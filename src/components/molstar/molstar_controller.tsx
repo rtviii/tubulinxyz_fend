@@ -1,10 +1,18 @@
-import { MolstarViewer, ComponentData } from './molstar_viewer';
+import { MolstarViewer } from './molstar_viewer';
 import { AppDispatch, RootState } from '@/store/store';
 import { setStructureRef, addComponents, clearStructure, clearAll, PolymerComponent, LigandComponent } from '@/store/slices/molstar_refs';
-import { initializePolymer, clearPolymersForStructure, clearAllPolymers } from '@/store/slices/polymer_states';
+import { initializePolymer, clearPolymersForStructure, clearAllPolymers, setPolymerVisibility, setPolymerHovered } from '@/store/slices/polymer_states';
 import { setLoading, setError } from '@/store/slices/tubulin_structures';
 
-// Type for the current state snapshot to reduce getState() calls
+// Mol* imports
+import { Structure, StructureProperties, Unit } from 'molstar/lib/mol-model/structure';
+import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder';
+import { StateObjectSelector, StateSelection } from 'molstar/lib/mol-state';
+import { createStructureRepresentationParams } from 'molstar/lib/mol-plugin-state/helpers/structure-representation-params';
+import { StateTransforms } from 'molstar/lib/mol-plugin-state/transforms';
+import { PluginCommands } from 'molstar/lib/mol-plugin/commands';
+import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state';
+
 interface StateSnapshot {
     currentStructure: string | null;
     components: Record<string, any>;
@@ -16,98 +24,66 @@ export class MolstarController {
     private dispatch: AppDispatch;
     private getState: () => RootState;
 
-    constructor(
-        viewer: MolstarViewer,
-        dispatch: AppDispatch,
-        getState: () => RootState
-    ) {
+    constructor(viewer: MolstarViewer, dispatch: AppDispatch, getState: () => RootState) {
         this.viewer = viewer;
         this.dispatch = dispatch;
         this.getState = getState;
     }
 
-    // Helper method to get current state snapshot
     private getCurrentState(): StateSnapshot {
+        // ... same as before
         const state = this.getState();
         return {
             currentStructure: state.molstarRefs.currentStructure,
-            components: state.molstarRefs.components,
-            structureRefs: state.molstarRefs.structureRefs
         };
     }
 
-    async loadStructure(pdbId: string, nomenclature_map: Record<string, string> = {}): Promise<boolean> {
+    async loadStructure(pdbId: string): Promise<boolean> {
         try {
             this.dispatch(setLoading(true));
             this.dispatch(setError(null));
 
-            // Clear existing structure from state
-            const currentState = this.getCurrentState();
-            if (currentState.currentStructure) {
-                await this.clearCurrentStructure();
-            }
+            await this.clearCurrentStructure();
 
-            // Load structure directly using Molstar builders
-            if (!this.viewer.ctx) {
-                throw new Error('Molstar not initialized');
-            }
+            if (!this.viewer.ctx) throw new Error('Molstar not initialized');
 
-            // Use the RCSB PDB binary CIF URL
             const asset_url = `https://models.rcsb.org/${pdbId.toUpperCase()}.bcif`;
-            
-            const data = await this.viewer.ctx.builders.data.download(
-                {
-                    url: asset_url,
-                    isBinary: true,
-                    label: `${pdbId.toUpperCase()}`
-                },
-                { state: { isGhost: true } }
-            );
-
+            const data = await this.viewer.ctx.builders.data.download({ url: asset_url, isBinary: true, label: pdbId.toUpperCase() });
             const trajectory = await this.viewer.ctx.builders.structure.parseTrajectory(data, 'mmcif');
             const model = await this.viewer.ctx.builders.structure.createModel(trajectory);
             const structure = await this.viewer.ctx.builders.structure.createStructure(model);
 
-            // Apply default preset
-            await this.viewer.ctx.builders.structure.representation.applyPreset(
-                structure.ref,
-                'default'
-            );
+            const presetResult = await this.viewer.ctx.builders.structure.representation.applyPreset(structure, 'tubulin-split-preset', { pdbId: pdbId.toUpperCase() });
 
-            // Update Redux state with the new structure
-            this.dispatch(setStructureRef({ 
-                pdbId: pdbId.toUpperCase(), 
-                ref: structure.ref 
-            }));
+            // --- START DEBUGGING ---
+            console.log('[Controller] Result from applyPreset:', presetResult);
+            // --- END DEBUGGING ---
 
-            // For now, create basic polymer components (we'll enhance this later)
-            const basicComponents: Record<string, PolymerComponent | LigandComponent> = {
-                'A': {
+            const objects_polymer = presetResult.objects_polymer as Record<string, { ref: string; sequence: any[] }>;
+
+            if (!objects_polymer || Object.keys(objects_polymer).length === 0) {
+                console.warn("[Controller] Preset did not return any polymer objects. The structure might not be visible.");
+            }
+
+            this.dispatch(setStructureRef({ pdbId: pdbId.toUpperCase(), ref: structure.ref }));
+
+            const newComponents = Object.entries(objects_polymer || {}).reduce((acc, [chainId, data]) => {
+                acc[chainId] = {
                     type: 'polymer' as const,
                     pdbId: pdbId.toUpperCase(),
-                    ref: structure.ref,
-                    chainId: 'A'
-                },
-                'B': {
-                    type: 'polymer' as const,
-                    pdbId: pdbId.toUpperCase(),
-                    ref: structure.ref,
-                    chainId: 'B'
-                }
-            };
+                    ref: data.ref,
+                    chainId: chainId,
+                };
+                return acc;
+            }, {} as Record<string, PolymerComponent>);
 
-            // Add components to Redux store
-            this.dispatch(addComponents({
-                pdbId: pdbId.toUpperCase(),
-                components: basicComponents
-            }));
+            // --- START DEBUGGING ---
+            console.log('[Controller] Created new components for Redux:', newComponents);
+            // --- END DEBUGGING ---
 
-            // Initialize polymer states for typical tubulin chains
-            ['A', 'B'].forEach(chainId => {
-                this.dispatch(initializePolymer({ 
-                    pdbId: pdbId.toUpperCase(), 
-                    chainId 
-                }));
+            this.dispatch(addComponents({ pdbId: pdbId.toUpperCase(), components: newComponents }));
+            Object.keys(newComponents).forEach(chainId => {
+                this.dispatch(initializePolymer({ pdbId: pdbId.toUpperCase(), chainId }));
             });
 
             this.dispatch(setLoading(false));
@@ -121,64 +97,63 @@ export class MolstarController {
         }
     }
 
+    private getComponentRef(pdbId: string, chainId: string): string | undefined {
+        const state = this.getState();
+        const component = state.molstarRefs.components[`${pdbId}_${chainId}`];
+        return component?.ref;
+    }
+
+    // --- CORRECTED INTERACTION METHODS ---
+
+    async setChainVisibility(pdbId: string, chainId: string, isVisible: boolean) {
+        const ref = this.getComponentRef(pdbId, chainId);
+        if (ref && this.viewer.ctx) {
+            // Correct method based on riboxyz
+            setSubtreeVisibility(this.viewer.ctx.state.data, ref, !isVisible);
+            this.dispatch(setPolymerVisibility({ pdbId, chainId, visible: isVisible }));
+        }
+    }
+
+    async highlightChain(pdbId: string, chainId: string, shouldHighlight: boolean) {
+        if (!this.viewer.ctx) return;
+
+        if (!shouldHighlight) {
+            this.viewer.ctx.managers.interactivity.lociHighlights.clearHighlights();
+            this.dispatch(setPolymerHovered({ pdbId, chainId, hovered: false }));
+            return;
+        }
+
+        const ref = this.getComponentRef(pdbId, chainId);
+        if (ref) {
+            const cell = this.viewer.ctx.state.data.select(StateSelection.Generators.byRef(ref))[0];
+            if (cell?.obj?.data) {
+                // Correct method based on riboxyz to get Loci from a component
+                const loci = Structure.toStructureElementLoci(cell.obj.data as Structure);
+                this.viewer.ctx.managers.interactivity.lociHighlights.highlight({ loci }, false);
+                this.dispatch(setPolymerHovered({ pdbId, chainId, hovered: true }));
+            }
+        }
+    }
     async clearCurrentStructure(): Promise<void> {
         const currentState = this.getCurrentState();
         if (!currentState.currentStructure) return;
-
         try {
-            // Clear from viewer
             await this.viewer.clear();
-
-            // Clear from Redux state
             this.dispatch(clearStructure(currentState.currentStructure));
             this.dispatch(clearPolymersForStructure(currentState.currentStructure));
-
         } catch (error) {
             console.error('Error clearing structure:', error);
-            throw error;
         }
     }
 
     async clearAll(): Promise<void> {
         try {
-            // Clear from viewer
             await this.viewer.clear();
-
-            // Clear from Redux state
             this.dispatch(clearAll());
             this.dispatch(clearAllPolymers());
-
         } catch (error) {
             console.error('Error clearing all structures:', error);
             throw error;
-        }
-    }
-
-    // Polymer interaction methods using typed state access
-    setPolymerVisibility(pdbId: string, chainId: string, visible: boolean) {
-        const currentState = this.getCurrentState();
-        const component = currentState.components[chainId];
-        
-        if (component) {
-            this.viewer.setComponentVisibility(component.ref, visible);
-        }
-    }
-
-    focusPolymer(pdbId: string, chainId: string) {
-        const currentState = this.getCurrentState();
-        const component = currentState.components[chainId];
-        
-        if (component) {
-            this.viewer.focusComponent(component.ref);
-        }
-    }
-
-    highlightPolymer(pdbId: string, chainId: string) {
-        const currentState = this.getCurrentState();
-        const component = currentState.components[chainId];
-        
-        if (component) {
-            this.viewer.highlightComponent(component.ref);
         }
     }
 

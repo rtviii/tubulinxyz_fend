@@ -11,6 +11,7 @@ import {
   selectError
 } from '@/store/slices/tubulin_structures';
 import React from 'react';
+import { ChainPanel } from '@/components/chain_panel';
 
 // Panel for selecting structures and seeing status
 function SettingsPanel({ isMolstarReady }: { isMolstarReady: boolean }) {
@@ -48,8 +49,8 @@ function SettingsPanel({ isMolstarReady }: { isMolstarReady: boolean }) {
               onClick={() => handleStructureSelect(structure.pdbId)}
               disabled={isInteractionDisabled}
               className={`w-full text-left p-3 rounded-lg border transition-colors ${selectedStructure === structure.pdbId
-                  ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-500'
-                  : 'bg-white border-gray-200 hover:bg-gray-50'
+                ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-500'
+                : 'bg-white border-gray-200 hover:bg-gray-50'
                 } ${isInteractionDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <span className="font-medium text-gray-900">{structure.pdbId.toUpperCase()}</span>
@@ -66,7 +67,6 @@ function SettingsPanel({ isMolstarReady }: { isMolstarReady: boolean }) {
 // Main page layout component
 export default function TubulinViewerPage() {
   const molstarRef = useRef<HTMLDivElement>(null);
-  // Initialize the service once in the parent component.
   const { isInitialized } = useMolstarService(molstarRef, 'main');
 
   return (
@@ -83,6 +83,8 @@ export default function TubulinViewerPage() {
           </div>
         )}
       </div>
+      {/* Add the Chain Panel on the right side */}
+      <ChainPanel />
     </div>
   );
 }

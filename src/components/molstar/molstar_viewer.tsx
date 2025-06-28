@@ -4,9 +4,14 @@ import { renderReact18 } from 'molstar/lib/mol-plugin-ui/react18';
 import { PluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
 import { PluginCommands } from 'molstar/lib/mol-plugin/commands';
 import { Color } from 'molstar/lib/mol-util/color';
-import {ribxzSpec} from './molstar_spec';
-import { StructureElement, Structure, StructureProperties } from 'molstar/lib/mol-model/structure';
-import { Loci } from 'molstar/lib/mol-model/loci';
+import { ribxzSpec } from './molstar_spec';
+import { TubulinSplitPreset } from './molstar_preset';
+
+// --- Important Imports from riboxyz ---
+import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state';
+import { StateSelection } from 'molstar/lib/mol-state';
+import { Structure } from 'molstar/lib/mol-model/structure';
+
 
 export class MolstarViewer {
     ctx: PluginUIContext | null = null;
@@ -26,16 +31,8 @@ export class MolstarViewer {
         }
 
         try {
-            while (parent.firstChild) {
-                parent.removeChild(parent.firstChild);
-            }
-
-            this.ctx = await createPluginUI({
-                target: parent,
-                spec,
-                render: renderReact18
-            });
-
+            this.ctx = await createPluginUI({ target: parent, spec, render: renderReact18 });
+            this.ctx.builders.structure.representation.registerPreset(TubulinSplitPreset);
             this.setupBasicStyling();
             this.resolveInit?.();
         } catch (error) {
@@ -46,6 +43,7 @@ export class MolstarViewer {
     }
 
     private setupBasicStyling() {
+        // ... (this method is fine, no changes)
         if (!this.ctx) return;
         const rendererParams = { backgroundColor: Color.fromRgb(255, 255, 255) };
         const renderer = this.ctx.canvas3d?.props.renderer;
@@ -54,9 +52,33 @@ export class MolstarViewer {
         });
     }
 
+    // --- NEW: Interaction methods based on riboxyz ---
+    interactions = {
+        setVisibility: (ref: string, isVisible: boolean) => {
+            if (!this.ctx) return;
+            // This is the correct method from your riboxyz code
+            setSubtreeVisibility(this.ctx.state.data, ref, !isVisible);
+        },
+
+        highlight: (ref: string, shouldHighlight: boolean) => {
+            if (!this.ctx) return;
+            if (!shouldHighlight) {
+                this.ctx.managers.interactivity.lociHighlights.clearHighlights();
+                return;
+            }
+
+            const cell = this.ctx.state.data.select(StateSelection.Generators.byRef(ref))[0];
+            if (!cell?.obj) return;
+
+            // This is the correct way to get Loci for a component
+            const loci = Structure.toStructureElementLoci(cell.obj.data);
+            this.ctx.managers.interactivity.lociHighlights.highlight({ loci }, false);
+        }
+    };
+
     async clear() {
         if (!this.ctx) return;
-        await PluginCommands.State.RemoveObject(this.ctx, { state: this.ctx.state.data, ref: this.ctx.state.data.tree.root.ref });
+        await PluginCommands.State.RemoveObject(this.ctx, { state: this.ctx.state.data, ref: this.ctx.state.data.tree.root.ref, removeParentGhosts: true });
     }
 
     dispose() {
@@ -64,22 +86,4 @@ export class MolstarViewer {
         this.ctx = null;
         this.initializedPromise = new Promise(resolve => { this.resolveInit = resolve; });
     }
-
-    // --- FULLY IMPLEMENTED METHODS ---
-
-    async loadStructureFromUrl(url: string, format: 'pdb' | 'mmcif' = 'mmcif', isBinary = true) {
-        if (!this.ctx) throw new Error('Molstar not initialized');
-
-        await this.clear();
-
-        const data = await this.ctx.builders.data.download({ url, isBinary });
-        const trajectory = await this.ctx.builders.structure.parseTrajectory(data, format);
-        const model = await this.ctx.builders.structure.createModel(trajectory);
-        const structure = await this.ctx.builders.structure.createStructure(model);
-        await this.ctx.builders.structure.representation.applyPreset(structure, 'default');
-
-        return { structure };
-    }
-
-
 }
