@@ -1,103 +1,88 @@
-import Image from "next/image";
+'use client'
+import { useRef } from 'react';
+import { useMolstarService, MolstarContext } from '@/components/molstar/molstar_service';
+import { MolstarNode } from '@/components/molstar/molstar_spec';
+import { useAppDispatch, useAppSelector } from '@/store/store';
+import {
+  selectStructure,
+  selectAvailableStructures,
+  selectSelectedStructure,
+  selectIsLoading,
+  selectError
+} from '@/store/slices/tubulin_structures';
+import React from 'react';
 
-export default function Home() {
+// Panel for selecting structures and seeing status
+function SettingsPanel({ isMolstarReady }: { isMolstarReady: boolean }) {
+  const dispatch = useAppDispatch();
+  const availableStructures = useAppSelector(selectAvailableStructures);
+  const selectedStructure = useAppSelector(selectSelectedStructure);
+  const isLoading = useAppSelector(selectIsLoading);
+  const error = useAppSelector(selectError);
+  const molstarService = React.useContext(MolstarContext)?.getService('main');
+
+  const handleStructureSelect = async (pdbId: string) => {
+    if (!molstarService?.controller) {
+      console.warn('Molstar controller not ready.');
+      return;
+    }
+    dispatch(selectStructure(pdbId));
+    await molstarService.controller.loadStructure(pdbId, {});
+  };
+
+  const isInteractionDisabled = isLoading || !isMolstarReady;
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="w-80 h-full bg-gray-50 border-r border-gray-200 p-4 overflow-y-auto">
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Tubulin Viewer</h2>
+          <p className="text-sm text-gray-600">Select a structure to visualize.</p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        {error && <div className="text-red-500 text-sm p-2 bg-red-50 rounded-md">{error}</div>}
+        <div className="space-y-2">
+          <h3 className="text-md font-medium text-gray-800">Available Structures</h3>
+          {availableStructures.map((structure) => (
+            <button
+              key={structure.pdbId}
+              onClick={() => handleStructureSelect(structure.pdbId)}
+              disabled={isInteractionDisabled}
+              className={`w-full text-left p-3 rounded-lg border transition-colors ${selectedStructure === structure.pdbId
+                  ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-500'
+                  : 'bg-white border-gray-200 hover:bg-gray-50'
+                } ${isInteractionDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <span className="font-medium text-gray-900">{structure.pdbId.toUpperCase()}</span>
+              <p className="text-sm text-gray-600 line-clamp-2">{structure.title}</p>
+            </button>
+          ))}
+        </div>
+        {isLoading && <div className="text-sm">Loading...</div>}
+      </div>
+    </div>
+  );
+}
+
+// Main page layout component
+export default function TubulinViewerPage() {
+  const molstarRef = useRef<HTMLDivElement>(null);
+  // Initialize the service once in the parent component.
+  const { isInitialized } = useMolstarService(molstarRef, 'main');
+
+  return (
+    <div className="h-screen w-screen flex overflow-hidden">
+      <SettingsPanel isMolstarReady={isInitialized} />
+      <div className="flex-1 h-full bg-white relative">
+        <MolstarNode ref={molstarRef} />
+        {!isInitialized && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-75 z-10">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+              <p className="text-gray-600">Initializing Molstar...</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,0 +1,19 @@
+/* Custom Molstar styles for tubulin viewer */
+
+/* Add any custom molstar overrides here */
+.msp-plugin {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+/* Ensure proper sizing */
+.msp-layout-main {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+/* Custom styling for your structure tools if needed */
+.msp-section-header {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
