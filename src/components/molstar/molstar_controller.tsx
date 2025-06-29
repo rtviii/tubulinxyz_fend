@@ -12,7 +12,7 @@ import { createStructureRepresentationParams } from 'molstar/lib/mol-plugin-stat
 import { StateTransforms } from 'molstar/lib/mol-plugin-state/transforms';
 import { PluginCommands } from 'molstar/lib/mol-plugin/commands';
 import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state';
-import { TubulinClass, TubulinClassification } from './molstar_preset';
+import { PresetObjects, TubulinClass, TubulinClassification } from './molstar_preset';
 import { initializeNonPolymer, setNonPolymerHovered, setNonPolymerVisibility } from '@/store/slices/nonpolymer_states';
 
 interface StateSnapshot {
@@ -33,7 +33,6 @@ export class MolstarController {
     }
 
     private getCurrentState(): StateSnapshot {
-        // ... same as before
         const state = this.getState();
         return {
             currentStructure: state.molstarRefs.currentStructure,
@@ -57,7 +56,8 @@ export class MolstarController {
             const { objects_polymer, objects_ligand } = await this.viewer.ctx.builders.structure.representation.applyPreset(structure, 'tubulin-split-preset', {
                 pdbId: pdbId.toUpperCase(),
                 tubulinClassification
-            });
+            }) as Partial<PresetObjects>; // We can cast it to be certain
+
 
             // Process Polymers
             const polymerComponents = Object.entries(objects_polymer || {}).reduce((acc, [chainId, data]) => {

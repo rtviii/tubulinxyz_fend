@@ -1,10 +1,10 @@
 import { StateObjectSelector } from "molstar/lib/mol-state";
 import { ResidueIndex, Structure } from "molstar/lib/mol-model/structure";
 export interface LigandInstance {
-    compId: string;       // e.g., 'GTP'
-    auth_asym_id: string; // The chain ID, e.g., 'A'
-    auth_seq_id: number;  // The residue number, e.g., 501
-    uniqueKey: string;    // A generated unique key, e.g., 'GTP_A_501'
+    compId: string;      
+    auth_asym_id: string; 
+    auth_seq_id: number;  
+    uniqueKey: string;   
 }
 
 export const AMINO_ACIDS_3_TO_1_CODE: { [key: string]: string } = {
@@ -271,7 +271,6 @@ export function getLigandInstances(structure: Structure): LigandInstance[] {
 
         const compId = structure.model.atomicHierarchy.atoms.label_comp_id.value(residueOffsets[rI]);
 
-        // Skip water and common ions
         if (IonNames.has(compId) || compId === 'HOH') continue;
 
         const auth_asym_id = structure.model.atomicHierarchy.chains.auth_asym_id.value(cI);

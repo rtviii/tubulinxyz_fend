@@ -19,6 +19,20 @@ const TubulinColors = {
     [TubulinClass.Beta]: Color(0xf97316),  // Orange
     Default: Color(0x808080)              // Gray for any unclassified chains
 };
+interface PolymerObject {
+    ref: string;
+    sequence: ResidueData[];
+}
+
+interface LigandObject {
+    ref: string;
+}
+
+export interface PresetObjects {
+    objects_polymer: { [chainId: string]: PolymerObject };
+    objects_ligand: { [uniqueKey: string]: LigandObject };
+}
+
 
 export const TubulinSplitPreset = StructureRepresentationPresetProvider({
     id: 'tubulin-split-preset',
@@ -34,7 +48,7 @@ export const TubulinSplitPreset = StructureRepresentationPresetProvider({
         tubulinClassification: PD.Value<TubulinClassification>({}, { isHidden: true })
     }),
 
-    async apply(ref, params, plugin) {
+    async apply(ref, params, plugin): Promise<Partial<PresetObjects>> {
         const structureCell = StateObjectRef.resolveAndCheck(plugin.state.data, ref);
         if (!structureCell) return {};
 
@@ -44,10 +58,9 @@ export const TubulinSplitPreset = StructureRepresentationPresetProvider({
             params,
             structure
         );
-        const objects_polymer: { [k: string]: { ref: string; sequence: ResidueData[] } } = {};
-        const objects_ligand: { [k: string]: { ref: string } } = {};
-        const components: { [k: string]: StateObjectSelector | undefined } = {};
-        const representations: { [k: string]: StateObjectSelector | undefined } = {};
+   const objects_polymer: { [k: string]: PolymerObject } = {};
+        const objects_ligand: { [k: string]: LigandObject } = {};
+
 
         // --- USING YOUR WORKING CHAIN DISCOVERY LOGIC ---
         const chains = new Set<string>();

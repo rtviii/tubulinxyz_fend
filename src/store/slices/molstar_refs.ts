@@ -19,10 +19,10 @@ export interface PolymerComponent extends BaseComponent {
 
 export interface LigandComponent extends BaseComponent {
     type: 'ligand';
-    uniqueKey: string;      // The unique key, e.g., 'GTP_A_501'
-    compId: string;         // The ligand name, e.g., 'GTP'
-    auth_asym_id: string;   // The chain ID
-    auth_seq_id: number;    // The residue number
+    uniqueKey: string;      
+    compId: string;         
+    auth_asym_id: string;   
+    auth_seq_id: number;   
 }
 
 
