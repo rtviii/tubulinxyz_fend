@@ -5,7 +5,7 @@ import { initializePolymer, clearPolymersForStructure, clearAllPolymers, setPoly
 import { setLoading, setError } from '@/store/slices/tubulin_structures';
 
 // Mol* imports
-import { Structure, StructureProperties, Unit } from 'molstar/lib/mol-model/structure';
+import { Structure, StructureProperties, StructureSelection, Unit } from 'molstar/lib/mol-model/structure';
 import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder';
 import { StateObjectSelector, StateSelection } from 'molstar/lib/mol-state';
 import { createStructureRepresentationParams } from 'molstar/lib/mol-plugin-state/helpers/structure-representation-params';
@@ -91,6 +91,17 @@ export class MolstarController {
         const state = this.getState();
         const component = state.molstarRefs.components[`${pdbId}_${chainId}`];
         return component?.ref;
+    }
+    async focusChain(pdbId: string, chainId: string) {
+        const ref = this.getComponentRef(pdbId, chainId);
+        if (ref && this.viewer.ctx) {
+            const cell = this.viewer.ctx.state.data.select(StateSelection.Generators.byRef(ref))[0];
+            if (cell?.obj?.data) {
+                // const loci = Structure.toLoci(cell.obj.data as Structure);
+                const loci = StructureSelection.toLociWithSourceUnits(cell.obj.data)
+                this.viewer.ctx.managers.camera.focusLoci(loci);
+            }
+        }
     }
 
     // --- CORRECTED INTERACTION METHODS ---
