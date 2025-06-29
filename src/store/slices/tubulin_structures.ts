@@ -46,11 +46,11 @@ const SAMPLE_STRUCTURES: TubulinStructure[] = [
         method: 'X-ray crystallography'
     },
     {
-        pdbId: '5CA1',
-        title: 'Tubulin-Eribulin Complex',
-        description: 'Structure of tubulin bound to eribulin',
-        resolution: 2.15,
-        method: 'X-ray crystallography'
+        pdbId: '6O2T',
+        title: 'Acetylated Microtubules',
+        description: 'Effects of alpha-tubulin acetylation on microtubule structure and stability.',
+        resolution: 4.10,
+        method: 'Electron Microscopy'
     }
 ];
 
