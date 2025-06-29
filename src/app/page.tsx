@@ -28,7 +28,8 @@ function SettingsPanel({ isMolstarReady }: { isMolstarReady: boolean }) {
       return;
     }
     dispatch(selectStructure(pdbId));
-    await molstarService.controller.loadStructure(pdbId, {});
+    await molstarService.controller.loadStructure(pdbId);
+    await molstarService.viewer.representations.stylized_lighting()
   };
 
   const isInteractionDisabled = isLoading || !isMolstarReady;
