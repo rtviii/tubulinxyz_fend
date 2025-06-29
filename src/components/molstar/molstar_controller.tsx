@@ -65,9 +65,21 @@ export class MolstarController {
                 return acc;
             }, {} as Record<string, PolymerComponent>);
 
-            // Process Ligands
-            const ligandComponents = Object.entries(objects_ligand || {}).reduce((acc, [chemId, data]) => {
-                acc[chemId] = { type: 'ligand', pdbId: pdbId.toUpperCase(), ref: data.ref, chemicalId: chemId };
+            const ligandComponents = Object.entries(objects_ligand || {}).reduce((acc, [uniqueKey, data]) => {
+                // Deconstruct the uniqueKey to get the details
+                const [compId, auth_asym_id, auth_seq_id_str] = uniqueKey.split('_');
+                const auth_seq_id = parseInt(auth_seq_id_str, 10);
+
+                // The key in the 'components' map remains unique: PDBID_GTP_A_501
+                acc[uniqueKey] = {
+                    type: 'ligand',
+                    pdbId: pdbId.toUpperCase(),
+                    ref: data.ref,
+                    uniqueKey,
+                    compId,
+                    auth_asym_id,
+                    auth_seq_id
+                };
                 return acc;
             }, {} as Record<string, LigandComponent>);
 
@@ -79,8 +91,8 @@ export class MolstarController {
             Object.keys(polymerComponents).forEach(chainId => {
                 this.dispatch(initializePolymer({ pdbId: pdbId.toUpperCase(), chainId }));
             });
-            Object.keys(ligandComponents).forEach(chemId => {
-                this.dispatch(initializeNonPolymer({ pdbId: pdbId.toUpperCase(), chemId }));
+            Object.keys(ligandComponents).forEach(uniqueKey => {
+                this.dispatch(initializeNonPolymer({ pdbId: pdbId.toUpperCase(), chemId: uniqueKey }));
             });
 
 
@@ -91,11 +103,12 @@ export class MolstarController {
             return false;
         }
     }
-    async setNonPolymerVisibility(pdbId: string, chemId: string, isVisible: boolean) {
-        const ref = this.getLigandComponentRef(pdbId, chemId);
+
+    async setNonPolymerVisibility(pdbId: string, uniqueKey: string, isVisible: boolean) {
+        const ref = this.getLigandComponentRef(pdbId, uniqueKey);
         if (ref && this.viewer.ctx) {
             setSubtreeVisibility(this.viewer.ctx.state.data, ref, !isVisible);
-            this.dispatch(setNonPolymerVisibility({ pdbId, chemId, visible: isVisible }));
+            this.dispatch(setNonPolymerVisibility({ pdbId, chemId: uniqueKey, visible: isVisible }));
         }
     }
 
@@ -130,12 +143,11 @@ export class MolstarController {
         }
     }
 
-    private getLigandComponentRef(pdbId: string, chemId: string): string | undefined {
+    private getLigandComponentRef(pdbId: string, uniqueKey: string): string | undefined {
         const state = this.getState();
-        const component = state.molstarRefs.components[`${pdbId}_${chemId}`];
+        const component = state.molstarRefs.components[`${pdbId}_${uniqueKey}`];
         return component?.ref;
     }
-
 
     private getComponentRef(pdbId: string, chainId: string): string | undefined {
         const state = this.getState();

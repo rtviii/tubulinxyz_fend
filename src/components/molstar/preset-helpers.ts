@@ -1,5 +1,11 @@
 import { StateObjectSelector } from "molstar/lib/mol-state";
 import { ResidueIndex, Structure } from "molstar/lib/mol-model/structure";
+export interface LigandInstance {
+    compId: string;       // e.g., 'GTP'
+    auth_asym_id: string; // The chain ID, e.g., 'A'
+    auth_seq_id: number;  // The residue number, e.g., 501
+    uniqueKey: string;    // A generated unique key, e.g., 'GTP_A_501'
+}
 
 export const AMINO_ACIDS_3_TO_1_CODE: { [key: string]: string } = {
     ALA: 'A', ARG: 'R', ASN: 'N', ASP: 'D', ASX: 'B', CYS: 'C',
@@ -247,20 +253,43 @@ export const IonNames = new Set([
     'NCO',
     'OHX'
 ]);
-export function getLigands(structure: Structure) {
-    const non_ion_ligands = new Set<string>();
-    const {_rowCount: residueCount} = structure.model.atomicHierarchy.residues;
-    const {offsets: residueOffsets} = structure.model.atomicHierarchy.residueAtomSegments;
+export function getLigandInstances(structure: Structure): LigandInstance[] {
+    const instances: LigandInstance[] = [];
+    const uniqueKeys = new Set<string>();
+
+    const { _rowCount: residueCount } = structure.model.atomicHierarchy.residues;
+    const { offsets: residueOffsets } = structure.model.atomicHierarchy.residueAtomSegments;
     const chainIndex = structure.model.atomicHierarchy.chainAtomSegments.index;
 
     for (let rI = 0 as ResidueIndex; rI < residueCount; rI++) {
         const cI = chainIndex[residueOffsets[rI]];
         const eI = structure.model.atomicHierarchy.index.getEntityFromChain(cI);
         const entityType = structure.model.entities.data.type.value(eI);
+
+        // We only care about non-polymer or branched entities (ligands, sugars)
         if (entityType !== 'non-polymer' && entityType !== 'branched') continue;
-        const comp_id = structure.model.atomicHierarchy.atoms.label_comp_id.value(residueOffsets[rI]);
-        IonNames.has(comp_id) ? null : non_ion_ligands.add(comp_id);
+
+        const compId = structure.model.atomicHierarchy.atoms.label_comp_id.value(residueOffsets[rI]);
+
+        // Skip water and common ions
+        if (IonNames.has(compId) || compId === 'HOH') continue;
+
+        const auth_asym_id = structure.model.atomicHierarchy.chains.auth_asym_id.value(cI);
+        const auth_seq_id = structure.model.atomicHierarchy.residues.auth_seq_id.value(rI);
+        
+        const uniqueKey = `${compId}_${auth_asym_id}_${auth_seq_id}`;
+
+        // Ensure we only add each instance once
+        if (!uniqueKeys.has(uniqueKey)) {
+            instances.push({
+                compId,
+                auth_asym_id,
+                auth_seq_id,
+                uniqueKey
+            });
+            uniqueKeys.add(uniqueKey);
+        }
     }
 
-    return non_ion_ligands;
+    return instances;
 }

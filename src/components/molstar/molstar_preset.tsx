@@ -4,7 +4,7 @@ import { StateObjectRef, StateObjectSelector } from 'molstar/lib/mol-state';
 import { StructureRepresentationPresetProvider } from 'molstar/lib/mol-plugin-state/builder/structure/representation-preset';
 import { ParamDefinition as PD } from 'molstar/lib/mol-util/param-definition';
 import { Color } from 'molstar/lib/mol-util/color';
-import { AMINO_ACIDS_3_TO_1_CODE, ResidueData, getLigands, getResidueSequence } from './preset-helpers';
+import { AMINO_ACIDS_3_TO_1_CODE, ResidueData, getLigandInstances, getResidueSequence } from './preset-helpers';
 
 // Define the Tubulin types and the parameter object shape
 export enum TubulinClass {
@@ -91,48 +91,47 @@ export const TubulinSplitPreset = StructureRepresentationPresetProvider({
 
 
 
-        const ligands = getLigands(structure);
-        for (const ligandId of Array.from(ligands)) {
+        const ligandInstances = getLigandInstances(structure);
+
+        for (const instance of ligandInstances) {
+            // Create a highly specific selector for this single instance
             const ligandSelection = MS.struct.generator.atomGroups({
-                'atom-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), ligandId])
+                'residue-test': MS.core.logic.and([
+                    MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), instance.compId]),
+                    MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), instance.auth_asym_id]),
+                    MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_seq_id(), instance.auth_seq_id])
+                ])
             });
 
+            // Create the component with a unique ID based on the instance key
             const component = await plugin.builders.structure.tryCreateComponentFromExpression(
                 ref,
                 ligandSelection,
-                `${ligandId}`,
+                `${params.pdbId}_${instance.uniqueKey}`, // Unique ID for the component
                 {
-                    label: `${"toreplacewithpdbid"}${ligandId}`,
-                    tags: [`${ligandId}`]
+                    label: `Ligand ${instance.uniqueKey}`,
+                    tags: [`ligand-${instance.compId}`]
                 }
             );
 
             if (component) {
-                const representation = await plugin.builders.structure.representation.addRepresentation(component, {
+                await plugin.builders.structure.representation.addRepresentation(component, {
                     type: 'ball-and-stick',
-                    colorParams: {
-                        style: {
-                            name: 'element-symbol'
-                        }
-                    }
+                    color: 'element-symbol'
                 });
 
-                components[`${ligandId}`] = component;
-                representations[`${ligandId}`] = representation;
-                objects_ligand[ligandId] = {
+                // Use the uniqueKey as the key in our return object
+                objects_ligand[instance.uniqueKey] = {
                     ref: component.ref
                 };
             }
         }
 
-
-
         await update.commit({ revertOnError: true });
-
 
         return {
             objects_polymer,
-            objects_ligand,
+            objects_ligand
         };
     }
 });
