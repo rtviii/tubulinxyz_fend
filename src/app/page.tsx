@@ -1,5 +1,5 @@
 'use client'
-import { useRef, useState } from 'react'; // Import useState
+import { useRef, useState } from 'react';
 import { useMolstarService, MolstarContext } from '@/components/molstar/molstar_service';
 import { MolstarNode } from '@/components/molstar/molstar_spec';
 import { useAppDispatch, useAppSelector } from '@/store/store';
@@ -8,56 +8,65 @@ import {
   selectAvailableStructures,
   selectSelectedStructure,
   selectIsLoading,
-  selectError
+  selectError,
+  setLoading,
+  setError
 } from '@/store/slices/tubulin_structures';
 import React from 'react';
 import { ChainPanel } from '@/components/chain_panel';
+import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
+import { createTubulinClassificationMap } from '@/services/gql_parser';
 
-// Panel for selecting structures and seeing status
 function SettingsPanel({ isMolstarReady }: { isMolstarReady: boolean }) {
   const dispatch = useAppDispatch();
-  const availableStructures = useAppSelector(selectAvailableStructures);
-  const selectedStructure = useAppSelector(selectSelectedStructure);
-  const isLoading = useAppSelector(selectIsLoading);
-  const error = useAppSelector(selectError);
   const molstarService = React.useContext(MolstarContext)?.getService('main');
-
-  // --- NEW: State for the custom PDB input field ---
   const [customPdbId, setCustomPdbId] = useState('');
+  const isLoading = useAppSelector(selectIsLoading);
+  const selectedStructure = useAppSelector(selectSelectedStructure)
+  const availableStructures = useAppSelector(selectAvailableStructures)
+  const error = useAppSelector(selectError)
+  const isInteractionDisabled = isLoading || !isMolstarReady;
 
   const handleStructureSelect = async (pdbId: string) => {
-    if (!molstarService?.controller || !pdbId) {
-      console.warn('Molstar controller not ready or PDB ID is missing.');
-      return;
-    }
-    // The rest of your loading logic is perfect
+    if (!molstarService?.controller || !pdbId) return;
+
     dispatch(selectStructure(pdbId));
-    await molstarService.controller.loadStructure(pdbId);
-    await molstarService.viewer.representations.stylized_lighting()
+    dispatch(setLoading(true));
+    dispatch(setError(null));
+
+    try {
+      const gqlData = await fetchRcsbGraphQlData(pdbId);
+      console.log(`[UI] Fetched GraphQL data for ${pdbId}`, gqlData);
+
+      const classificationMap = createTubulinClassificationMap(gqlData);
+      console.log('[UI] Generated Tubulin Classification Map:', classificationMap);
+
+      await molstarService.controller.loadStructure(pdbId, classificationMap);
+      await molstarService.viewer.representations.stylized_lighting()
+    } catch (error) {
+      console.error(`[UI] An error occurred during the loading process for ${pdbId}:`, error);
+      dispatch(setError(error instanceof Error ? error.message : "An unknown error occurred."));
+    } finally {
+      dispatch(setLoading(false));
+    }
   };
 
-  // --- NEW: Handler for the form submission ---
   const handleCustomLoad = (e: React.FormEvent) => {
-    e.preventDefault(); // Prevents the browser from reloading the page
+    e.preventDefault();
     const trimmedId = customPdbId.trim();
     if (trimmedId.length === 4) {
       handleStructureSelect(trimmedId);
-      setCustomPdbId(''); // Clear input after load
+      setCustomPdbId('');
     }
   };
 
-
-  const isInteractionDisabled = isLoading || !isMolstarReady;
-
   return (
     <div className="w-80 h-full bg-gray-50 border-r border-gray-200 p-4 overflow-y-auto">
-      <div className="space-y-6"> {/* Increased spacing */}
+      <div className="space-y-6">
         <div>
           <h2 className="text-lg font-semibold text-gray-900 mb-2">Tubulin Viewer</h2>
           <p className="text-sm text-gray-600">Select a default structure or load your own by PDB ID.</p>
         </div>
-
-        {/* --- NEW: Input form for custom PDB ID --- */}
         <div className="space-y-2">
           <h3 className="text-md font-medium text-gray-800">Load Custom Structure</h3>
           <form onSubmit={handleCustomLoad} className="flex items-center space-x-2">
@@ -65,7 +74,7 @@ function SettingsPanel({ isMolstarReady }: { isMolstarReady: boolean }) {
               type="text"
               placeholder="e.g., 1SA0"
               value={customPdbId}
-              onChange={(e) => setCustomPdbId(e.target.value)}
+              onChange={(e) => setCustomPdbId(e.target.value.toUpperCase())}
               maxLength={4}
               className="flex-grow w-full px-3 py-2 text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
               disabled={isInteractionDisabled}
@@ -79,9 +88,7 @@ function SettingsPanel({ isMolstarReady }: { isMolstarReady: boolean }) {
             </button>
           </form>
         </div>
-
         {error && <div className="text-red-500 text-sm p-2 bg-red-50 rounded-md">{error}</div>}
-
         <div className="space-y-2">
           <h3 className="text-md font-medium text-gray-800">Available Structures</h3>
           {availableStructures.map((structure) => (
@@ -105,11 +112,10 @@ function SettingsPanel({ isMolstarReady }: { isMolstarReady: boolean }) {
   );
 }
 
-// Main page layout component (no changes needed here)
+// ... TubulinViewerPage component is unchanged ...
 export default function TubulinViewerPage() {
   const molstarRef = useRef<HTMLDivElement>(null);
   const { isInitialized } = useMolstarService(molstarRef, 'main');
-
   return (
     <div className="h-screen w-screen flex overflow-hidden">
       <SettingsPanel isMolstarReady={isInitialized} />

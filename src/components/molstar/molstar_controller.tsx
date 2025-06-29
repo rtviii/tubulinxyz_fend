@@ -12,6 +12,7 @@ import { createStructureRepresentationParams } from 'molstar/lib/mol-plugin-stat
 import { StateTransforms } from 'molstar/lib/mol-plugin-state/transforms';
 import { PluginCommands } from 'molstar/lib/mol-plugin/commands';
 import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state';
+import { TubulinClass, TubulinClassification } from './molstar_preset';
 
 interface StateSnapshot {
     currentStructure: string | null;
@@ -38,35 +39,27 @@ export class MolstarController {
         };
     }
 
-    async loadStructure(pdbId: string): Promise<boolean> {
+
+    async loadStructure(pdbId: string, tubulinClassification: TubulinClassification): Promise<boolean> {
         try {
-            this.dispatch(setLoading(true));
-            this.dispatch(setError(null));
-
             await this.clearCurrentStructure();
-
             if (!this.viewer.ctx) throw new Error('Molstar not initialized');
 
             const asset_url = `https://models.rcsb.org/${pdbId.toUpperCase()}.bcif`;
+
             const data = await this.viewer.ctx.builders.data.download({ url: asset_url, isBinary: true, label: pdbId.toUpperCase() });
             const trajectory = await this.viewer.ctx.builders.structure.parseTrajectory(data, 'mmcif');
             const model = await this.viewer.ctx.builders.structure.createModel(trajectory);
             const structure = await this.viewer.ctx.builders.structure.createStructure(model);
 
-            const presetResult = await this.viewer.ctx.builders.structure.representation.applyPreset(structure, 'tubulin-split-preset', { pdbId: pdbId.toUpperCase() });
-
-            // --- START DEBUGGING ---
-            console.log('[Controller] Result from applyPreset:', presetResult);
-            // --- END DEBUGGING ---
+            const presetResult = await this.viewer.ctx.builders.structure.representation.applyPreset(structure, 'tubulin-split-preset', {
+                pdbId: pdbId.toUpperCase(),
+                tubulinClassification
+            });
 
             const objects_polymer = presetResult.objects_polymer as Record<string, { ref: string; sequence: any[] }>;
 
-            if (!objects_polymer || Object.keys(objects_polymer).length === 0) {
-                console.warn("[Controller] Preset did not return any polymer objects. The structure might not be visible.");
-            }
-
             this.dispatch(setStructureRef({ pdbId: pdbId.toUpperCase(), ref: structure.ref }));
-
             const newComponents = Object.entries(objects_polymer || {}).reduce((acc, [chainId, data]) => {
                 acc[chainId] = {
                     type: 'polymer' as const,
@@ -76,26 +69,19 @@ export class MolstarController {
                 };
                 return acc;
             }, {} as Record<string, PolymerComponent>);
-
-            // --- START DEBUGGING ---
-            console.log('[Controller] Created new components for Redux:', newComponents);
-            // --- END DEBUGGING ---
-
             this.dispatch(addComponents({ pdbId: pdbId.toUpperCase(), components: newComponents }));
             Object.keys(newComponents).forEach(chainId => {
                 this.dispatch(initializePolymer({ pdbId: pdbId.toUpperCase(), chainId }));
             });
 
-            this.dispatch(setLoading(false));
             return true;
-
         } catch (error) {
             console.error('Error loading structure:', error);
             this.dispatch(setError(error instanceof Error ? error.message : 'Unknown error'));
-            this.dispatch(setLoading(false));
             return false;
         }
     }
+
 
     private getComponentRef(pdbId: string, chainId: string): string | undefined {
         const state = this.getState();
