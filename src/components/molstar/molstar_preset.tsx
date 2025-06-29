@@ -57,7 +57,6 @@ export const TubulinSplitPreset = StructureRepresentationPresetProvider({
             chains.add(auth_asym_id({ unit, element: unit.elements[0] }));
         }
 
-
         for (const chainId of Array.from(chains).sort()) {
             const chainSelection = MS.struct.generator.atomGroups({
                 'chain-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId])
@@ -89,6 +88,9 @@ export const TubulinSplitPreset = StructureRepresentationPresetProvider({
                 };
             }
         }
+
+
+
         const ligands = getLigands(structure);
         for (const ligandId of Array.from(ligands)) {
             const ligandSelection = MS.struct.generator.atomGroups({
@@ -122,11 +124,15 @@ export const TubulinSplitPreset = StructureRepresentationPresetProvider({
                 };
             }
         }
+
+
+
         await update.commit({ revertOnError: true });
+
 
         return {
             objects_polymer,
-            objects_ligand: {} // Not handling ligands for now
+            objects_ligand,
         };
     }
 });

@@ -13,6 +13,7 @@ import { StateTransforms } from 'molstar/lib/mol-plugin-state/transforms';
 import { PluginCommands } from 'molstar/lib/mol-plugin/commands';
 import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state';
 import { TubulinClass, TubulinClassification } from './molstar_preset';
+import { initializeNonPolymer, setNonPolymerHovered, setNonPolymerVisibility } from '@/store/slices/nonpolymer_states';
 
 interface StateSnapshot {
     currentStructure: string | null;
@@ -74,9 +75,14 @@ export class MolstarController {
             this.dispatch(setStructureRef({ pdbId: pdbId.toUpperCase(), ref: structure.ref }));
             this.dispatch(addComponents({ pdbId: pdbId.toUpperCase(), components: { ...polymerComponents, ...ligandComponents } }));
 
+            // Initialize state for both polymers and non-polymers
             Object.keys(polymerComponents).forEach(chainId => {
                 this.dispatch(initializePolymer({ pdbId: pdbId.toUpperCase(), chainId }));
             });
+            Object.keys(ligandComponents).forEach(chemId => {
+                this.dispatch(initializeNonPolymer({ pdbId: pdbId.toUpperCase(), chemId }));
+            });
+
 
             return true;
         } catch (error) {
@@ -84,6 +90,50 @@ export class MolstarController {
             this.dispatch(setError(error instanceof Error ? error.message : 'Unknown error'));
             return false;
         }
+    }
+    async setNonPolymerVisibility(pdbId: string, chemId: string, isVisible: boolean) {
+        const ref = this.getLigandComponentRef(pdbId, chemId);
+        if (ref && this.viewer.ctx) {
+            setSubtreeVisibility(this.viewer.ctx.state.data, ref, !isVisible);
+            this.dispatch(setNonPolymerVisibility({ pdbId, chemId, visible: isVisible }));
+        }
+    }
+
+    async highlightNonPolymer(pdbId: string, chemId: string, shouldHighlight: boolean) {
+        if (!this.viewer.ctx) return;
+
+        if (!shouldHighlight) {
+            this.viewer.ctx.managers.interactivity.lociHighlights.clearHighlights();
+            this.dispatch(setNonPolymerHovered({ pdbId, chemId, hovered: false }));
+            return;
+        }
+
+        const ref = this.getLigandComponentRef(pdbId, chemId);
+        if (ref) {
+            const cell = this.viewer.ctx.state.data.select(StateSelection.Generators.byRef(ref))[0];
+            if (cell?.obj?.data) {
+                const loci = Structure.toStructureElementLoci(cell.obj.data as Structure);
+                this.viewer.ctx.managers.interactivity.lociHighlights.highlight({ loci }, false);
+                this.dispatch(setNonPolymerHovered({ pdbId, chemId, hovered: true }));
+            }
+        }
+    }
+
+    async focusNonPolymer(pdbId: string, chemId: string) {
+        const ref = this.getLigandComponentRef(pdbId, chemId);
+        if (ref && this.viewer.ctx) {
+            const cell = this.viewer.ctx.state.data.select(StateSelection.Generators.byRef(ref))[0];
+            if (cell?.obj?.data) {
+                const loci = StructureSelection.toLociWithSourceUnits(cell.obj.data)
+                this.viewer.ctx.managers.camera.focusLoci(loci);
+            }
+        }
+    }
+
+    private getLigandComponentRef(pdbId: string, chemId: string): string | undefined {
+        const state = this.getState();
+        const component = state.molstarRefs.components[`${pdbId}_${chemId}`];
+        return component?.ref;
     }
 
 
