@@ -52,25 +52,29 @@ export class MolstarController {
             const model = await this.viewer.ctx.builders.structure.createModel(trajectory);
             const structure = await this.viewer.ctx.builders.structure.createStructure(model);
 
-            const presetResult = await this.viewer.ctx.builders.structure.representation.applyPreset(structure, 'tubulin-split-preset', {
+            // The preset now returns both polymers and ligands
+            const { objects_polymer, objects_ligand } = await this.viewer.ctx.builders.structure.representation.applyPreset(structure, 'tubulin-split-preset', {
                 pdbId: pdbId.toUpperCase(),
                 tubulinClassification
             });
 
-            const objects_polymer = presetResult.objects_polymer as Record<string, { ref: string; sequence: any[] }>;
-
-            this.dispatch(setStructureRef({ pdbId: pdbId.toUpperCase(), ref: structure.ref }));
-            const newComponents = Object.entries(objects_polymer || {}).reduce((acc, [chainId, data]) => {
-                acc[chainId] = {
-                    type: 'polymer' as const,
-                    pdbId: pdbId.toUpperCase(),
-                    ref: data.ref,
-                    chainId: chainId,
-                };
+            // Process Polymers
+            const polymerComponents = Object.entries(objects_polymer || {}).reduce((acc, [chainId, data]) => {
+                acc[chainId] = { type: 'polymer', pdbId: pdbId.toUpperCase(), ref: data.ref, chainId: chainId };
                 return acc;
             }, {} as Record<string, PolymerComponent>);
-            this.dispatch(addComponents({ pdbId: pdbId.toUpperCase(), components: newComponents }));
-            Object.keys(newComponents).forEach(chainId => {
+
+            // Process Ligands
+            const ligandComponents = Object.entries(objects_ligand || {}).reduce((acc, [chemId, data]) => {
+                acc[chemId] = { type: 'ligand', pdbId: pdbId.toUpperCase(), ref: data.ref, chemicalId: chemId };
+                return acc;
+            }, {} as Record<string, LigandComponent>);
+
+            // Combine and dispatch to Redux
+            this.dispatch(setStructureRef({ pdbId: pdbId.toUpperCase(), ref: structure.ref }));
+            this.dispatch(addComponents({ pdbId: pdbId.toUpperCase(), components: { ...polymerComponents, ...ligandComponents } }));
+
+            Object.keys(polymerComponents).forEach(chainId => {
                 this.dispatch(initializePolymer({ pdbId: pdbId.toUpperCase(), chainId }));
             });
 

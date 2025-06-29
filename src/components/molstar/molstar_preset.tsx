@@ -4,7 +4,7 @@ import { StateObjectRef, StateObjectSelector } from 'molstar/lib/mol-state';
 import { StructureRepresentationPresetProvider } from 'molstar/lib/mol-plugin-state/builder/structure/representation-preset';
 import { ParamDefinition as PD } from 'molstar/lib/mol-util/param-definition';
 import { Color } from 'molstar/lib/mol-util/color';
-import { AMINO_ACIDS_3_TO_1_CODE, ResidueData, getResidueSequence } from './preset-helpers';
+import { AMINO_ACIDS_3_TO_1_CODE, ResidueData, getLigands, getResidueSequence } from './preset-helpers';
 
 // Define the Tubulin types and the parameter object shape
 export enum TubulinClass {
@@ -39,6 +39,15 @@ export const TubulinSplitPreset = StructureRepresentationPresetProvider({
         if (!structureCell) return {};
 
         const structure = structureCell.obj!.data;
+        const { update, builder, typeParams, color, symmetryColor } = StructureRepresentationPresetProvider.reprBuilder(
+            plugin,
+            params,
+            structure
+        );
+        const objects_polymer: { [k: string]: { ref: string; sequence: ResidueData[] } } = {};
+        const objects_ligand: { [k: string]: { ref: string } } = {};
+        const components: { [k: string]: StateObjectSelector | undefined } = {};
+        const representations: { [k: string]: StateObjectSelector | undefined } = {};
 
         // --- USING YOUR WORKING CHAIN DISCOVERY LOGIC ---
         const chains = new Set<string>();
@@ -48,7 +57,6 @@ export const TubulinSplitPreset = StructureRepresentationPresetProvider({
             chains.add(auth_asym_id({ unit, element: unit.elements[0] }));
         }
 
-        const objects_polymer: { [k: string]: { ref: string; sequence: ResidueData[] } } = {};
 
         for (const chainId of Array.from(chains).sort()) {
             const chainSelection = MS.struct.generator.atomGroups({
@@ -81,6 +89,40 @@ export const TubulinSplitPreset = StructureRepresentationPresetProvider({
                 };
             }
         }
+        const ligands = getLigands(structure);
+        for (const ligandId of Array.from(ligands)) {
+            const ligandSelection = MS.struct.generator.atomGroups({
+                'atom-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), ligandId])
+            });
+
+            const component = await plugin.builders.structure.tryCreateComponentFromExpression(
+                ref,
+                ligandSelection,
+                `${ligandId}`,
+                {
+                    label: `${"toreplacewithpdbid"}${ligandId}`,
+                    tags: [`${ligandId}`]
+                }
+            );
+
+            if (component) {
+                const representation = await plugin.builders.structure.representation.addRepresentation(component, {
+                    type: 'ball-and-stick',
+                    colorParams: {
+                        style: {
+                            name: 'element-symbol'
+                        }
+                    }
+                });
+
+                components[`${ligandId}`] = component;
+                representations[`${ligandId}`] = representation;
+                objects_ligand[ligandId] = {
+                    ref: component.ref
+                };
+            }
+        }
+        await update.commit({ revertOnError: true });
 
         return {
             objects_polymer,
