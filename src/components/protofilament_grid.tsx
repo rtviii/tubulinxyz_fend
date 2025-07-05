@@ -1,26 +1,92 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 
-// A type definition for the data this component will now expect.
-export interface SubunitData {
-    id: string; // A unique ID for the grid, e.g., "pf0-A"
-    auth_asym_id: string; // The actual chain ID, e.g., "A"
+// Backend data structure (what we get from API)
+interface BackendSubunitData {
+    id: string;
+    auth_asym_id: string;
     protofilament: number;
-    subunitIndex: number; // Index within the protofilament
-    monomerType: 'α' | 'β';
-    // We can add these back later when the data is available
-    // gtpState: 'GTP' | 'GDP';
-    // hasPTMs: boolean;
+    subunitIndex: number;
+    monomerType: 'alpha' | 'beta'; // Backend returns these strings
+}
+
+interface BackendGridData {
+    subunits: BackendSubunitData[];
+    structure_type: string;
+    metadata: {
+        pdb_id: string;
+        num_tubulin_chains: number;
+        num_protofilaments: number;
+        nterm_connections: number;
+    };
+}
+
+// Frontend data structure (what the component uses)
+export interface SubunitData {
+    id: string;
+    auth_asym_id: string;
+    protofilament: number;
+    subunitIndex: number;
+    monomerType: 'α' | 'β'; // Greek letters for display
 }
 
 export interface GridData {
     subunits: SubunitData[];
-    // We'll leave contacts out for now until we have a real source for them.
-    // contacts: any[];
 }
 
-// The ProtofilamentGrid component, now accepting props.
-export const ProtofilamentGrid = ({ 
-    gridData,
+// Grid loading hook
+const useGridData = (pdbId: string | null) => {
+    const [gridData, setGridData] = useState<GridData | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const loadGrid = useCallback(async (pdbId: string) => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            const response = await fetch(`http://localhost:8000/grid/${pdbId.toLowerCase()}`);
+
+            if (!response.ok) {
+                throw new Error(`Failed to load grid: ${response.statusText}`);
+            }
+
+            const backendData: BackendGridData = await response.json();
+
+            // Convert backend format to frontend format
+            const frontendData: GridData = {
+                subunits: backendData.subunits.map(subunit => ({
+                    ...subunit,
+                    monomerType: subunit.monomerType === 'alpha' ? 'α' : 'β'
+                }))
+            };
+
+            setGridData(frontendData);
+            console.log(`Loaded grid for ${pdbId}: ${frontendData.subunits.length} subunits`);
+
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            setError(errorMessage);
+            console.error('Error loading grid:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (pdbId) {
+            loadGrid(pdbId);
+        } else {
+            setGridData(null);
+            setError(null);
+        }
+    }, [pdbId, loadGrid]);
+
+    return { gridData, loading, error, refetch: () => pdbId && loadGrid(pdbId) };
+};
+
+// Enhanced ProtofilamentGrid component with integrated data loading
+export const ProtofilamentGrid = ({
+    pdbId,
     onSubunitSelect,
     onSubunitHover,
     selectedSubunitId,
@@ -30,17 +96,71 @@ export const ProtofilamentGrid = ({
     gap = 4,
     protofilamentGap = 10
 }: {
-    gridData: GridData | null;
-    onSubunitSelect: (subunit: SubunitData) => void;
-    onSubunitHover: (subunit: SubunitData | null) => void;
-    selectedSubunitId: string | null;
-    hoveredSubunitId: string | null;
+    pdbId: string | null;
+    onSubunitSelect?: (subunit: SubunitData) => void;
+    onSubunitHover?: (subunit: SubunitData | null) => void;
+    selectedSubunitId?: string | null;
+    hoveredSubunitId?: string | null;
     shearAngle?: number;
     cellSize?: number;
     gap?: number;
     protofilamentGap?: number;
 }) => {
-    // If no data is loaded yet, show a placeholder.
+    const { gridData, loading, error } = useGridData(pdbId);
+
+    const getPosition = useCallback((pf: number, su: number) => {
+        const shearOffset = Math.tan(shearAngle * Math.PI / 180) * cellSize;
+        // Swap x and y to make protofilaments vertical columns
+        const x = su * (cellSize + gap) + pf * shearOffset;
+        const y = pf * (cellSize + protofilamentGap);
+        return { x, y };
+    }, [cellSize, protofilamentGap, gap, shearAngle]);
+
+    const { subunitPositions, totalWidth, totalHeight, protofilaments } = useMemo(() => {
+        if (!gridData || gridData.subunits.length === 0) {
+            return { subunitPositions: {}, totalWidth: 0, totalHeight: 0, protofilaments: 0 };
+        }
+
+        const { subunits } = gridData;
+        const protofilaments = Math.max(...subunits.map(d => d.protofilament)) + 1;
+        const maxSubunits = Math.max(...subunits.map(d => d.subunitIndex)) + 1;
+        const shearOffset = Math.tan(shearAngle * Math.PI / 180) * cellSize;
+        // Swap width and height since we swapped x and y
+        const totalWidth = maxSubunits * (cellSize + gap) + Math.abs(shearOffset * protofilaments);
+        const totalHeight = protofilaments * (cellSize + protofilamentGap);
+
+        const positions: { [id: string]: { data: SubunitData, position: { x: number, y: number } } } = {};
+        subunits.forEach(subunit => {
+            positions[subunit.id] = {
+                data: subunit,
+                position: getPosition(subunit.protofilament, subunit.subunitIndex)
+            };
+        });
+
+        return { subunitPositions: positions, totalWidth, totalHeight, protofilaments };
+    }, [gridData, getPosition, cellSize, protofilamentGap, gap, shearAngle]);
+
+    // Loading state
+    if (loading) {
+        return (
+            <div className="w-full text-center p-8 bg-gray-50 rounded-lg">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                <p className="text-gray-500">Generating 2D lattice from {pdbId?.toUpperCase()}...</p>
+            </div>
+        );
+    }
+
+    // Error state
+    if (error) {
+        return (
+            <div className="w-full text-center p-8 bg-red-50 rounded-lg border border-red-200">
+                <p className="text-red-600 font-medium">Failed to load grid</p>
+                <p className="text-red-500 text-sm mt-1">{error}</p>
+            </div>
+        );
+    }
+
+    // No data state
     if (!gridData || gridData.subunits.length === 0) {
         return (
             <div className="w-full text-center p-8 bg-gray-50 rounded-lg">
@@ -48,36 +168,15 @@ export const ProtofilamentGrid = ({
             </div>
         );
     }
-    
-    const { subunits } = gridData;
 
-    // --- The rest of this component is the layout and rendering logic from your example ---
-    const protofilaments = Math.max(...subunits.map(d => d.protofilament)) + 1;
-    const maxSubunits = Math.max(...subunits.map(d => d.subunitIndex)) + 1;
-    const shearOffset = Math.tan(shearAngle * Math.PI / 180) * cellSize;
-    const totalWidth = protofilaments * (cellSize + protofilamentGap) + Math.abs(shearOffset * maxSubunits);
-    const totalHeight = maxSubunits * (cellSize + gap);
-
-    const getPosition = useCallback((pf: number, su: number) => {
-        const x = pf * (cellSize + protofilamentGap) + su * shearOffset;
-        const y = su * (cellSize + gap);
-        return { x, y };
-    }, [cellSize, protofilamentGap, gap, shearOffset]);
-
-    const subunitPositions = useMemo(() => {
-        const positions: { [id: string]: { data: SubunitData, position: {x: number, y: number} } } = {};
-        subunits.forEach(subunit => {
-            positions[subunit.id] = {
-                data: subunit,
-                position: getPosition(subunit.protofilament, subunit.subunitIndex)
-            };
-        });
-        return positions;
-    }, [subunits, getPosition]);
-    
     return (
         <div className="w-full max-w-5xl mx-auto p-4">
-            <h3 className="text-lg font-semibold mb-2">2D Lattice View</h3>
+            <div className="flex justify-between items-center mb-2">
+                <h3 className="text-lg font-semibold">2D Lattice View</h3>
+                <div className="text-sm text-gray-600">
+                    {gridData.subunits.length} subunits • {protofilaments} protofilaments
+                </div>
+            </div>
             <div className="overflow-auto border rounded-lg bg-gray-50 p-4">
                 <svg width={totalWidth} height={totalHeight} className="block">
                     {/* Render subunits */}
@@ -87,10 +186,10 @@ export const ProtofilamentGrid = ({
                         const isHighlighted = isHovered || isSelected;
 
                         return (
-                            <g key={data.id} 
-                                onMouseEnter={() => onSubunitHover(data)}
-                                onMouseLeave={() => onSubunitHover(null)}
-                                onClick={() => onSubunitSelect(data)}
+                            <g key={data.id}
+                                onMouseEnter={() => onSubunitHover?.(data)}
+                                onMouseLeave={() => onSubunitHover?.(null)}
+                                onClick={() => onSubunitSelect?.(data)}
                                 className="cursor-pointer">
                                 <circle
                                     cx={position.x + cellSize / 2}
@@ -113,13 +212,14 @@ export const ProtofilamentGrid = ({
                             </g>
                         );
                     })}
-                    {/* Protofilament labels */}
+                    {/* Protofilament labels - now on the left side as row labels */}
                     {Array.from({ length: protofilaments }, (_, i) => (
                         <text
                             key={`pf-label-${i}`}
-                            x={getPosition(i, 0).x + cellSize / 2}
-                            y={-8}
-                            textAnchor="middle"
+                            x={-8}
+                            y={getPosition(i, 0).y + cellSize / 2}
+                            textAnchor="end"
+                            dominantBaseline="middle"
                             className="text-xs font-medium fill-gray-500"
                         >
                             PF{i + 1}

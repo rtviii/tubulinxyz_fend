@@ -15,16 +15,10 @@ import React from 'react';
 import { ChainPanel } from '@/components/chain_panel';
 import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 import { createTubulinClassificationMap } from '@/services/gql_parser';
-import { ProtofilamentGrid, GridData, SubunitData } from '@/components/protofilament_grid';
+import { ProtofilamentGrid, SubunitData } from '@/components/protofilament_grid'; // Updated import
 import { buildGridDataFromGql } from '@/services/protofilament_grid_parser';
-import { NonPolymerPanel } from '@/components/nonpolymer_panel'; // Import the new panel
+import { NonPolymerPanel } from '@/components/nonpolymer_panel';
 
-// A larger list of suggested PDB IDs to be picked from randomly.
-
-// At the top of your page.tsx, you might need to add the Shuffle icon to your imports
-// import { Shuffle } from 'lucide-react';
-
-// A larger list of suggested PDB IDs (should already be in your file)
 const SUGGESTED_PDB_IDS = ["6WVR", "8QV0", "3JAT", "6O2R", "4TV9", "6U0H", "8VRK", "6E7B", "5J2T", "6FKJ", "4O2B", "6DPU", "1SA0", "6BR1", "7SJ8", "2MZ7", "7SJ9", "6O2T"];
 
 /**
@@ -66,15 +60,14 @@ function SettingsPanel({
     }
   };
 
-  // --- NEW: Function to pick a new random suggestion ---
   const handleRandomize = () => {
-    if (SUGGESTED_PDB_IDS.length <= 1) return; // Avoid infinite loop
+    if (SUGGESTED_PDB_IDS.length <= 1) return;
 
     let newPdbId;
     do {
       const randomIndex = Math.floor(Math.random() * SUGGESTED_PDB_IDS.length);
       newPdbId = SUGGESTED_PDB_IDS[randomIndex];
-    } while (newPdbId === suggestedPdbId); // Make sure it's different
+    } while (newPdbId === suggestedPdbId);
 
     setSuggestedPdbId(newPdbId);
   };
@@ -114,7 +107,6 @@ function SettingsPanel({
 
         {suggestedPdbId && (
           <div className="space-y-2">
-            {/* --- NEW: Title with Randomize Button --- */}
             <div className="flex justify-between items-center">
               <h3 className="text-md font-medium text-gray-800">Suggested Structure</h3>
               <button
@@ -123,7 +115,6 @@ function SettingsPanel({
                 className="p-1.5 rounded-full text-gray-500 hover:bg-gray-200 hover:text-gray-800 disabled:opacity-50"
                 title="Get another suggestion"
               >
-                {/* Replace with a suitable icon, e.g., from lucide-react */}
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="8 21 3 21 3 16"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
               </button>
             </div>
@@ -147,8 +138,6 @@ function SettingsPanel({
   );
 }
 
-
-
 /**
  * Main Page Component
  */
@@ -158,15 +147,9 @@ export default function TubulinViewerPage() {
   const dispatch = useAppDispatch();
   const selectedStructure = useAppSelector(selectSelectedStructure);
 
-  const [gridData, setGridData] = useState<GridData | null>(null);
+  // Remove the old grid data state - it's now handled in ProtofilamentGrid
   const [selectedGridSubunit, setSelectedGridSubunit] = useState<string | null>(null);
   const [hoveredGridSubunit, setHoveredGridSubunit] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!selectedStructure) {
-      setGridData(null);
-    }
-  }, [selectedStructure]);
 
   const handleStructureSelect = useCallback(async (pdbId: string) => {
     if (!service?.controller) {
@@ -177,18 +160,14 @@ export default function TubulinViewerPage() {
     dispatch(selectStructure(pdbId));
     dispatch(setLoading(true));
     dispatch(setError(null));
-    setGridData(null);
 
     try {
       const gqlData = await fetchRcsbGraphQlData(pdbId);
       console.log(`[UI] Fetched GraphQL data for ${pdbId}`, gqlData);
       const classificationMap = createTubulinClassificationMap(gqlData);
       console.log('[UI] Generated Tubulin Classification Map:', classificationMap);
-      const newGridData = buildGridDataFromGql(gqlData, classificationMap);
-      setGridData(newGridData);
+      
       await service.controller.loadStructure(pdbId, classificationMap);
-      // The `stylized_lighting` method you had isn't in the provided MolstarViewer,
-      // but you can add it if you have the code for it.
       await service.viewer.representations.stylized_lighting()
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -199,21 +178,27 @@ export default function TubulinViewerPage() {
     }
   }, [service, dispatch]);
 
+  // Track the currently hovered subunit data for proper cleanup
+  const [hoveredSubunitData, setHoveredSubunitData] = useState<SubunitData | null>(null);
+
   const handleSubunitHover = useCallback((subunit: SubunitData | null) => {
     const controller = service?.controller;
     if (!controller || !selectedStructure) return;
 
+    // Clear previous highlight if there was one
+    if (hoveredSubunitData) {
+      controller.highlightChain(selectedStructure, hoveredSubunitData.auth_asym_id, false);
+    }
+
     if (subunit) {
       controller.highlightChain(selectedStructure, subunit.auth_asym_id, true);
       setHoveredGridSubunit(subunit.id);
+      setHoveredSubunitData(subunit);
     } else {
-      const prevHovered = gridData?.subunits.find(s => s.id === hoveredGridSubunit);
-      if (prevHovered) {
-        controller.highlightChain(selectedStructure, prevHovered.auth_asym_id, false);
-      }
       setHoveredGridSubunit(null);
+      setHoveredSubunitData(null);
     }
-  }, [service, selectedStructure, gridData, hoveredGridSubunit]);
+  }, [service, selectedStructure, hoveredSubunitData]);
 
   const handleSubunitSelect = useCallback((subunit: SubunitData) => {
     console.log("Selected subunit on grid:", subunit);
@@ -237,20 +222,20 @@ export default function TubulinViewerPage() {
         </div>
         <div className="flex flex-col">
           <ChainPanel />
-          <div className="border-t border-gray-200"></div> {/* Separator */}
+          <div className="border-t border-gray-200"></div>
           <NonPolymerPanel />
         </div>
       </div>
-      {/* <div className="flex-shrink-0 border-t bg-white shadow-inner">
+      <div className="flex-shrink-0 border-t bg-white shadow-inner">
+        {/* Updated ProtofilamentGrid - now handles its own data loading */}
         <ProtofilamentGrid
-          gridData={gridData}
+          pdbId={selectedStructure} // Pass the selected PDB ID
           onSubunitHover={handleSubunitHover}
           onSubunitSelect={handleSubunitSelect}
           hoveredSubunitId={hoveredGridSubunit}
           selectedSubunitId={selectedGridSubunit}
         />
-      </div> */}
+      </div>
     </div>
   );
 }
-
