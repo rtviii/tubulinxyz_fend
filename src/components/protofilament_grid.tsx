@@ -143,7 +143,7 @@ export const ProtofilamentGrid = ({
     // Loading state
     if (loading) {
         return (
-            <div className="w-full text-center p-8 bg-gray-50 rounded-lg">
+            <div className="w-full text-center p-8 bg-gray-50">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
                 <p className="text-gray-500">Generating 2D lattice from {pdbId?.toUpperCase()}...</p>
             </div>
@@ -153,7 +153,7 @@ export const ProtofilamentGrid = ({
     // Error state
     if (error) {
         return (
-            <div className="w-full text-center p-8 bg-red-50 rounded-lg border border-red-200">
+            <div className="w-full text-center p-8 bg-red-50 border border-red-200">
                 <p className="text-red-600 font-medium">Failed to load grid</p>
                 <p className="text-red-500 text-sm mt-1">{error}</p>
             </div>
@@ -163,21 +163,22 @@ export const ProtofilamentGrid = ({
     // No data state
     if (!gridData || gridData.subunits.length === 0) {
         return (
-            <div className="w-full text-center p-8 bg-gray-50 rounded-lg">
+            <div className="w-full text-center p-8 bg-gray-50">
                 <p className="text-gray-500">Load a structure to see the 2D lattice view.</p>
             </div>
         );
     }
 
     return (
-        <div className="w-full max-w-5xl mx-auto p-4">
+        <div className="w-full p-4">
             <div className="flex justify-between items-center mb-2">
                 <h3 className="text-lg font-semibold">2D Lattice View</h3>
                 <div className="text-sm text-gray-600">
                     {gridData.subunits.length} subunits • {protofilaments} protofilaments
                 </div>
             </div>
-            <div className="overflow-auto border rounded-lg bg-gray-50 p-4">
+            {/* Remove internal scrolling - let parent handle it */}
+            <div className="border rounded-lg bg-gray-50 p-4">
                 <svg width={totalWidth} height={totalHeight} className="block">
                     {/* Render subunits */}
                     {Object.values(subunitPositions).map(({ data, position }) => {

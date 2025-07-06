@@ -133,13 +133,29 @@ export class MolstarController {
     }
 
     async focusNonPolymer(pdbId: string, chemId: string) {
-        const ref = this.getLigandComponentRef(pdbId, chemId);
-        if (ref && this.viewer.ctx) {
-            const cell = this.viewer.ctx.state.data.select(StateSelection.Generators.byRef(ref))[0];
-            if (cell?.obj?.data) {
-                const loci = StructureSelection.toLociWithSourceUnits(cell.obj.data)
-                this.viewer.ctx.managers.camera.focusLoci(loci);
+        try {
+            const ref = this.getLigandComponentRef(pdbId, chemId);
+            if (!ref || !this.viewer.ctx) {
+                console.warn(`No ref found for ligand ${chemId} in structure ${pdbId}`);
+                return;
             }
+
+            const cell = this.viewer.ctx.state.data.select(StateSelection.Generators.byRef(ref))[0];
+            if (!cell?.obj?.data) {
+                console.warn(`No cell data found for ligand ${chemId}`);
+                return;
+            }
+
+            // Same fix: use Structure.toStructureElementLoci instead of StructureSelection.toLociWithSourceUnits
+            const structure = cell.obj.data as Structure;
+            const loci = Structure.toStructureElementLoci(structure);
+
+            this.viewer.ctx.managers.camera.focusLoci(loci);
+
+            console.log(`Successfully focused on ligand ${chemId}`);
+
+        } catch (error) {
+            console.error(`Error focusing ligand ${chemId}:`, error);
         }
     }
 
@@ -155,13 +171,38 @@ export class MolstarController {
         return component?.ref;
     }
     async focusChain(pdbId: string, chainId: string) {
-        const ref = this.getComponentRef(pdbId, chainId);
-        if (ref && this.viewer.ctx) {
+        try {
+            const ref = this.getComponentRef(pdbId, chainId);
+            if (!ref || !this.viewer.ctx) {
+                console.warn(`No ref found for chain ${chainId} in structure ${pdbId}`);
+                return;
+            }
+
             const cell = this.viewer.ctx.state.data.select(StateSelection.Generators.byRef(ref))[0];
-            if (cell?.obj?.data) {
-                // const loci = Structure.toLoci(cell.obj.data as Structure);
-                const loci = StructureSelection.toLociWithSourceUnits(cell.obj.data)
-                this.viewer.ctx.managers.camera.focusLoci(loci);
+            if (!cell?.obj?.data) {
+                console.warn(`No cell data found for chain ${chainId}`);
+                return;
+            }
+
+            // The key fix: cell.obj.data is a Structure, not a StructureSelection
+            // Use Structure.toStructureElementLoci to get the loci
+            const structure = cell.obj.data as Structure;
+            const loci = Structure.toStructureElementLoci(structure);
+
+            // Focus on the loci
+            this.viewer.ctx.managers.camera.focusLoci(loci);
+
+            console.log(`Successfully focused on chain ${chainId}`);
+
+        } catch (error) {
+            console.error(`Error focusing chain ${chainId}:`, error);
+
+            // Fallback to highlighting if focus fails
+            try {
+                await this.highlightChain(pdbId, chainId, true);
+                console.log(`Fallback: highlighted chain ${chainId} instead of focusing`);
+            } catch (fallbackError) {
+                console.error(`Fallback highlighting also failed:`, fallbackError);
             }
         }
     }

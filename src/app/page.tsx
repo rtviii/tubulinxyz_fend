@@ -15,7 +15,7 @@ import React from 'react';
 import { ChainPanel } from '@/components/chain_panel';
 import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 import { createTubulinClassificationMap } from '@/services/gql_parser';
-import { ProtofilamentGrid, SubunitData } from '@/components/protofilament_grid'; // Updated import
+import { ProtofilamentGrid, SubunitData } from '@/components/protofilament_grid';
 import { buildGridDataFromGql } from '@/services/protofilament_grid_parser';
 import { NonPolymerPanel } from '@/components/nonpolymer_panel';
 
@@ -147,7 +147,6 @@ export default function TubulinViewerPage() {
   const dispatch = useAppDispatch();
   const selectedStructure = useAppSelector(selectSelectedStructure);
 
-  // Remove the old grid data state - it's now handled in ProtofilamentGrid
   const [selectedGridSubunit, setSelectedGridSubunit] = useState<string | null>(null);
   const [hoveredGridSubunit, setHoveredGridSubunit] = useState<string | null>(null);
 
@@ -166,7 +165,7 @@ export default function TubulinViewerPage() {
       console.log(`[UI] Fetched GraphQL data for ${pdbId}`, gqlData);
       const classificationMap = createTubulinClassificationMap(gqlData);
       console.log('[UI] Generated Tubulin Classification Map:', classificationMap);
-      
+
       await service.controller.loadStructure(pdbId, classificationMap);
       await service.viewer.representations.stylized_lighting()
     } catch (error) {
@@ -203,7 +202,20 @@ export default function TubulinViewerPage() {
   const handleSubunitSelect = useCallback((subunit: SubunitData) => {
     console.log("Selected subunit on grid:", subunit);
     setSelectedGridSubunit(subunit.id);
-  }, []);
+
+    // Focus the chain in Molstar
+    const controller = service?.controller;
+    if (controller && selectedStructure) {
+      // Add error handling for the focus operation
+      try {
+        controller.focusChain(selectedStructure, subunit.auth_asym_id);
+      } catch (error) {
+        console.error("Error focusing chain:", error);
+        // Fallback to highlight if focus fails
+        controller.highlightChain(selectedStructure, subunit.auth_asym_id, true);
+      }
+    }
+  }, [service, selectedStructure]);
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-gray-100">
@@ -220,21 +232,28 @@ export default function TubulinViewerPage() {
             </div>
           )}
         </div>
-        <div className="flex flex-col">
-          <ChainPanel />
+        {/* Fixed height constraints for the right panels */}
+        <div className="flex flex-col h-full">
+          <div className="flex-1 min-h-0 overflow-hidden"> {/* min-h-0 allows flex child to shrink */}
+            <ChainPanel />
+          </div>
           <div className="border-t border-gray-200"></div>
-          <NonPolymerPanel />
+          <div className="flex-1 min-h-0 overflow-hidden"> {/* min-h-0 allows flex child to shrink */}
+            <NonPolymerPanel />
+          </div>
         </div>
       </div>
-      <div className="flex-shrink-0 border-t bg-white shadow-inner">
-        {/* Updated ProtofilamentGrid - now handles its own data loading */}
-        <ProtofilamentGrid
-          pdbId={selectedStructure} // Pass the selected PDB ID
-          onSubunitHover={handleSubunitHover}
-          onSubunitSelect={handleSubunitSelect}
-          hoveredSubunitId={hoveredGridSubunit}
-          selectedSubunitId={selectedGridSubunit}
-        />
+      {/* Constrain 2D lattice to 25% max height */}
+      <div className="flex-shrink-0 border-t bg-white shadow-inner" style={{ maxHeight: '25vh' }}>
+        <div className="h-full overflow-auto">
+          <ProtofilamentGrid
+            pdbId={selectedStructure}
+            onSubunitHover={handleSubunitHover}
+            onSubunitSelect={handleSubunitSelect}
+            hoveredSubunitId={hoveredGridSubunit}
+            selectedSubunitId={selectedGridSubunit}
+          />
+        </div>
       </div>
     </div>
   );
