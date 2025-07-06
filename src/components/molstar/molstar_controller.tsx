@@ -1,11 +1,10 @@
-import { MolstarViewer } from './molstar_viewer';
-import { AppDispatch, RootState } from '@/store/store';
+import { MolstarViewer } from './molstar_viewer'; import { AppDispatch, RootState } from '@/store/store';
 import { setStructureRef, addComponents, clearStructure, clearAll, PolymerComponent, LigandComponent } from '@/store/slices/molstar_refs';
 import { initializePolymer, clearPolymersForStructure, clearAllPolymers, setPolymerVisibility, setPolymerHovered } from '@/store/slices/polymer_states';
 import { setLoading, setError } from '@/store/slices/tubulin_structures';
 
 // Mol* imports
-import { Structure, StructureProperties, StructureSelection, Unit } from 'molstar/lib/mol-model/structure';
+import { QueryContext, Structure, StructureProperties, StructureSelection, Unit } from 'molstar/lib/mol-model/structure';
 import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder';
 import { StateObjectSelector, StateSelection } from 'molstar/lib/mol-state';
 import { createStructureRepresentationParams } from 'molstar/lib/mol-plugin-state/helpers/structure-representation-params';
@@ -14,6 +13,12 @@ import { PluginCommands } from 'molstar/lib/mol-plugin/commands';
 import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state';
 import { PresetObjects, TubulinClass, TubulinClassification } from './molstar_preset';
 import { initializeNonPolymer, setNonPolymerHovered, setNonPolymerVisibility } from '@/store/slices/nonpolymer_states';
+import { compile } from 'molstar/lib/mol-script/runtime/query/compiler';
+import { StructureSelectionQueries } from 'molstar/lib/mol-plugin-state/helpers/structure-selection-query';
+import { StructureComponentManager } from 'molstar/lib/mol-plugin-state/manager/structure/component';
+import { Script } from 'molstar/lib/mol-script/script';
+import { StructureSelectionQuery } from 'molstar/lib/mol-plugin-state/helpers/structure-selection-query';
+// Add these new imports if they are missing at the top of molstar_controller.ts
 
 interface StateSnapshot {
     currentStructure: string | null;
@@ -101,6 +106,99 @@ export class MolstarController {
             console.error('Error loading structure:', error);
             this.dispatch(setError(error instanceof Error ? error.message : 'Unknown error'));
             return false;
+        }
+    }
+    // In MolstarController class
+
+    // ... inside your MolstarController class
+
+    async createGtpInterfaceBonds() {
+        if (!this.viewer.ctx) {
+            console.error('Molstar context not available');
+            return;
+        }
+        const plugin = this.viewer.ctx;
+
+        // 1. Get the parent structure object
+        const structureRef = plugin.managers.structure.hierarchy.current.structures[0];
+        if (!structureRef?.cell.obj?.data) {
+            console.error('No structure loaded');
+            this.dispatch(setError('No structure loaded. Please load a PDB structure first.'));
+            return;
+        }
+        const structure = structureRef.cell.obj.data;
+
+        // --- Debugging Step: Log all non-polymer component names ---
+        const allLigands = new Set<string>();
+        Structure.eachAtomicHierarchyElement(structure, {
+            residue: loc => {
+                if (StructureProperties.entity.type(loc) === 'non-polymer') {
+                    allLigands.add(StructureProperties.atom.auth_comp_id(loc));
+                }
+            }
+        });
+        console.log('Found non-polymer molecules in structure:', Array.from(allLigands));
+        // --- End Debugging Step ---
+
+        // 2. Define the MolScript expression for the interface atoms.
+        const ligandQuery = MS.struct.filter.first({ // Corrected: Use filter.first
+            0: MS.struct.generator.atomGroups({
+                // Check for GTP and its common analogs
+                'residue-test': MS.core.logic.or([
+                    MS.core.rel.eq([MS.ammp('auth_comp_id'), 'GTP']),
+                    MS.core.rel.eq([MS.ammp('auth_comp_id'), 'GDP']),
+                    MS.core.rel.eq([MS.ammp('auth_comp_id'), 'GNP']),
+                ]),
+                'group-by': MS.ammp('residueKey')
+            })
+        });
+
+        const surroundings = MS.struct.modifier.includeSurroundings({
+            0: ligandQuery,
+            radius: 5,
+            'as-whole-residues': false
+        });
+
+        const ligandPartners = MS.struct.filter.isConnectedTo({
+            0: ligandQuery,
+            target: surroundings
+        });
+
+        const surroundingPartners = MS.struct.filter.isConnectedTo({
+            0: surroundings,
+            target: ligandQuery
+        });
+
+        const interfaceAtomsUnionExpr = MS.struct.modifier.union({
+            0: MS.struct.combinator.merge([ligandPartners, surroundingPartners])
+        });
+
+        // 3. Use the State Builder to create the component and its representation.
+        const update = plugin.state.data.build();
+
+        const component = update.to(structureRef.cell)
+            .apply(StateTransforms.Model.StructureSelectionFromExpression, {
+                expression: interfaceAtomsUnionExpr,
+                label: 'Ligand Interface Bonds'
+            });
+
+        component.apply(StateTransforms.Representation.StructureRepresentation3D,
+            createStructureRepresentationParams(plugin, structure, {
+                type: 'ball-and-stick',
+                color: 'element-symbol'
+            })
+        );
+
+        // 4. Commit the changes to the state tree.
+        await update.commit();
+
+        // 5. Check if the new component is empty and handle the error.
+        const newCell = plugin.state.data.select(component.ref)[0];
+        const newStructure = newCell?.obj?.data as Structure | undefined;
+        if (!newStructure || newStructure.elementCount === 0) {
+            // The selection was empty. Clean up the newly created (but empty) component.
+            await plugin.state.data.build().delete(component.ref).commit();
+            this.dispatch(setError('Could not create interface. No connections found between ligand (GTP/GDP/GNP) and surroundings. Check console for available ligands.'));
         }
     }
 

@@ -21,16 +21,34 @@ import { NonPolymerPanel } from '@/components/nonpolymer_panel';
 
 const SUGGESTED_PDB_IDS = ["6WVR", "8QV0", "3JAT", "6O2R", "4TV9", "6U0H", "8VRK", "6E7B", "5J2T", "6FKJ", "4O2B", "6DPU", "1SA0", "6BR1", "7SJ8", "2MZ7", "7SJ9", "6O2T"];
 
-/**
- * SettingsPanel Component: Renders the left-side panel for loading structures.
- */
+function GtpInterfaceCreator({ onCreate, isInteractionDisabled }: { onCreate: () => void, isInteractionDisabled: boolean }) {
+  return (
+    <div className="space-y-3 pt-4 mt-4 border-t border-gray-200">
+      <h3 className="text-md font-medium text-gray-800">Analyze Ligand Interface</h3>
+      <button
+        onClick={onCreate}
+        className="w-full px-4 py-2 font-semibold text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+        disabled={isInteractionDisabled}
+      >
+        Show First GTP Interface Bonds
+      </button>
+    </div>
+  );
+}
 function SettingsPanel({
   isMolstarReady,
-  onStructureSelect
+  onStructureSelect,
+
+
+  onCreateGtpInterface // <-- Changed prop
 }: {
   isMolstarReady: boolean;
   onStructureSelect: (pdbId: string) => void;
+
+  onCreateGtpInterface: () => void; // <-- Changed prop type
+
 }) {
+
   const selectedStructure = useAppSelector(selectSelectedStructure);
   const isLoading = useAppSelector(selectIsLoading);
   const error = useAppSelector(selectError);
@@ -134,6 +152,9 @@ function SettingsPanel({
 
         {isLoading && <div className="text-sm text-gray-500">Loading...</div>}
       </div>
+      <GtpInterfaceCreator onCreate={onCreateGtpInterface} isInteractionDisabled={isInteractionDisabled} />
+
+
     </div>
   );
 }
@@ -216,11 +237,32 @@ export default function TubulinViewerPage() {
       }
     }
   }, [service, selectedStructure]);
+  const handleCreateGtpInterface = useCallback(async () => {
+    if (!service?.controller) {
+      console.warn("Molstar controller not available.");
+      return;
+    }
+    dispatch(setLoading(true));
+    dispatch(setError(null));
+    try {
+      await service.controller.createGtpInterfaceBonds();
+    } catch (e) {
+      console.error("Failed to create GTP interface component", e);
+      const errorMessage = e instanceof Error ? e.message : 'Failed to create GTP interface';
+      dispatch(setError(errorMessage));
+    } finally {
+      dispatch(setLoading(false));
+    }
+  }, [service, dispatch]);
+
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-gray-100">
       <div className="flex flex-1 overflow-hidden">
-        <SettingsPanel isMolstarReady={isInitialized} onStructureSelect={handleStructureSelect} />
+        <SettingsPanel isMolstarReady={isInitialized} onStructureSelect={handleStructureSelect}
+          onCreateGtpInterface={handleCreateGtpInterface} // <-- Pass the new handler
+
+        />
         <div className="flex-1 h-full bg-white relative">
           <MolstarNode ref={molstarRef} />
           {!isInitialized && (
