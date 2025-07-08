@@ -20,6 +20,90 @@ import { StructureComponentManager } from 'molstar/lib/mol-plugin-state/manager/
 import { Script } from 'molstar/lib/mol-script/script';
 import { StructureSelectionQuery } from 'molstar/lib/mol-plugin-state/helpers/structure-selection-query';
 
+
+
+
+import { InteractionsProvider, Interactions } from 'molstar/lib/mol-model-props/computed/interactions';
+import { PluginContext } from 'molstar/lib/mol-plugin/context';
+import { StructureElement } from 'molstar/lib/mol-model/structure';
+import { interactionTypeLabel } from 'molstar/lib/mol-model-props/computed/interactions/common';
+import { SyncRuntimeContext } from 'molstar/lib/mol-task/execution/synchronous';
+import { AssetManager } from 'molstar/lib/mol-util/assets';
+
+// NOTE: Other necessary imports for the full controller class are assumed to be present.
+// e.g., import { setError } from '@/store/slices/tubulin_structures';
+
+// Define a simple structure for our interaction data
+export interface InteractionInfo {
+    type: string;
+    partnerA: string;
+    partnerB: string;
+}
+
+/**
+ * CORRECTED Helper function to extract interaction data from a given structure.
+ * This is the core logic for iterating through bonds.
+ * @param structure The structure to analyze. It MUST have interactions computed already.
+ * @returns An array of interaction information.
+ */
+function getInteractionData(structure: Structure): InteractionInfo[] {
+    // 1. Correctly get the pre-computed interactions from the structure property.
+    const interactions = InteractionsProvider.get(structure).value;
+    if (!interactions) {
+        console.warn('Interactions have not been computed for this structure.');
+        return [];
+    }
+
+    const results: InteractionInfo[] = [];
+    const { units } = structure;
+    const { unitsFeatures, unitsContacts, contacts: interUnitContacts } = interactions;
+
+    // Helper to create a descriptive label for an interaction partner (feature)
+    const getPartnerLabel = (unit: Unit, feature: number): string => {
+        const featuresOfUnit = unitsFeatures.get(unit.id);
+        if (!featuresOfUnit) return 'Unknown';
+        // Location of the first atom in the feature
+        const loc = StructureElement.Location.create(structure, unit, featuresOfUnit.members[featuresOfUnit.offsets[feature]]);
+        const compId = StructureProperties.atom.auth_comp_id(loc);
+        const seqId = StructureProperties.chain.auth_asym_id(loc);
+        const atomId = StructureProperties.atom.auth_atom_id(loc);
+        return `[${compId}]${seqId}:${atomId}`;
+    };
+
+    // 2. Iterate over interactions within the same unit (intra-unit)
+    for (const unit of units) {
+        const intraContacts = unitsContacts.get(unit.id);
+        if (!intraContacts) continue;
+        const { edgeCount, a, b, edgeProps } = intraContacts;
+        for (let i = 0; i < edgeCount; i++) {
+            if (a[i] < b[i]) { // Process each bond only once to avoid duplicates
+                results.push({
+                    type: interactionTypeLabel(edgeProps.type[i]),
+                    partnerA: getPartnerLabel(unit, a[i]),
+                    partnerB: getPartnerLabel(unit, b[i]),
+                });
+            }
+        }
+    }
+
+    // 3. Iterate over interactions between different units (inter-unit)
+    for (const bond of interUnitContacts.edges) {
+        const unitA = structure.unitMap.get(bond.unitA);
+        const unitB = structure.unitMap.get(bond.unitB);
+        if (!unitA || !unitB) continue;
+
+        if (unitA.id > unitB.id || (unitA.id === unitB.id && bond.indexA > bond.indexB)) continue;
+
+        results.push({
+            type: interactionTypeLabel(bond.props.type),
+            partnerA: getPartnerLabel(unitA, bond.indexA),
+            partnerB: getPartnerLabel(unitB, bond.indexB),
+        });
+    }
+
+    return results;
+}
+
 interface StateSnapshot {
     currentStructure: string | null;
     // Keeping these for context, though they aren't used in the provided snippet
@@ -36,6 +120,59 @@ export class MolstarController {
         this.viewer = viewer;
         this.dispatch = dispatch;
         this.getState = getState;
+    }
+
+
+    async getLigandInterfaceData(ligandChemId: string): Promise<InteractionInfo[] | undefined> {
+        if (!this.viewer.ctx) {
+            this.dispatch(setError('Mol* context not available.'));
+            return;
+        }
+        const plugin = this.viewer.ctx;
+
+        const structureRef = plugin.managers.structure.hierarchy.current.structures[0]?.cell;
+        if (!structureRef?.obj?.data) {
+            this.dispatch(setError('No structure loaded.'));
+            return;
+        }
+        const sourceStructure = structureRef.obj.data;
+
+        // 1. Create a temporary structure containing just the ligand and its surroundings
+        const surroundingsQuery = MS.struct.modifier.includeSurroundings({
+            0: MS.struct.filter.first({
+                0: MS.struct.generator.atomGroups({
+                    'residue-test': MS.core.rel.eq([MS.ammp('auth_comp_id'), ligandChemId]),
+                    'group-by': MS.ammp('residueKey')
+                })
+            }),
+            radius: 5,
+            'as-whole-residues': true
+        });
+
+        // Correctly create a new Structure object from the query without using the state builder
+        const compiledQuery = compile(surroundingsQuery);
+        const selection = compiledQuery(new QueryContext(sourceStructure));
+        const focusedStructure = StructureSelection.unionStructure(selection);
+
+        if (focusedStructure.elementCount === 0) {
+            this.dispatch(setError(`No surroundings found for ${ligandChemId}.`));
+            return [];
+        }
+
+        // 2. CRITICAL STEP: Ensure interactions are computed for this new, focused structure.
+        // The `attach` method requires a `CustomProperty.Context`. We create one manually,
+        // as shown in Mol* examples for standalone analysis.
+        const customPropertyContext = {
+            runtime: SyncRuntimeContext,
+            assetManager: new AssetManager() // Interactions don't load external assets, so a temp manager is fine.
+        };
+        await InteractionsProvider.attach(customPropertyContext, focusedStructure, undefined, true);
+
+        // 3. Run the data extraction helper on this new, focused structure
+        const interactionData = getInteractionData(focusedStructure);
+
+        console.log('Extracted Interaction Data:', interactionData);
+        return interactionData;
     }
 
     private getCurrentState(): StateSnapshot {

@@ -18,6 +18,7 @@ import { createTubulinClassificationMap } from '@/services/gql_parser';
 import { ProtofilamentGrid, SubunitData } from '@/components/protofilament_grid';
 import { buildGridDataFromGql } from '@/services/protofilament_grid_parser';
 import { NonPolymerPanel } from '@/components/nonpolymer_panel';
+import { InteractionInfo } from '@/components/molstar/molstar_controller'; // <-- ADD THIS IMPORT
 
 const SUGGESTED_PDB_IDS = ["6WVR", "8QV0", "3JAT", "6O2R", "4TV9", "6U0H", "8VRK", "6E7B", "5J2T", "6FKJ", "4O2B", "6DPU", "1SA0", "6BR1", "7SJ8", "2MZ7", "7SJ9", "6O2T"];
 
@@ -26,12 +27,16 @@ function SettingsPanel({
   isMolstarReady,
   onStructureSelect,
   onCreateGtpInterface,
-  onCreateGtpSurroundings // <-- New prop
+  onCreateGtpSurroundings,
+
+  onGetInterfaceData // <-- New prop
 }: {
   isMolstarReady: boolean;
   onStructureSelect: (pdbId: string) => void;
   onCreateGtpInterface: () => void;
   onCreateGtpSurroundings: () => void; // <-- New prop type
+
+  onGetInterfaceData: () => void; // <-- New prop type
 }) {
 
   const selectedStructure = useAppSelector(selectSelectedStructure);
@@ -73,7 +78,7 @@ function SettingsPanel({
   };
 
   const isInteractionDisabled = isLoading || !isMolstarReady;
-  const isLigandInteractionDisabled = isInteractionDisabled || !selectedStructure;
+  const isLigandInteractionDisabled = isLoading || !isMolstarReady || !selectedStructure;
 
   return (
     <div className="w-80 h-full bg-gray-50 border-r border-gray-200 p-4 overflow-y-auto">
@@ -153,6 +158,13 @@ function SettingsPanel({
           >
             Show GTP Interface Bonds
           </button>
+          <button
+            onClick={onGetInterfaceData}
+            disabled={isLigandInteractionDisabled}
+            className="w-full px-4 py-2 font-semibold text-white bg-orange-600 rounded-md shadow-sm hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            Get Interface Data
+          </button>
         </div>
       </div>
     </div>
@@ -170,6 +182,9 @@ export default function TubulinViewerPage() {
 
   const [selectedGridSubunit, setSelectedGridSubunit] = useState<string | null>(null);
   const [hoveredGridSubunit, setHoveredGridSubunit] = useState<string | null>(null);
+
+  const [interactionData, setInteractionData] = useState<InteractionInfo[]>([]); // <-- NEW STATE
+
 
   const handleStructureSelect = useCallback(async (pdbId: string) => {
     if (!service?.controller) {
@@ -266,6 +281,26 @@ export default function TubulinViewerPage() {
     }
   }, [service, dispatch]);
 
+  const handleGetInterfaceData = useCallback(async () => {
+    if (!service?.controller) {
+      console.warn("Molstar controller not available.");
+      return;
+    }
+    dispatch(setLoading(true));
+    setInteractionData([]); // Clear previous data
+    try {
+      const data = await service.controller.getLigandInterfaceData('GTP');
+      if (data) {
+        setInteractionData(data);
+      }
+    } catch (e) {
+      console.error("Failed to get interface data", e);
+      const errorMessage = e instanceof Error ? e.message : 'Failed to get interface data';
+      dispatch(setError(errorMessage));
+    } finally {
+      dispatch(setLoading(false));
+    }
+  }, [service, dispatch]);
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-gray-100">
@@ -275,6 +310,8 @@ export default function TubulinViewerPage() {
           onStructureSelect={handleStructureSelect}
           onCreateGtpInterface={handleCreateGtpInterface}
           onCreateGtpSurroundings={handleCreateGtpSurroundings} // <-- Pass the new handler
+
+          onGetInterfaceData={handleGetInterfaceData} // <-- Pass the new handler
         />
         <div className="flex-1 h-full bg-white relative">
           <MolstarNode ref={molstarRef} />
@@ -297,8 +334,25 @@ export default function TubulinViewerPage() {
           </div>
         </div>
       </div>
-      <div className="flex-shrink-0 border-t bg-white shadow-inner" style={{ maxHeight: '25vh' }}>
-        <div className="h-full overflow-auto">
+      <div className="flex-shrink-0 border-t bg-white shadow-inner" style={{ maxHeight: '25vh', display: 'flex' }}>
+        <div className="flex-1 h-full overflow-auto p-2">
+          <h3 className="text-md font-medium text-gray-800 mb-2">Interaction Data</h3>
+          {interactionData.length > 0 ? (
+            <ul className="text-xs space-y-1">
+              {interactionData.map((interaction, index) => (
+                <li key={index} className="p-1 bg-gray-50 rounded">
+                  <span className="font-semibold text-blue-700">{interaction.type}: </span>
+                  <span>{interaction.partnerA}</span>
+                  <span className="mx-2 text-gray-400">&harr;</span>
+                  <span>{interaction.partnerB}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-gray-500">Click "Get Interface Data" to populate.</p>
+          )}
+        </div>
+        <div className="flex-1 h-full overflow-auto border-l">
           <ProtofilamentGrid
             pdbId={selectedStructure}
             onSubunitHover={handleSubunitHover}
