@@ -21,32 +21,17 @@ import { NonPolymerPanel } from '@/components/nonpolymer_panel';
 
 const SUGGESTED_PDB_IDS = ["6WVR", "8QV0", "3JAT", "6O2R", "4TV9", "6U0H", "8VRK", "6E7B", "5J2T", "6FKJ", "4O2B", "6DPU", "1SA0", "6BR1", "7SJ8", "2MZ7", "7SJ9", "6O2T"];
 
-function GtpInterfaceCreator({ onCreate, isInteractionDisabled }: { onCreate: () => void, isInteractionDisabled: boolean }) {
-  return (
-    <div className="space-y-3 pt-4 mt-4 border-t border-gray-200">
-      <h3 className="text-md font-medium text-gray-800">Analyze Ligand Interface</h3>
-      <button
-        onClick={onCreate}
-        className="w-full px-4 py-2 font-semibold text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
-        disabled={isInteractionDisabled}
-      >
-        Show First GTP Interface Bonds
-      </button>
-    </div>
-  );
-}
+
 function SettingsPanel({
   isMolstarReady,
   onStructureSelect,
-
-
-  onCreateGtpInterface // <-- Changed prop
+  onCreateGtpInterface,
+  onCreateGtpSurroundings // <-- New prop
 }: {
   isMolstarReady: boolean;
   onStructureSelect: (pdbId: string) => void;
-
-  onCreateGtpInterface: () => void; // <-- Changed prop type
-
+  onCreateGtpInterface: () => void;
+  onCreateGtpSurroundings: () => void; // <-- New prop type
 }) {
 
   const selectedStructure = useAppSelector(selectSelectedStructure);
@@ -55,7 +40,6 @@ function SettingsPanel({
   const [customPdbId, setCustomPdbId] = useState('');
   const [suggestedPdbId, setSuggestedPdbId] = useState<string | null>(null);
 
-  // Effect to pick one random structure to suggest when the app is ready.
   useEffect(() => {
     if (isMolstarReady && !suggestedPdbId) {
       const randomIndex = Math.floor(Math.random() * SUGGESTED_PDB_IDS.length);
@@ -80,17 +64,16 @@ function SettingsPanel({
 
   const handleRandomize = () => {
     if (SUGGESTED_PDB_IDS.length <= 1) return;
-
     let newPdbId;
     do {
       const randomIndex = Math.floor(Math.random() * SUGGESTED_PDB_IDS.length);
       newPdbId = SUGGESTED_PDB_IDS[randomIndex];
     } while (newPdbId === suggestedPdbId);
-
     setSuggestedPdbId(newPdbId);
   };
 
   const isInteractionDisabled = isLoading || !isMolstarReady;
+  const isLigandInteractionDisabled = isInteractionDisabled || !selectedStructure;
 
   return (
     <div className="w-80 h-full bg-gray-50 border-r border-gray-200 p-4 overflow-y-auto">
@@ -151,10 +134,27 @@ function SettingsPanel({
         )}
 
         {isLoading && <div className="text-sm text-gray-500">Loading...</div>}
+
+        {/* --- NEW BUTTONS SECTION --- */}
+        <div className="space-y-2 pt-4 border-t border-gray-200">
+          <h3 className="text-md font-medium text-gray-800">Ligand Interactions</h3>
+          <p className="text-xs text-gray-500">Visualize GTP interactions. Load a structure first.</p>
+          <button
+            onClick={onCreateGtpSurroundings}
+            disabled={isLigandInteractionDisabled}
+            className="w-full px-4 py-2 font-semibold text-white bg-teal-600 rounded-md shadow-sm hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            Show GTP 5Å Surroundings
+          </button>
+          <button
+            onClick={onCreateGtpInterface}
+            disabled={isLigandInteractionDisabled}
+            className="w-full px-4 py-2 font-semibold text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            Show GTP Interface Bonds
+          </button>
+        </div>
       </div>
-      <GtpInterfaceCreator onCreate={onCreateGtpInterface} isInteractionDisabled={isInteractionDisabled} />
-
-
     </div>
   );
 }
@@ -183,10 +183,7 @@ export default function TubulinViewerPage() {
 
     try {
       const gqlData = await fetchRcsbGraphQlData(pdbId);
-      console.log(`[UI] Fetched GraphQL data for ${pdbId}`, gqlData);
       const classificationMap = createTubulinClassificationMap(gqlData);
-      console.log('[UI] Generated Tubulin Classification Map:', classificationMap);
-
       await service.controller.loadStructure(pdbId, classificationMap);
       await service.viewer.representations.stylized_lighting()
     } catch (error) {
@@ -198,14 +195,12 @@ export default function TubulinViewerPage() {
     }
   }, [service, dispatch]);
 
-  // Track the currently hovered subunit data for proper cleanup
   const [hoveredSubunitData, setHoveredSubunitData] = useState<SubunitData | null>(null);
 
   const handleSubunitHover = useCallback((subunit: SubunitData | null) => {
     const controller = service?.controller;
     if (!controller || !selectedStructure) return;
 
-    // Clear previous highlight if there was one
     if (hoveredSubunitData) {
       controller.highlightChain(selectedStructure, hoveredSubunitData.auth_asym_id, false);
     }
@@ -221,22 +216,18 @@ export default function TubulinViewerPage() {
   }, [service, selectedStructure, hoveredSubunitData]);
 
   const handleSubunitSelect = useCallback((subunit: SubunitData) => {
-    console.log("Selected subunit on grid:", subunit);
     setSelectedGridSubunit(subunit.id);
-
-    // Focus the chain in Molstar
     const controller = service?.controller;
     if (controller && selectedStructure) {
-      // Add error handling for the focus operation
       try {
         controller.focusChain(selectedStructure, subunit.auth_asym_id);
       } catch (error) {
         console.error("Error focusing chain:", error);
-        // Fallback to highlight if focus fails
         controller.highlightChain(selectedStructure, subunit.auth_asym_id, true);
       }
     }
   }, [service, selectedStructure]);
+
   const handleCreateGtpInterface = useCallback(async () => {
     if (!service?.controller) {
       console.warn("Molstar controller not available.");
@@ -245,10 +236,30 @@ export default function TubulinViewerPage() {
     dispatch(setLoading(true));
     dispatch(setError(null));
     try {
-      await service.controller.createGtpInterfaceBonds();
+      // This now calls the more specific interface bonds method
+      await service.controller.createLigandInterfaceBonds('GTP');
     } catch (e) {
       console.error("Failed to create GTP interface component", e);
       const errorMessage = e instanceof Error ? e.message : 'Failed to create GTP interface';
+      dispatch(setError(errorMessage));
+    } finally {
+      dispatch(setLoading(false));
+    }
+  }, [service, dispatch]);
+
+  // New handler for surroundings
+  const handleCreateGtpSurroundings = useCallback(async () => {
+    if (!service?.controller) {
+      console.warn("Molstar controller not available.");
+      return;
+    }
+    dispatch(setLoading(true));
+    dispatch(setError(null));
+    try {
+      await service.controller.createLigandSurroundings('GTP');
+    } catch (e) {
+      console.error("Failed to create GTP surroundings component", e);
+      const errorMessage = e instanceof Error ? e.message : 'Failed to create GTP surroundings';
       dispatch(setError(errorMessage));
     } finally {
       dispatch(setLoading(false));
@@ -259,9 +270,11 @@ export default function TubulinViewerPage() {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-gray-100">
       <div className="flex flex-1 overflow-hidden">
-        <SettingsPanel isMolstarReady={isInitialized} onStructureSelect={handleStructureSelect}
-          onCreateGtpInterface={handleCreateGtpInterface} // <-- Pass the new handler
-
+        <SettingsPanel
+          isMolstarReady={isInitialized}
+          onStructureSelect={handleStructureSelect}
+          onCreateGtpInterface={handleCreateGtpInterface}
+          onCreateGtpSurroundings={handleCreateGtpSurroundings} // <-- Pass the new handler
         />
         <div className="flex-1 h-full bg-white relative">
           <MolstarNode ref={molstarRef} />
@@ -274,18 +287,16 @@ export default function TubulinViewerPage() {
             </div>
           )}
         </div>
-        {/* Fixed height constraints for the right panels */}
         <div className="flex flex-col h-full">
-          <div className="flex-1 min-h-0 overflow-hidden"> {/* min-h-0 allows flex child to shrink */}
+          <div className="flex-1 min-h-0 overflow-hidden">
             <ChainPanel />
           </div>
           <div className="border-t border-gray-200"></div>
-          <div className="flex-1 min-h-0 overflow-hidden"> {/* min-h-0 allows flex child to shrink */}
+          <div className="flex-1 min-h-0 overflow-hidden">
             <NonPolymerPanel />
           </div>
         </div>
       </div>
-      {/* Constrain 2D lattice to 25% max height */}
       <div className="flex-shrink-0 border-t bg-white shadow-inner" style={{ maxHeight: '25vh' }}>
         <div className="h-full overflow-auto">
           <ProtofilamentGrid
