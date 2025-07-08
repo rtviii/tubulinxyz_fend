@@ -282,26 +282,25 @@ export default function TubulinViewerPage() {
   }, [service, dispatch]);
 
   const handleGetInterfaceData = useCallback(async () => {
-    if (!service?.controller) {
-      console.warn("Molstar controller not available.");
-      return;
-    }
+    if (!service?.controller) return;
     dispatch(setLoading(true));
-    setInteractionData([]); // Clear previous data
+    setInteractionData([]);
     try {
       const data = await service.controller.getLigandInterfaceData('GTP');
-      if (data) {
-        setInteractionData(data);
-      }
+      if (data) setInteractionData(data);
     } catch (e) {
-      console.error("Failed to get interface data", e);
-      const errorMessage = e instanceof Error ? e.message : 'Failed to get interface data';
-      dispatch(setError(errorMessage));
+      const msg = e instanceof Error ? e.message : 'Failed to get interface data';
+      dispatch(setError(msg));
     } finally {
       dispatch(setLoading(false));
     }
   }, [service, dispatch]);
 
+  const handleInteractionClick = (interaction: InteractionInfo) => {
+    if (service?.controller) {
+      service.controller.focusOnInteraction(interaction.partnerA.loci, interaction.partnerB.loci);
+    }
+  };
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-gray-100">
       <div className="flex flex-1 overflow-hidden">
@@ -340,11 +339,15 @@ export default function TubulinViewerPage() {
           {interactionData.length > 0 ? (
             <ul className="text-xs space-y-1">
               {interactionData.map((interaction, index) => (
-                <li key={index} className="p-1 bg-gray-50 rounded">
+                <li
+                  key={index}
+                  className="p-1 bg-gray-50 rounded hover:bg-blue-100 cursor-pointer"
+                  onClick={() => handleInteractionClick(interaction)}
+                >
                   <span className="font-semibold text-blue-700">{interaction.type}: </span>
-                  <span>{interaction.partnerA}</span>
+                  <span>{interaction.partnerA.label}</span>
                   <span className="mx-2 text-gray-400">&harr;</span>
-                  <span>{interaction.partnerB}</span>
+                  <span>{interaction.partnerB.label}</span>
                 </li>
               ))}
             </ul>
