@@ -19,9 +19,7 @@ import { StructureSelectionQueries } from 'molstar/lib/mol-plugin-state/helpers/
 import { StructureComponentManager } from 'molstar/lib/mol-plugin-state/manager/structure/component';
 import { Script } from 'molstar/lib/mol-script/script';
 import { StructureSelectionQuery } from 'molstar/lib/mol-plugin-state/helpers/structure-selection-query';
-
 import { Loci as locii } from 'molstar/lib/mol-model/loci';
-
 import { OrderedSet } from 'molstar/lib/mol-data/int';
 import { InteractionsProvider, Interactions } from 'molstar/lib/mol-model-props/computed/interactions';
 import { PluginContext } from 'molstar/lib/mol-plugin/context';
@@ -30,6 +28,13 @@ import { interactionTypeLabel } from 'molstar/lib/mol-model-props/computed/inter
 import { SyncRuntimeContext } from 'molstar/lib/mol-task/execution/synchronous';
 import { AssetManager } from 'molstar/lib/mol-util/assets';
 import { Loci } from 'molstar/lib/mol-model/structure/structure/element/element';
+
+interface ComputedResidueAnnotation {
+    auth_asym_id: string;
+    auth_seq_id: number;
+    method: string;
+    confidence: number;
+}
 
 // NOTE: Other necessary imports for the full controller class are assumed to be present.
 // e.g., import { setError } from '@/store/slices/tubulin_structures';
@@ -183,7 +188,7 @@ export class MolstarController {
      */
     async focusOnInteraction(lociA: locii, lociB: locii) {
         if (!this.viewer.ctx) return;
-        
+
         // ** FIX: ** Create a bundle of the two loci to focus on them together.
         // The camera manager will compute the bounding sphere for the bundle.
         const bundle: locii.Bundle<2> = { loci: [lociA, lociB] };
@@ -466,4 +471,148 @@ export class MolstarController {
     dispose() {
         this.viewer.dispose();
     }
+
+
+
+    private parseComputedResidues(mmcifContent: string): ComputedResidueAnnotation[] {
+        const annotations: ComputedResidueAnnotation[] = [];
+
+        try {
+            const lines = mmcifContent.split('\n');
+            let inComputedLoop = false;
+            let headerIndices: { [key: string]: number } = {};
+
+            for (let i = 0; i < lines.length; i++) {
+                const trimmedLine = lines[i].trim();
+
+                // Detect start of computed residue loop
+                if (trimmedLine === 'loop_') {
+                    if (i + 1 < lines.length &&
+                        lines[i + 1].trim().startsWith('_pdbx_computed_residue.')) {
+                        inComputedLoop = true;
+                        continue;
+                    }
+                }
+
+                // Parse headers
+                if (inComputedLoop && trimmedLine.startsWith('_pdbx_computed_residue.')) {
+                    const field = trimmedLine.replace('_pdbx_computed_residue.', '');
+                    headerIndices[field] = Object.keys(headerIndices).length;
+                    continue;
+                }
+
+                // Parse data lines
+                if (inComputedLoop && !trimmedLine.startsWith('_') && !trimmedLine.startsWith('#') && trimmedLine.length > 0) {
+                    if (trimmedLine.startsWith('loop_') || trimmedLine.startsWith('data_')) {
+                        break; // End of this loop
+                    }
+
+                    const parts = trimmedLine.split(/\s+/);
+                    if (parts.length >= Object.keys(headerIndices).length) {
+                        annotations.push({
+                            auth_asym_id: parts[headerIndices['auth_asym_id']] || '',
+                            auth_seq_id: parseInt(parts[headerIndices['auth_seq_id']] || '0'),
+                            method: parts[headerIndices['method']]?.replace(/'/g, '') || '',
+                            confidence: parseFloat(parts[headerIndices['confidence']] || '0')
+                        });
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error parsing computed residues:', error);
+        }
+
+        return annotations;
+    }
+
+    async loadStructureFromBackend(filename: string, tubulinClassification: TubulinClassification): Promise<boolean> {
+        try {
+            await this.clearCurrentStructure();
+            if (!this.viewer.ctx) throw new Error('Molstar not initialized');
+
+            const backendUrl = `http://localhost:8000/models/${filename}`;
+            console.log(`Fetching structure from backend: ${backendUrl}`);
+
+            // Fetch the mmCIF content
+            const response = await fetch(backendUrl);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch from backend: ${response.status} ${response.statusText}`);
+            }
+
+            const mmcifContent = await response.text();
+
+            // Parse computed residue annotations
+            const computedAnnotations = this.parseComputedResidues(mmcifContent);
+            if (computedAnnotations.length > 0) {
+                console.log('🔬 Found computed residue annotations:');
+                console.table(computedAnnotations);
+
+                // Group by method for summary
+                const byMethod = computedAnnotations.reduce((acc, ann) => {
+                    if (!acc[ann.method]) acc[ann.method] = [];
+                    acc[ann.method].push(ann);
+                    return acc;
+                }, {} as Record<string, ComputedResidueAnnotation[]>);
+
+                console.log('📊 Summary by method:');
+                Object.entries(byMethod).forEach(([method, anns]) => {
+                    console.log(`  ${method}: ${anns.length} residues`);
+                });
+            } else {
+                console.log('No computed residue annotations found in this structure.');
+            }
+
+            // Load the structure normally
+            const data = await this.viewer.ctx.builders.data.rawData({ data: mmcifContent, label: filename });
+            const trajectory = await this.viewer.ctx.builders.structure.parseTrajectory(data, 'mmcif');
+            const model = await this.viewer.ctx.builders.structure.createModel(trajectory);
+            const structure = await this.viewer.ctx.builders.structure.createStructure(model);
+
+            // Extract PDB ID from filename for consistency
+            const pdbId = filename.split('_')[0].toUpperCase();
+
+            const { objects_polymer, objects_ligand } = await this.viewer.ctx.builders.structure.representation.applyPreset(structure, 'tubulin-split-preset-computed-res', {
+                pdbId: pdbId,
+                tubulinClassification,
+    computedResidues: computedAnnotations  
+            }) as Partial<PresetObjects>;
+
+            const polymerComponents = Object.entries(objects_polymer || {}).reduce((acc, [chainId, data]) => {
+                acc[chainId] = { type: 'polymer', pdbId: pdbId, ref: data.ref, chainId: chainId };
+                return acc;
+            }, {} as Record<string, PolymerComponent>);
+
+            const ligandComponents = Object.entries(objects_ligand || {}).reduce((acc, [uniqueKey, data]) => {
+                const [compId, auth_asym_id, auth_seq_id_str] = uniqueKey.split('_');
+                const auth_seq_id = parseInt(auth_seq_id_str, 10);
+                acc[uniqueKey] = {
+                    type: 'ligand',
+                    pdbId: pdbId,
+                    ref: data.ref,
+                    uniqueKey,
+                    compId,
+                    auth_asym_id,
+                    auth_seq_id
+                };
+                return acc;
+            }, {} as Record<string, LigandComponent>);
+
+            this.dispatch(setStructureRef({ pdbId: pdbId, ref: structure.ref }));
+            this.dispatch(addComponents({ pdbId: pdbId, components: { ...polymerComponents, ...ligandComponents } }));
+
+            Object.keys(polymerComponents).forEach(chainId => {
+                this.dispatch(initializePolymer({ pdbId: pdbId, chainId }));
+            });
+            Object.keys(ligandComponents).forEach(uniqueKey => {
+                this.dispatch(initializeNonPolymer({ pdbId: pdbId, chemId: uniqueKey }));
+            });
+
+            return true;
+        } catch (error) {
+            console.error('Error loading structure from backend:', error);
+            this.dispatch(setError(error instanceof Error ? error.message : 'Unknown error'));
+            return false;
+        }
+    }
+
 }

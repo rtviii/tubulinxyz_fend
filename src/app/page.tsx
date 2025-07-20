@@ -19,6 +19,7 @@ import { ProtofilamentGrid, SubunitData } from '@/components/protofilament_grid'
 import { buildGridDataFromGql } from '@/services/protofilament_grid_parser';
 import { NonPolymerPanel } from '@/components/nonpolymer_panel';
 import { InteractionInfo } from '@/components/molstar/molstar_controller'; // <-- ADD THIS IMPORT
+import { TubulinClass } from '@/components/molstar/molstar_preset';
 
 const SUGGESTED_PDB_IDS = ["6WVR", "8QV0", "3JAT", "6O2R", "4TV9", "6U0H", "8VRK", "6E7B", "5J2T", "6FKJ", "4O2B", "6DPU", "1SA0", "6BR1", "7SJ8", "2MZ7", "7SJ9", "6O2T"];
 
@@ -26,17 +27,17 @@ const SUGGESTED_PDB_IDS = ["6WVR", "8QV0", "3JAT", "6O2R", "4TV9", "6U0H", "8VRK
 function SettingsPanel({
   isMolstarReady,
   onStructureSelect,
+  onBackendStructureSelect, // New prop
   onCreateGtpInterface,
   onCreateGtpSurroundings,
-
-  onGetInterfaceData // <-- New prop
+  onGetInterfaceData
 }: {
   isMolstarReady: boolean;
   onStructureSelect: (pdbId: string) => void;
+  onBackendStructureSelect: (filename: string) => void; // New prop type
   onCreateGtpInterface: () => void;
-  onCreateGtpSurroundings: () => void; // <-- New prop type
-
-  onGetInterfaceData: () => void; // <-- New prop type
+  onCreateGtpSurroundings: () => void;
+  onGetInterfaceData: () => void;
 }) {
 
   const selectedStructure = useAppSelector(selectSelectedStructure);
@@ -67,6 +68,10 @@ function SettingsPanel({
     }
   };
 
+  const handleBackendLoad = () => {
+    onBackendStructureSelect('7sj7_with_metadata.cif');
+  };
+
   const handleRandomize = () => {
     if (SUGGESTED_PDB_IDS.length <= 1) return;
     let newPdbId;
@@ -87,6 +92,7 @@ function SettingsPanel({
           <h2 className="text-lg font-semibold text-gray-900 mb-2">Tubulin Viewer</h2>
           <p className="text-sm text-gray-600">Load a structure by PDB ID or try our suggestion.</p>
         </div>
+
         <div className="space-y-2">
           <h3 className="text-md font-medium text-gray-800">Load Custom Structure</h3>
           <form onSubmit={handleCustomLoad} className="flex items-center space-x-2">
@@ -107,6 +113,19 @@ function SettingsPanel({
               Load
             </button>
           </form>
+        </div>
+
+        {/* NEW: Backend Loading Section */}
+        <div className="space-y-2">
+          <h3 className="text-md font-medium text-gray-800">Load from Backend</h3>
+          <p className="text-xs text-gray-500">Load structures with computed residue annotations.</p>
+          <button
+            onClick={handleBackendLoad}
+            disabled={isInteractionDisabled}
+            className="w-full px-4 py-2 font-semibold text-white bg-purple-600 rounded-md shadow-sm hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            Load 7SJ7 with Metadata
+          </button>
         </div>
 
         {error && <div className="text-red-500 text-sm p-2 bg-red-50 rounded-md">{error}</div>}
@@ -140,7 +159,6 @@ function SettingsPanel({
 
         {isLoading && <div className="text-sm text-gray-500">Loading...</div>}
 
-        {/* --- NEW BUTTONS SECTION --- */}
         <div className="space-y-2 pt-4 border-t border-gray-200">
           <h3 className="text-md font-medium text-gray-800">Ligand Interactions</h3>
           <p className="text-xs text-gray-500">Visualize GTP interactions. Load a structure first.</p>
@@ -182,8 +200,7 @@ export default function TubulinViewerPage() {
 
   const [selectedGridSubunit, setSelectedGridSubunit] = useState<string | null>(null);
   const [hoveredGridSubunit, setHoveredGridSubunit] = useState<string | null>(null);
-
-  const [interactionData, setInteractionData] = useState<InteractionInfo[]>([]); // <-- NEW STATE
+  const [interactionData, setInteractionData] = useState<InteractionInfo[]>([]);
 
 
   const handleStructureSelect = useCallback(async (pdbId: string) => {
@@ -210,6 +227,36 @@ export default function TubulinViewerPage() {
     }
   }, [service, dispatch]);
 
+  // NEW: Backend structure handler
+  const handleBackendStructureSelect = useCallback(async (filename: string) => {
+    if (!service?.controller) {
+      console.warn("Molstar controller not available.");
+      return;
+    }
+
+    // Extract PDB ID for state management
+    const pdbId = filename.split('_')[0].toUpperCase();
+    dispatch(selectStructure(pdbId));
+    dispatch(setLoading(true));
+    dispatch(setError(null));
+
+    try {
+      // For now, use a dummy classification map since we're loading from backend
+      const dummyClassificationMap = {
+        A: TubulinClass.Alpha,
+        B: TubulinClass.Beta
+      };
+
+      await service.controller.loadStructureFromBackend(filename, dummyClassificationMap);
+      await service.viewer.representations.stylized_lighting();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      console.error(`[UI] An error occurred during backend loading for ${filename}:`, error);
+      dispatch(setError(errorMessage));
+    } finally {
+      dispatch(setLoading(false));
+    }
+  }, [service, dispatch]);
   const [hoveredSubunitData, setHoveredSubunitData] = useState<SubunitData | null>(null);
 
   const handleSubunitHover = useCallback((subunit: SubunitData | null) => {
@@ -307,10 +354,10 @@ export default function TubulinViewerPage() {
         <SettingsPanel
           isMolstarReady={isInitialized}
           onStructureSelect={handleStructureSelect}
+          onBackendStructureSelect={handleBackendStructureSelect} // Pass the new handler
           onCreateGtpInterface={handleCreateGtpInterface}
-          onCreateGtpSurroundings={handleCreateGtpSurroundings} // <-- Pass the new handler
-
-          onGetInterfaceData={handleGetInterfaceData} // <-- Pass the new handler
+          onCreateGtpSurroundings={handleCreateGtpSurroundings}
+          onGetInterfaceData={handleGetInterfaceData}
         />
         <div className="flex-1 h-full bg-white relative">
           <MolstarNode ref={molstarRef} />
