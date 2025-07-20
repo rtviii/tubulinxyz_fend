@@ -14,6 +14,7 @@ import { Structure, StructureElement } from 'molstar/lib/mol-model/structure';
 import { MolScriptBuilder } from 'molstar/lib/mol-script/language/builder';
 import { StructureQueryHelper } from 'molstar/lib/mol-plugin-state/helpers/structure-query';
 import { StateTransforms } from 'molstar/lib/mol-plugin-state/transforms';
+import { EnhancedTubulinSplitPreset } from './molstar_preset_computed_residues';
 
 
 export class MolstarViewer {
@@ -36,6 +37,7 @@ export class MolstarViewer {
         try {
             this.ctx = await createPluginUI({ target: parent, spec, render: renderReact18 });
             this.ctx.builders.structure.representation.registerPreset(TubulinSplitPreset);
+            this.ctx.builders.structure.representation.registerPreset(EnhancedTubulinSplitPreset);
             this.setupBasicStyling();
             this.resolveInit?.();
         } catch (error) {
