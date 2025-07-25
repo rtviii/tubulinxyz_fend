@@ -472,6 +472,72 @@ export class MolstarController {
         this.viewer.dispose();
     }
 
+    private getNonPolymerComponentRef(pdbId: string, uniqueKey: string): string | undefined {
+        const state = this.getState();
+        const component = state.molstarRefs.components[`${pdbId}_${uniqueKey}`];
+        return component?.ref;
+    }
+
+    async focusNonPolymer(pdbId: string, uniqueKey: string) {
+        try {
+            const ref = this.getNonPolymerComponentRef(pdbId, uniqueKey);
+            if (!ref || !this.viewer.ctx) {
+                console.warn(`No ref found for non-polymer ${uniqueKey} in structure ${pdbId}`);
+                return;
+            }
+
+            const cell = this.viewer.ctx.state.data.select(StateSelection.Generators.byRef(ref))[0];
+            if (!cell?.obj?.data) {
+                console.warn(`No cell data found for non-polymer ${uniqueKey}`);
+                return;
+            }
+
+            const structure = cell.obj.data as Structure;
+            const loci = Structure.toStructureElementLoci(structure);
+
+            this.viewer.ctx.managers.camera.focusLoci(loci);
+
+            console.log(`Successfully focused on non-polymer ${uniqueKey}`);
+
+        } catch (error) {
+            console.error(`Error focusing non-polymer ${uniqueKey}:`, error);
+
+            try {
+                await this.highlightNonPolymer(pdbId, uniqueKey, true);
+                console.log(`Fallback: highlighted non-polymer ${uniqueKey} instead of focusing`);
+            } catch (fallbackError) {
+                console.error(`Fallback highlighting also failed:`, fallbackError);
+            }
+        }
+    }
+
+    async highlightNonPolymer(pdbId: string, uniqueKey: string, shouldHighlight: boolean) {
+        if (!this.viewer.ctx) return;
+
+        if (!shouldHighlight) {
+            this.viewer.ctx.managers.interactivity.lociHighlights.clearHighlights();
+            this.dispatch(setNonPolymerHovered({ pdbId, chemId: uniqueKey, hovered: false }));
+            return;
+        }
+
+        const ref = this.getNonPolymerComponentRef(pdbId, uniqueKey);
+        if (ref) {
+            const cell = this.viewer.ctx.state.data.select(StateSelection.Generators.byRef(ref))[0];
+            if (cell?.obj?.data) {
+                const loci = Structure.toStructureElementLoci(cell.obj.data as Structure);
+                this.viewer.ctx.managers.interactivity.lociHighlights.highlight({ loci }, false);
+                this.dispatch(setNonPolymerHovered({ pdbId, chemId: uniqueKey, hovered: true }));
+            }
+        }
+    }
+
+    async setNonPolymerVisibility(pdbId: string, uniqueKey: string, isVisible: boolean) {
+        const ref = this.getNonPolymerComponentRef(pdbId, uniqueKey);
+        if (ref && this.viewer.ctx) {
+            setSubtreeVisibility(this.viewer.ctx.state.data, ref, !isVisible);
+            this.dispatch(setNonPolymerVisibility({ pdbId, chemId: uniqueKey, visible: isVisible }));
+        }
+    }
 
 
     private parseComputedResidues(mmcifContent: string): ComputedResidueAnnotation[] {
@@ -574,7 +640,7 @@ export class MolstarController {
             const { objects_polymer, objects_ligand } = await this.viewer.ctx.builders.structure.representation.applyPreset(structure, 'tubulin-split-preset-computed-res', {
                 pdbId: pdbId,
                 tubulinClassification,
-    computedResidues: computedAnnotations  
+                computedResidues: computedAnnotations
             }) as Partial<PresetObjects>;
 
             const polymerComponents = Object.entries(objects_polymer || {}).reduce((acc, [chainId, data]) => {
