@@ -30,6 +30,8 @@ import { AssetManager } from 'molstar/lib/mol-util/assets';
 import { Loci } from 'molstar/lib/mol-model/structure/structure/element/element';
 import { AMINO_ACIDS_3_TO_1_CODE } from './preset-helpers';
 import { SequenceData } from '@/store/slices/sequence_viewer';
+import { setResidueHover, setResidueSelection } from '@/store/slices/sequence_structure_sync';
+import { Color } from 'molstar/lib/mol-util/color/color';
 
 interface ComputedResidueAnnotation {
     auth_asym_id: string;
@@ -765,5 +767,280 @@ export class MolstarController {
             name: `${pdbId} Chain ${chainId}`,
             chainType: 'polymer'
         };
+    }
+    async highlightResidues(pdbId: string, chainId: string, startResidue: number, endResidue: number, shouldHighlight: boolean = true) {
+        if (!this.viewer.ctx) return;
+
+        if (!shouldHighlight) {
+            this.viewer.ctx.managers.interactivity.lociHighlights.clearHighlights();
+            return;
+        }
+
+        try {
+            const structureRef = this.viewer.ctx.managers.structure.hierarchy.current.structures[0]?.cell;
+            if (!structureRef?.obj?.data) return;
+
+            const structure = structureRef.obj.data;
+
+            // Create a selection for the residue range
+            const residueSelection = MS.struct.generator.atomGroups({
+                'chain-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]),
+                'residue-test': MS.core.rel.inRange([
+                    MS.struct.atomProperty.macromolecular.auth_seq_id(),
+                    startResidue,
+                    endResidue
+                ])
+            });
+
+            const compiled = compile(residueSelection);
+            const selection = compiled(new QueryContext(structure));
+
+            if (StructureSelection.isEmpty(selection)) {
+                console.warn(`No residues found for chain ${chainId} residues ${startResidue}-${endResidue}`);
+                return;
+            }
+
+            const loci = StructureSelection.toLociWithSourceUnits(selection);
+            this.viewer.ctx.managers.interactivity.lociHighlights.highlight({ loci }, false);
+
+            console.log(`🔍 Highlighted chain ${chainId} residues ${startResidue}-${endResidue}`);
+
+        } catch (error) {
+            console.error('Error highlighting residues:', error);
+        }
+    }
+
+    /**
+     * Select and focus on specific residues in Molstar
+     */
+    async selectResidues(pdbId: string, chainId: string, startResidue: number, endResidue: number) {
+        if (!this.viewer.ctx) return;
+
+        try {
+            const structureRef = this.viewer.ctx.managers.structure.hierarchy.current.structures[0]?.cell;
+            if (!structureRef?.obj?.data) return;
+
+            const structure = structureRef.obj.data;
+
+            // Create selection for residue range
+            const residueSelection = MS.struct.generator.atomGroups({
+                'chain-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]),
+                'residue-test': MS.core.rel.inRange([
+                    MS.struct.atomProperty.macromolecular.auth_seq_id(),
+                    startResidue,
+                    endResidue
+                ])
+            });
+
+            const compiled = compile(residueSelection);
+            const selection = compiled(new QueryContext(structure));
+
+            if (StructureSelection.isEmpty(selection)) {
+                console.warn(`No residues found for chain ${chainId} residues ${startResidue}-${endResidue}`);
+                return;
+            }
+
+            const loci = StructureSelection.toLociWithSourceUnits(selection);
+
+            // Focus camera on selection
+            this.viewer.ctx.managers.camera.focusLoci(loci);
+
+            // Also highlight the selection
+            this.viewer.ctx.managers.interactivity.lociHighlights.highlight({ loci }, false);
+
+            console.log(`🎯 Selected and focused chain ${chainId} residues ${startResidue}-${endResidue}`);
+
+            // Dispatch to state for sync
+            this.dispatch(setResidueSelection({
+                pdbId,
+                chainId,
+                startResidue,
+                endResidue,
+                source: 'structure'
+            }));
+
+        } catch (error) {
+            console.error('Error selecting residues:', error);
+        }
+    }
+
+    /**
+     * Hover over a single residue
+     */
+    async hoverResidue(pdbId: string, chainId: string, residueNumber: number, shouldHover: boolean = true) {
+        if (!this.viewer.ctx) return;
+
+        if (!shouldHover) {
+            this.viewer.ctx.managers.interactivity.lociHighlights.clearHighlights();
+            this.dispatch(setResidueHover(null));
+            return;
+        }
+
+        try {
+            const structureRef = this.viewer.ctx.managers.structure.hierarchy.current.structures[0]?.cell;
+            if (!structureRef?.obj?.data) return;
+
+            const structure = structureRef.obj.data;
+
+            const residueSelection = MS.struct.generator.atomGroups({
+                'chain-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]),
+                'residue-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_seq_id(), residueNumber])
+            });
+
+            const compiled = compile(residueSelection);
+            const selection = compiled(new QueryContext(structure));
+
+            if (StructureSelection.isEmpty(selection)) return;
+
+            const loci = StructureSelection.toLociWithSourceUnits(selection);
+            this.viewer.ctx.managers.interactivity.lociHighlights.highlight({ loci }, false);
+
+            // Dispatch hover state
+            this.dispatch(setResidueHover({
+                pdbId,
+                chainId,
+                residueNumber,
+                source: 'structure'
+            }));
+
+        } catch (error) {
+            console.error('Error hovering residue:', error);
+        }
+    }
+
+    /**
+     * Create a visual representation (e.g., ball-and-stick) for selected residues
+     */
+    async createResidueRepresentation(pdbId: string, chainId: string, startResidue: number, endResidue: number, representationType: 'ball-and-stick' | 'spacefill' | 'licorice' = 'ball-and-stick') {
+        if (!this.viewer.ctx) return;
+
+        try {
+            const structureRef = this.viewer.ctx.managers.structure.hierarchy.current.structures[0]?.cell;
+            if (!structureRef?.obj?.data) return;
+
+            const residueSelection = MS.struct.generator.atomGroups({
+                'chain-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]),
+                'residue-test': MS.core.rel.inRange([
+                    MS.struct.atomProperty.macromolecular.auth_seq_id(),
+                    startResidue,
+                    endResidue
+                ])
+            });
+
+            const stateUpdate = this.viewer.ctx.state.data.build();
+            const selectionComponent = stateUpdate.to(structureRef)
+                .apply(StateTransforms.Model.StructureSelectionFromExpression, {
+                    expression: residueSelection,
+                    label: `${chainId}:${startResidue}-${endResidue} (from sequence)`
+                });
+
+            selectionComponent.apply(StateTransforms.Representation.StructureRepresentation3D,
+                createStructureRepresentationParams(this.viewer.ctx, structureRef.obj.data, {
+                    type: representationType,
+                    color: 'chain-id' // Color by chain
+                })
+            );
+
+            await stateUpdate.commit();
+
+            console.log(`🎨 Created ${representationType} representation for ${chainId}:${startResidue}-${endResidue}`);
+
+        } catch (error) {
+            console.error('Error creating residue representation:', error);
+        }
+    }
+
+
+    // Add these methods to your MolstarController class to replace the highlight methods:
+
+    /**
+     * Simple residue selection using Molstar's native selection system
+     */
+    async selectResiduesRange(pdbId: string, chainId: string, startResidue: number, endResidue: number) {
+        if (!this.viewer.ctx) return;
+
+        try {
+            const structureRef = this.viewer.ctx.managers.structure.hierarchy.current.structures[0]?.cell;
+            if (!structureRef?.obj?.data) return;
+
+            const structure = structureRef.obj.data;
+
+            // Create a selection expression for the residue range
+            const residueSelection = MS.struct.generator.atomGroups({
+                'chain-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]),
+                'residue-test': MS.core.rel.inRange([
+                    MS.struct.atomProperty.macromolecular.auth_seq_id(),
+                    startResidue,
+                    endResidue
+                ])
+            });
+
+            // Compile and execute the selection
+            const compiled = compile(residueSelection);
+            const selection = compiled(new QueryContext(structure));
+
+            if (!StructureSelection.isEmpty(selection)) {
+                const loci = StructureSelection.toLociWithSourceUnits(selection);
+
+                // Clear previous selection and add new one using Molstar's native selection
+                this.viewer.ctx.managers.structure.selection.clear();
+                this.viewer.ctx.managers.structure.selection.fromLoci('add', loci);
+
+                console.log(`✅ Selected residues ${chainId}:${startResidue}-${endResidue} using native Molstar selection`);
+            }
+
+        } catch (error) {
+            console.error('Error selecting residues:', error);
+        }
+    }
+
+    /**
+     * Clear Molstar selection
+     */
+    async clearResidueSelection(chainId?: string) {
+        if (!this.viewer.ctx) return;
+
+        try {
+            // Simply clear the native Molstar selection
+            this.viewer.ctx.managers.structure.selection.clear();
+            console.log(`🗑️ Cleared Molstar selection`);
+        } catch (error) {
+            console.error('Error clearing selection:', error);
+        }
+    }
+
+    /**
+     * Focus camera on selected residues
+     */
+    async focusOnResidues(pdbId: string, chainId: string, startResidue: number, endResidue: number) {
+        if (!this.viewer.ctx) return;
+
+        try {
+            const structureRef = this.viewer.ctx.managers.structure.hierarchy.current.structures[0]?.cell;
+            if (!structureRef?.obj?.data) return;
+
+            const structure = structureRef.obj.data;
+
+            const residueSelection = MS.struct.generator.atomGroups({
+                'chain-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]),
+                'residue-test': MS.core.rel.inRange([
+                    MS.struct.atomProperty.macromolecular.auth_seq_id(),
+                    startResidue,
+                    endResidue
+                ])
+            });
+
+            const compiled = compile(residueSelection);
+            const selection = compiled(new QueryContext(structure));
+
+            if (!StructureSelection.isEmpty(selection)) {
+                const loci = StructureSelection.toLociWithSourceUnits(selection);
+                this.viewer.ctx.managers.camera.focusLoci(loci);
+                console.log(`🎯 Focused camera on ${chainId}:${startResidue}-${endResidue}`);
+            }
+
+        } catch (error) {
+            console.error('Error focusing on residues:', error);
+        }
     }
 }

@@ -21,6 +21,7 @@ import { NonPolymerPanel } from '@/components/nonpolymer_panel';
 import { InteractionInfo } from '@/components/molstar/molstar_controller'; // <-- ADD THIS IMPORT
 import { TubulinClass } from '@/components/molstar/molstar_preset';
 import { SequenceViewer } from '@/components/sequence_viewer';
+import { useMolstarSync } from '@/hooks/useMolstarSync';
 
 const SUGGESTED_PDB_IDS = ["6WVR", "8QV0", "3JAT", "6O2R", "4TV9", "6U0H", "8VRK", "6E7B", "5J2T", "6FKJ", "4O2B", "6DPU", "1SA0", "6BR1", "7SJ8", "2MZ7", "7SJ9", "6O2T"];
 
@@ -203,6 +204,7 @@ export default function TubulinViewerPage() {
   const [hoveredGridSubunit, setHoveredGridSubunit] = useState<string | null>(null);
   const [interactionData, setInteractionData] = useState<InteractionInfo[]>([]);
 
+  const syncStatus = useMolstarSync();
 
   const handleStructureSelect = useCallback(async (pdbId: string) => {
     if (!service?.controller) {
