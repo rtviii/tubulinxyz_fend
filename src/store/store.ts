@@ -6,6 +6,7 @@ import { tubulinStructuresSlice } from './slices/tubulin_structures';
 import { molstarRefsSlice } from './slices/molstar_refs';
 import { polymerStatesSlice } from './slices/polymer_states';
 import { nonPolymerStatesSlice } from './slices/nonpolymer_states'; // Import the new slice
+import sequenceViewerReducer from './slices/sequence_viewer';
 
 export const makeStore = () => {
     const store = configureStore({
@@ -14,6 +15,7 @@ export const makeStore = () => {
             molstarRefs: molstarRefsSlice.reducer,
             polymerStates: polymerStatesSlice.reducer,
             nonPolymerStates: nonPolymerStatesSlice.reducer, // Add the new reducer
+            sequenceViewer: sequenceViewerReducer,
         },
         middleware: getDefaultMiddleware =>
             getDefaultMiddleware({

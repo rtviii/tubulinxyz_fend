@@ -1,13 +1,15 @@
 'use client';
 import React from 'react';
-import { useAppSelector } from '@/store/store';
+import { useAppSelector, useAppDispatch } from '@/store/store';
 import { selectSelectedStructure } from '@/store/slices/tubulin_structures';
 import { PolymerComponent, selectComponentsForStructure } from '@/store/slices/molstar_refs';
 import { selectPolymerState } from '@/store/slices/polymer_states';
+import { setSelectedSequence } from '@/store/slices/sequence_viewer';
 import { MolstarContext } from '@/components/molstar/molstar_service';
-import { Eye, EyeOff, Focus } from 'lucide-react';
+import { Eye, EyeOff, Focus, FileText } from 'lucide-react';
 
 const ChainRow = ({ component }: { component: PolymerComponent }) => {
+    const dispatch = useAppDispatch();
     const molstarService = React.useContext(MolstarContext)?.getService('main');
     const polymerState = useAppSelector(state => selectPolymerState(state, { pdbId: component.pdbId, chainId: component.chainId }));
 
@@ -33,6 +35,16 @@ const ChainRow = ({ component }: { component: PolymerComponent }) => {
         controller.focusChain(component.pdbId, component.chainId);
     };
 
+    const showSequence = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const sequenceData = controller.getSequenceForViewer(component.pdbId, component.chainId);
+        if (sequenceData) {
+            dispatch(setSelectedSequence(sequenceData));
+        } else {
+            console.warn(`Could not extract sequence for chain ${component.chainId}`);
+        }
+    };
+
     return (
         <div
             className={`flex items-center justify-between py-0.5 px-2 rounded-sm transition-colors cursor-pointer ${polymerState.hovered ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
@@ -46,10 +58,25 @@ const ChainRow = ({ component }: { component: PolymerComponent }) => {
                 <span className="font-mono text-xs select-none">{component.chainId}</span>
             </div>
             <div className="flex items-center">
-                <button onClick={focusChain} className="p-0.5 text-gray-400 hover:text-gray-800" title="Focus Chain">
+                <button
+                    onClick={showSequence}
+                    className="p-0.5 text-gray-400 hover:text-blue-600"
+                    title="Show Sequence"
+                >
+                    <FileText size={14} />
+                </button>
+                <button
+                    onClick={focusChain}
+                    className="p-0.5 text-gray-400 hover:text-gray-800"
+                    title="Focus Chain"
+                >
                     <Focus size={14} />
                 </button>
-                <button onClick={toggleVisibility} className="p-0.5 text-gray-400 hover:text-gray-800" title="Toggle Visibility">
+                <button
+                    onClick={toggleVisibility}
+                    className="p-0.5 text-gray-400 hover:text-gray-800"
+                    title="Toggle Visibility"
+                >
                     {polymerState.visible ? <Eye size={14} /> : <EyeOff size={14} />}
                 </button>
             </div>
@@ -60,7 +87,6 @@ const ChainRow = ({ component }: { component: PolymerComponent }) => {
 export const ChainPanel = () => {
     const selectedStructure = useAppSelector(selectSelectedStructure);
     const components = useAppSelector(state => selectComponentsForStructure(state, selectedStructure || ''));
-
     const polymerComponents = (components?.filter(c => c.type === 'polymer') as PolymerComponent[]) || [];
 
     return (
@@ -79,4 +105,4 @@ export const ChainPanel = () => {
             </div>
         </div>
     );
-};;
+};

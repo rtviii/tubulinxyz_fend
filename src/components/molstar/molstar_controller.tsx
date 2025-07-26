@@ -28,6 +28,8 @@ import { interactionTypeLabel } from 'molstar/lib/mol-model-props/computed/inter
 import { SyncRuntimeContext } from 'molstar/lib/mol-task/execution/synchronous';
 import { AssetManager } from 'molstar/lib/mol-util/assets';
 import { Loci } from 'molstar/lib/mol-model/structure/structure/element/element';
+import { AMINO_ACIDS_3_TO_1_CODE } from './preset-helpers';
+import { SequenceData } from '@/store/slices/sequence_viewer';
 
 interface ComputedResidueAnnotation {
     auth_asym_id: string;
@@ -681,4 +683,87 @@ export class MolstarController {
         }
     }
 
+
+
+    getChainSequence(pdbId: string, chainId: string): string | null {
+        const state = this.getState();
+        const component = state.molstarRefs.components[`${pdbId}_${chainId}`];
+
+        if (!component || component.type !== 'polymer') {
+            console.warn(`No polymer component found for ${pdbId} chain ${chainId}`);
+            return null;
+        }
+
+        // Try to get sequence from the component data stored during preset application
+        // This assumes your preset stores sequence data - if not, we'll need to extract it from structure
+        if ('sequence' in component && Array.isArray(component.sequence)) {
+            // Convert ResidueData[] to simple string
+            return component.sequence.map(residue => residue.code || 'X').join('');
+        }
+
+        // Fallback: extract directly from structure
+        return this.extractSequenceFromStructure(pdbId, chainId);
+    }
+
+    /**
+     * Fallback method to extract sequence directly from structure
+     */
+    private extractSequenceFromStructure(pdbId: string, chainId: string): string | null {
+        if (!this.viewer.ctx) return null;
+
+        const structureRef = this.viewer.ctx.managers.structure.hierarchy.current.structures[0]?.cell;
+        if (!structureRef?.obj?.data) return null;
+
+        const structure = structureRef.obj.data;
+        const sequence: string[] = [];
+
+        // Iterate through structure units to find the chain
+        for (const unit of structure.units) {
+            const unitChainId = StructureProperties.chain.auth_asym_id({
+                unit,
+                element: unit.elements[0]
+            });
+
+            if (unitChainId === chainId) {
+                // Extract residues for this chain
+                const residues = new Map<number, string>();
+
+                for (let i = 0; i < unit.elements.length; i++) {
+                    const location = StructureElement.Location.create(structure, unit, unit.elements[i]);
+                    const seqId = StructureProperties.residue.auth_seq_id(location);
+                    const compId = StructureProperties.atom.label_comp_id(location);
+
+                    // Convert 3-letter code to 1-letter if possible
+                    const singleLetter = AMINO_ACIDS_3_TO_1_CODE[compId] || 'X';
+                    residues.set(seqId, singleLetter);
+                }
+
+                // Sort by sequence ID and build sequence string
+                const sortedResidues = Array.from(residues.entries()).sort((a, b) => a[0] - b[0]);
+                return sortedResidues.map(([, code]) => code).join('');
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Get sequence data formatted for SeqViz
+     */
+    getSequenceForViewer(pdbId: string, chainId: string): SequenceData | null {
+        const sequence = this.getChainSequence(pdbId, chainId);
+        if (!sequence) return null;
+
+        // Get additional info about the chain
+        const state = this.getState();
+        const component = state.molstarRefs.components[`${pdbId}_${chainId}`];
+
+        return {
+            chainId,
+            pdbId,
+            sequence,
+            name: `${pdbId} Chain ${chainId}`,
+            chainType: 'polymer'
+        };
+    }
 }

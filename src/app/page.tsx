@@ -20,6 +20,7 @@ import { buildGridDataFromGql } from '@/services/protofilament_grid_parser';
 import { NonPolymerPanel } from '@/components/nonpolymer_panel';
 import { InteractionInfo } from '@/components/molstar/molstar_controller'; // <-- ADD THIS IMPORT
 import { TubulinClass } from '@/components/molstar/molstar_preset';
+import { SequenceViewer } from '@/components/sequence_viewer';
 
 const SUGGESTED_PDB_IDS = ["6WVR", "8QV0", "3JAT", "6O2R", "4TV9", "6U0H", "8VRK", "6E7B", "5J2T", "6FKJ", "4O2B", "6DPU", "1SA0", "6BR1", "7SJ8", "2MZ7", "7SJ9", "6O2T"];
 
@@ -380,36 +381,48 @@ export default function TubulinViewerPage() {
           </div>
         </div>
       </div>
-      <div className="flex-shrink-0 border-t bg-white shadow-inner" style={{ maxHeight: '25vh', display: 'flex' }}>
-        <div className="flex-1 h-full overflow-auto p-2">
-          <h3 className="text-md font-medium text-gray-800 mb-2">Interaction Data</h3>
-          {interactionData.length > 0 ? (
-            <ul className="text-xs space-y-1">
-              {interactionData.map((interaction, index) => (
-                <li
-                  key={index}
-                  className="p-1 bg-gray-50 rounded hover:bg-blue-100 cursor-pointer"
-                  onClick={() => handleInteractionClick(interaction)}
-                >
-                  <span className="font-semibold text-blue-700">{interaction.type}: </span>
-                  <span>{interaction.partnerA.label}</span>
-                  <span className="mx-2 text-gray-400">&harr;</span>
-                  <span>{interaction.partnerB.label}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs text-gray-500">Click "Get Interface Data" to populate.</p>
-          )}
+
+      <div className="flex-shrink-0 border-t bg-white shadow-inner" style={{ maxHeight: '30vh', display: 'flex' }}>
+        {/* Left Half: Interactions + 2D Lattice */}
+        <div className="flex-1 flex flex-col border-r">
+          {/* Interaction Data - Top */}
+          <div className="flex-1 overflow-auto p-2 border-b">
+            <h3 className="text-md font-medium text-gray-800 mb-2">Interaction Data</h3>
+            {interactionData.length > 0 ? (
+              <ul className="text-xs space-y-1">
+                {interactionData.map((interaction, index) => (
+                  <li
+                    key={index}
+                    className="p-1 bg-gray-50 rounded hover:bg-blue-100 cursor-pointer"
+                    onClick={() => handleInteractionClick(interaction)}
+                  >
+                    <span className="font-semibold text-blue-700">{interaction.type}: </span>
+                    <span>{interaction.partnerA.label}</span>
+                    <span className="mx-2 text-gray-400">&harr;</span>
+                    <span>{interaction.partnerB.label}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-gray-500">Click "Get Interface Data" to populate.</p>
+            )}
+          </div>
+
+          {/* 2D Lattice View - Bottom */}
+          <div className="flex-1 overflow-auto p-2">
+            <ProtofilamentGrid
+              pdbId={selectedStructure}
+              onSubunitHover={handleSubunitHover}
+              onSubunitSelect={handleSubunitSelect}
+              hoveredSubunitId={hoveredGridSubunit}
+              selectedSubunitId={selectedGridSubunit}
+            />
+          </div>
         </div>
-        <div className="flex-1 h-full overflow-auto border-l">
-          <ProtofilamentGrid
-            pdbId={selectedStructure}
-            onSubunitHover={handleSubunitHover}
-            onSubunitSelect={handleSubunitSelect}
-            hoveredSubunitId={hoveredGridSubunit}
-            selectedSubunitId={selectedGridSubunit}
-          />
+
+        {/* Right Half: Sequence Viewer */}
+        <div className="flex-1">
+          <SequenceViewer />
         </div>
       </div>
     </div>
