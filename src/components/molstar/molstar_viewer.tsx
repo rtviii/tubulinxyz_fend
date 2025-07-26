@@ -57,11 +57,9 @@ export class MolstarViewer {
         });
     }
 
-    // --- NEW: Interaction methods based on riboxyz ---
     interactions = {
         setVisibility: (ref: string, isVisible: boolean) => {
             if (!this.ctx) return;
-            // This is the correct method from your riboxyz code
             setSubtreeVisibility(this.ctx.state.data, ref, !isVisible);
         },
 
