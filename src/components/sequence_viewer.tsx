@@ -201,7 +201,7 @@ export function SequenceViewer() {
             {/* SeqViz Container */}
             <div className="flex-1 overflow-hidden" ref={seqVizRef}>
                 <SeqViz
-                    key={`${selectedSequence.pdbId}_${selectedSequence.chainId}`}
+                    // key={`${selectedSequence.pdbId}_${selectedSequence.chainId}`}
                     name={selectedSequence.name || `Chain ${selectedSequence.chainId}`}
                     seq={selectedSequence.sequence}
                     viewer="linear"

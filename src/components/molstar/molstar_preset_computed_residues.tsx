@@ -4,7 +4,7 @@ import { StateObjectRef, StateObjectSelector } from 'molstar/lib/mol-state';
 import { StructureRepresentationPresetProvider } from 'molstar/lib/mol-plugin-state/builder/structure/representation-preset';
 import { ParamDefinition as PD } from 'molstar/lib/mol-util/param-definition';
 import { Color } from 'molstar/lib/mol-util/color';
-import { AMINO_ACIDS_3_TO_1_CODE, ResidueData, getLigandInstances, getResidueSequence } from './preset-helpers';
+import { getLigandInstances, getResidueSequence, ResidueData } from './preset-helpers';
 
 // Define the Tubulin types and the parameter object shape
 export enum TubulinClass {
@@ -102,21 +102,23 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
         if (!structureCell) return {};
 
         const structure = structureCell.obj!.data;
-        const { update, builder } = StructureRepresentationPresetProvider.reprBuilder(plugin, params);
+        const { update } = StructureRepresentationPresetProvider.reprBuilder(plugin, params);
 
         const objects_polymer: { [k: string]: PolymerObject } = {};
         const objects_ligand: { [k: string]: LigandObject } = {};
 
-        // 🚨 FIX: Get all polymer chains by checking the entity type
+        // 🚨 FIX: This is the corrected, robust logic for finding polymer chains.
         const polymerChains = new Set<string>();
-        const { entities } = structure.model;
-        const { auth_asym_id } = structure.model.atomicHierarchy.chains;
-        for (let i = 0, il = entities.data.rowCount; i < il; i++) {
-            if (entities.data.type.value(i) === 'polymer') {
-                const chains = entities.chainIndex.getChains(i);
-                for (let j = 0, jl = chains.length; j < jl; j++) {
-                    polymerChains.add(auth_asym_id.value(chains[j]));
-                }
+        const { model } = structure;
+        const { entities } = model;
+        const { auth_asym_id } = model.atomicHierarchy.chains;
+        const { entity_id } = model.atomicHierarchy.chains;
+        const chainCount = model.atomicHierarchy.chains._rowCount;
+
+        for (let cI = 0; cI < chainCount; cI++) {
+            const eI = model.atomicHierarchy.index.getEntityFromChain(cI);
+            if (entities.data.type.value(eI) === 'polymer') {
+                polymerChains.add(auth_asym_id.value(cI));
             }
         }
 
@@ -135,54 +137,24 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
             if (component) {
                 const tubulinClass = params.tubulinClassification[chainId];
                 const chainColor = TubulinColors[tubulinClass] || TubulinColors.Default;
-
                 const chainComputedResidues = params.computedResidues.filter(r => r.auth_asym_id === chainId);
 
                 if (chainComputedResidues.length > 0) {
-                    console.log(`🔬 Chain ${chainId}: Found ${chainComputedResidues.length} computed residues`);
-
                     const nonComputedSelection = createNonComputedResidueSelection(chainId, params.computedResidues);
-                    const nonComputedComp = await plugin.builders.structure.tryCreateComponentFromExpression(
-                        component,
-                        nonComputedSelection,
-                        `${params.pdbId}_${chainId}_exp`,
-                        { label: `${chainId} Experimental`, tags: [`chain-${chainId}`, 'experimental'] }
-                    );
-
+                    const nonComputedComp = await plugin.builders.structure.tryCreateComponentFromExpression(component, nonComputedSelection, `${params.pdbId}_${chainId}_exp`, { label: `${chainId} Experimental` });
                     if (nonComputedComp) {
-                        await plugin.builders.structure.representation.addRepresentation(nonComputedComp, {
-                            type: 'cartoon',
-                            color: 'uniform',
-                            colorParams: { value: chainColor }
-                        });
+                        await plugin.builders.structure.representation.addRepresentation(nonComputedComp, { type: 'cartoon', color: 'uniform', colorParams: { value: chainColor } });
                     }
 
                     const computedSelection = createComputedResidueSelection(chainId, params.computedResidues);
                     if (computedSelection) {
-                        const computedComp = await plugin.builders.structure.tryCreateComponentFromExpression(
-                            component,
-                            computedSelection,
-                            `${params.pdbId}_${chainId}_comp`,
-                            { label: `${chainId} Computed`, tags: [`chain-${chainId}`, 'computed'] }
-                        );
-
+                        const computedComp = await plugin.builders.structure.tryCreateComponentFromExpression(component, computedSelection, `${params.pdbId}_${chainId}_comp`, { label: `${chainId} Computed` });
                         if (computedComp) {
-                            const computedColor = ComputedResidueColors['Default'];
-                            await plugin.builders.structure.representation.addRepresentation(computedComp, {
-                                type: 'ball-and-stick',
-                                color: 'uniform',
-                                colorParams: { value: computedColor },
-                                sizeTheme: { name: 'uniform', params: { value: 0.8 } }
-                            });
-                            console.log(`🎨 Added computed residue representation for chain ${chainId}`);
+                            await plugin.builders.structure.representation.addRepresentation(computedComp, { type: 'ball-and-stick', color: 'uniform', colorParams: { value: ComputedResidueColors.Default }, sizeTheme: { name: 'uniform', params: { value: 0.8 } } });
                         }
                     }
                 } else {
-                    await plugin.builders.structure.representation.addRepresentation(component, {
-                        type: 'cartoon',
-                        color: 'uniform',
-                        colorParams: { value: chainColor }
-                    });
+                    await plugin.builders.structure.representation.addRepresentation(component, { type: 'cartoon', color: 'uniform', colorParams: { value: chainColor } });
                 }
 
                 objects_polymer[chainId] = {
@@ -202,25 +174,11 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
                 ])
             });
 
-            const component = await plugin.builders.structure.tryCreateComponentFromExpression(
-                ref,
-                ligandSelection,
-                `${params.pdbId}_${instance.uniqueKey}`,
-                {
-                    label: `Ligand ${instance.uniqueKey}`,
-                    tags: [`ligand-${instance.compId}`]
-                }
-            );
+            const component = await plugin.builders.structure.tryCreateComponentFromExpression(ref, ligandSelection, `${params.pdbId}_${instance.uniqueKey}`, { label: `Ligand ${instance.uniqueKey}` });
 
             if (component) {
-                await plugin.builders.structure.representation.addRepresentation(component, {
-                    type: 'ball-and-stick',
-                    color: 'element-symbol'
-                });
-
-                objects_ligand[instance.uniqueKey] = {
-                    ref: component.ref
-                };
+                await plugin.builders.structure.representation.addRepresentation(component, { type: 'ball-and-stick', color: 'element-symbol' });
+                objects_ligand[instance.uniqueKey] = { ref: component.ref };
             }
         }
 

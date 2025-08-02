@@ -190,7 +190,7 @@ export const ProtofilamentGrid = ({
                                     fill={data.monomerType === 'α' ? '#bfdbfe' : '#fed7aa'}
                                     stroke={isSelected ? '#1d4ed8' : isHovered ? '#6b7280' : '#d1d5db'}
                                     strokeWidth={isHighlighted ? 2.5 : 1}
-                                    _className="transition-all duration-150"
+                                    className="transition-all duration-150"
                                 />
                                 <text
                                     x={position.x + cellSize / 2}
