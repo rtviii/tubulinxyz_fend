@@ -24,15 +24,15 @@ export interface ComputedResidueAnnotation {
 // Define specific colors for each tubulin type
 const TubulinColors = {
     [TubulinClass.Alpha]: Color(0x3b82f6), // Blue
-    [TubulinClass.Beta]: Color(0xf97316),  // Orange
-    Default: Color(0x808080)              // Gray for any unclassified chains
+    [TubulinClass.Beta]: Color(0xf97316),  // Orange
+    Default: Color(0x808080)              // Gray for any unclassified chains
 };
 
 // Colors for computed residues
 const ComputedResidueColors = {
     'MD_simulation': Color(0xff6b6b), // Red
-    'Modeller': Color(0x4ecdc4),      // Teal
-    'Default': Color(0xffa726)        // Orange
+    'Modeller': Color(0x4ecdc4),      // Teal
+    'Default': Color(0xffa726)        // Orange
 };
 
 interface PolymerObject {
@@ -66,7 +66,6 @@ function createComputedResidueSelection(chainId: string, computedResidues: Compu
 function createNonComputedResidueSelection(chainId: string, computedResidues: ComputedResidueAnnotation[]) {
     const chainResidues = computedResidues.filter(r => r.auth_asym_id === chainId);
     if (chainResidues.length === 0) {
-        // If no computed residues, return the entire chain
         return MS.struct.generator.atomGroups({
             'chain-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId])
         });
@@ -103,28 +102,29 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
         if (!structureCell) return {};
 
         const structure = structureCell.obj!.data;
-        const { update, builder, typeParams, color, symmetryColor } = StructureRepresentationPresetProvider.reprBuilder(
-            plugin,
-            params,
-            structure
-        );
+        const { update, builder } = StructureRepresentationPresetProvider.reprBuilder(plugin, params);
 
         const objects_polymer: { [k: string]: PolymerObject } = {};
         const objects_ligand: { [k: string]: LigandObject } = {};
 
-        // Get all chain IDs
-        const chains = new Set<string>();
-        for (const unit of structure.units) {
-            const { auth_asym_id } = StructureProperties.chain;
-            chains.add(auth_asym_id({ unit, element: unit.elements[0] }));
+        // 🚨 FIX: Get all polymer chains by checking the entity type
+        const polymerChains = new Set<string>();
+        const { entities } = structure.model;
+        const { auth_asym_id } = structure.model.atomicHierarchy.chains;
+        for (let i = 0, il = entities.data.rowCount; i < il; i++) {
+            if (entities.data.type.value(i) === 'polymer') {
+                const chains = entities.chainIndex.getChains(i);
+                for (let j = 0, jl = chains.length; j < jl; j++) {
+                    polymerChains.add(auth_asym_id.value(chains[j]));
+                }
+            }
         }
 
-        for (const chainId of Array.from(chains).sort()) {
+        for (const chainId of Array.from(polymerChains).sort()) {
             const chainSelection = MS.struct.generator.atomGroups({
                 'chain-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId])
             });
 
-            // Create the main component for the chain
             const component = await plugin.builders.structure.tryCreateComponentFromExpression(
                 structureCell,
                 chainSelection,
@@ -136,14 +136,11 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
                 const tubulinClass = params.tubulinClassification[chainId];
                 const chainColor = TubulinColors[tubulinClass] || TubulinColors.Default;
 
-                // Check if this chain has computed residues
                 const chainComputedResidues = params.computedResidues.filter(r => r.auth_asym_id === chainId);
 
                 if (chainComputedResidues.length > 0) {
                     console.log(`🔬 Chain ${chainId}: Found ${chainComputedResidues.length} computed residues`);
 
-                    // Create sub-components for different representations
-                    // Non-computed residues (cartoon)
                     const nonComputedSelection = createNonComputedResidueSelection(chainId, params.computedResidues);
                     const nonComputedComp = await plugin.builders.structure.tryCreateComponentFromExpression(
                         component,
@@ -160,7 +157,6 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
                         });
                     }
 
-                    // Computed residues (ball-and-stick)
                     const computedSelection = createComputedResidueSelection(chainId, params.computedResidues);
                     if (computedSelection) {
                         const computedComp = await plugin.builders.structure.tryCreateComponentFromExpression(
@@ -172,19 +168,16 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
 
                         if (computedComp) {
                             const computedColor = ComputedResidueColors['Default'];
-
                             await plugin.builders.structure.representation.addRepresentation(computedComp, {
                                 type: 'ball-and-stick',
                                 color: 'uniform',
                                 colorParams: { value: computedColor },
                                 sizeTheme: { name: 'uniform', params: { value: 0.8 } }
                             });
-
                             console.log(`🎨 Added computed residue representation for chain ${chainId}`);
                         }
                     }
                 } else {
-                    // No computed residues, just add regular cartoon representation
                     await plugin.builders.structure.representation.addRepresentation(component, {
                         type: 'cartoon',
                         color: 'uniform',
@@ -199,9 +192,7 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
             }
         }
 
-        // Handle ligands (unchanged from original)
         const ligandInstances = getLigandInstances(structure);
-
         for (const instance of ligandInstances) {
             const ligandSelection = MS.struct.generator.atomGroups({
                 'residue-test': MS.core.logic.and([
