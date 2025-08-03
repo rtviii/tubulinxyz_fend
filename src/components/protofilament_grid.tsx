@@ -52,7 +52,6 @@ const useGridData = (pdbId: string | null) => {
 
             const backendData: BackendGridData = await response.json();
 
-            // Convert backend format to frontend format
             const frontendData: GridData = {
                 subunits: backendData.subunits.map(subunit => ({
                     ...subunit,
@@ -84,7 +83,6 @@ const useGridData = (pdbId: string | null) => {
     return { gridData, loading, error, refetch: () => pdbId && loadGrid(pdbId) };
 };
 
-// Enhanced ProtofilamentGrid component with integrated data loading
 export const ProtofilamentGrid = ({
     pdbId,
     onSubunitSelect,
@@ -92,9 +90,9 @@ export const ProtofilamentGrid = ({
     selectedSubunitId,
     hoveredSubunitId,
     shearAngle = 15,
-    cellSize = 28,
-    gap = 4,
-    protofilamentGap = 10
+    cellSize = 24, // Slightly smaller for a tighter fit
+    gap = 3,
+    protofilamentGap = 8
 }: {
     pdbId: string | null;
     onSubunitSelect?: (subunit: SubunitData) => void;
@@ -110,7 +108,6 @@ export const ProtofilamentGrid = ({
 
     const getPosition = useCallback((pf: number, su: number) => {
         const shearOffset = Math.tan(shearAngle * Math.PI / 180) * cellSize;
-        // Swap x and y to make protofilaments vertical columns
         const x = su * (cellSize + gap) + pf * shearOffset;
         const y = pf * (cellSize + protofilamentGap);
         return { x, y };
@@ -125,7 +122,6 @@ export const ProtofilamentGrid = ({
         const protofilaments = Math.max(...subunits.map(d => d.protofilament)) + 1;
         const maxSubunits = Math.max(...subunits.map(d => d.subunitIndex)) + 1;
         const shearOffset = Math.tan(shearAngle * Math.PI / 180) * cellSize;
-        // Swap width and height since we swapped x and y
         const totalWidth = maxSubunits * (cellSize + gap) + Math.abs(shearOffset * protofilaments);
         const totalHeight = protofilaments * (cellSize + protofilamentGap);
 
@@ -140,47 +136,42 @@ export const ProtofilamentGrid = ({
         return { subunitPositions: positions, totalWidth, totalHeight, protofilaments };
     }, [gridData, getPosition, cellSize, protofilamentGap, gap, shearAngle]);
 
-    // Loading state
     if (loading) {
         return (
-            <div className="w-full text-center p-8 bg-gray-50">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                <p className="text-gray-500">Generating 2D lattice from {pdbId?.toUpperCase()}...</p>
+            <div className="w-full text-center py-4">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                <p className="text-xs text-gray-500">Generating lattice...</p>
             </div>
         );
     }
 
-    // Error state
     if (error) {
         return (
-            <div className="w-full text-center p-8 bg-red-50 border border-red-200">
-                <p className="text-red-600 font-medium">Failed to load grid</p>
-                <p className="text-red-500 text-sm mt-1">{error}</p>
+            <div className="w-full text-center p-2 bg-red-50 border border-red-200 rounded">
+                <p className="text-red-600 text-xs font-medium">Failed to load grid</p>
             </div>
         );
     }
 
-    // No data state
     if (!gridData || gridData.subunits.length === 0) {
         return (
-            <div className="w-full text-center p-8 bg-gray-50">
-                <p className="text-gray-500">Load a structure to see the 2D lattice view.</p>
+            <div className="text-center py-2">
+                <p className="text-xs text-gray-500">No 2D lattice data available.</p>
             </div>
         );
     }
 
+    // 🎨 2. Simplified container with less padding
     return (
-        <div className="w-full p-4">
-            <div className="flex justify-between items-center mb-2">
-                <h3 className="text-lg font-semibold">2D Lattice View</h3>
-                <div className="text-sm text-gray-600">
-                    {gridData.subunits.length} subunits • {protofilaments} protofilaments
+        <div className="w-full">
+            <div className="flex justify-between items-center mb-2 px-1">
+                <h3 className="text-md font-semibold text-gray-800">2D Lattice</h3>
+                <div className="text-xs text-gray-600">
+                    {protofilaments} PFs
                 </div>
             </div>
-            {/* Remove internal scrolling - let parent handle it */}
-            <div className="border rounded-lg bg-gray-50 p-4">
+            <div className="border rounded-md bg-gray-100 p-2 overflow-auto">
                 <svg width={totalWidth} height={totalHeight} className="block">
-                    {/* Render subunits */}
                     {Object.values(subunitPositions).map(({ data, position }) => {
                         const isHovered = hoveredSubunitId === data.id;
                         const isSelected = selectedSubunitId === data.id;
@@ -196,9 +187,9 @@ export const ProtofilamentGrid = ({
                                     cx={position.x + cellSize / 2}
                                     cy={position.y + cellSize / 2}
                                     r={cellSize / 2 - 2}
-                                    fill={data.monomerType === 'α' ? '#bfdbfe' : '#fed7aa'} // Alpha: blue, Beta: orange
+                                    fill={data.monomerType === 'α' ? '#bfdbfe' : '#fed7aa'}
                                     stroke={isSelected ? '#1d4ed8' : isHovered ? '#6b7280' : '#d1d5db'}
-                                    strokeWidth={isHighlighted ? 3 : 1.5}
+                                    strokeWidth={isHighlighted ? 2.5 : 1}
                                     className="transition-all duration-150"
                                 />
                                 <text
@@ -206,14 +197,13 @@ export const ProtofilamentGrid = ({
                                     y={position.y + cellSize / 2 + 1}
                                     textAnchor="middle"
                                     dominantBaseline="middle"
-                                    className="text-xs font-semibold fill-gray-800 pointer-events-none select-none"
+                                    className="text-[10px] font-semibold fill-gray-800 pointer-events-none select-none"
                                 >
                                     {data.monomerType}
                                 </text>
                             </g>
                         );
                     })}
-                    {/* Protofilament labels - now on the left side as row labels */}
                     {Array.from({ length: protofilaments }, (_, i) => (
                         <text
                             key={`pf-label-${i}`}
@@ -230,4 +220,4 @@ export const ProtofilamentGrid = ({
             </div>
         </div>
     );
-};
+}

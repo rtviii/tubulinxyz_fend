@@ -7,6 +7,8 @@ import { molstarRefsSlice } from './slices/molstar_refs';
 import { polymerStatesSlice } from './slices/polymer_states';
 import { nonPolymerStatesSlice } from './slices/nonpolymer_states'; // Import the new slice
 import sequenceViewerReducer from './slices/sequence_viewer';
+import { sequenceStructureSyncSlice} from './slices/sequence_structure_sync';
+import interactionReducer from './slices/interaction_slice'; // ✨ IMPORT THE NEW REDUCER
 
 export const makeStore = () => {
     const store = configureStore({
@@ -16,6 +18,8 @@ export const makeStore = () => {
             polymerStates: polymerStatesSlice.reducer,
             nonPolymerStates: nonPolymerStatesSlice.reducer, // Add the new reducer
             sequenceViewer: sequenceViewerReducer,
+            sequenceStructureSync: sequenceStructureSyncSlice.reducer, 
+    interaction: interactionReducer, // ✨ ADD IT HERE
         },
         middleware: getDefaultMiddleware =>
             getDefaultMiddleware({
