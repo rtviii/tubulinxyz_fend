@@ -1,5 +1,5 @@
 'use client';
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/store';
 import { selectSelectedStructure } from '@/store/slices/tubulin_structures';
 import { PolymerComponent, LigandComponent, selectComponentsForStructure } from '@/store/slices/molstar_refs';
@@ -7,8 +7,9 @@ import { selectPolymerState } from '@/store/slices/polymer_states';
 import { selectNonPolymerState } from '@/store/slices/nonpolymer_states';
 import { setSelectedSequence } from '@/store/slices/sequence_viewer';
 import { MolstarContext } from '@/components/molstar/molstar_service';
-import { Eye, EyeOff, Focus, FileText } from 'lucide-react';
+import { Eye, EyeOff, Focus, FileText, Search } from 'lucide-react';
 import { ProtofilamentGrid, SubunitData } from './protofilament_grid';
+import { InteractionInfo } from '@/components/molstar/molstar_controller';
 
 const PolymerRow = ({ component }: { component: PolymerComponent }) => {
     const dispatch = useAppDispatch();
@@ -73,13 +74,17 @@ const PolymerRow = ({ component }: { component: PolymerComponent }) => {
     );
 };
 
-const LigandRow = ({ component }: { component: LigandComponent }) => {
+const LigandRow = ({ component, onAnalyze }: { component: LigandComponent, onAnalyze: (c: LigandComponent) => void }) => {
     const molstarService = React.useContext(MolstarContext)?.getService('main');
     const nonPolymerState = useAppSelector(state => selectNonPolymerState(state, { pdbId: component.pdbId, chemId: component.uniqueKey }));
 
     if (!molstarService || !nonPolymerState) return null;
-
     const { controller } = molstarService;
+
+    const handleAnalyzeClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onAnalyze(component);
+    };
 
     const toggleVisibility = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -113,6 +118,9 @@ const LigandRow = ({ component }: { component: LigandComponent }) => {
                 </span>
             </div>
             <div className="flex items-center">
+                <button onClick={handleAnalyzeClick} className="p-0.5 text-gray-400 hover:text-teal-600" title="Analyze Interactions">
+                    <Search size={14} />
+                </button>
                 <button onClick={focusLigand} className="p-0.5 text-gray-400 hover:text-gray-800" title="Focus Ligand">
                     <Focus size={14} />
                 </button>
@@ -124,7 +132,35 @@ const LigandRow = ({ component }: { component: LigandComponent }) => {
     );
 };
 
-// 🚨 FIX: Accept props for grid interaction
+const LigandInteractionPanel = ({ ligand, data, onFocus, isLoading }: {
+    ligand: LigandComponent;
+    data: InteractionInfo[];
+    onFocus: (interaction: InteractionInfo) => void;
+    isLoading: boolean;
+}) => {
+    return (
+        <div className="bg-gray-100 p-2 rounded-md my-1 text-xs">
+            <h4 className="font-bold mb-2 text-gray-700">Analysis: {ligand.uniqueKey}</h4>
+            {isLoading ? (
+                <p className="text-gray-500">Analyzing...</p>
+            ) : data.length > 0 ? (
+                <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
+                    {data.map((interaction, index) => (
+                        <div key={index} onClick={() => onFocus(interaction)} className="p-1 bg-white rounded hover:bg-blue-50 cursor-pointer">
+                            <span className="font-semibold text-blue-700">{interaction.type}: </span>
+                            <span>{interaction.partnerA.label}</span>
+                            <span className="mx-1.5 text-gray-400">&harr;</span>
+                            <span>{interaction.partnerB.label}</span>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <p className="text-gray-500">No interactions found within 5Å.</p>
+            )}
+        </div>
+    );
+};
+
 export const EntitiesPanel = ({ onSubunitHover, onSubunitSelect, hoveredSubunitId, selectedSubunitId }: {
     onSubunitHover: (subunit: SubunitData | null) => void;
     onSubunitSelect: (subunit: SubunitData) => void;
@@ -133,15 +169,42 @@ export const EntitiesPanel = ({ onSubunitHover, onSubunitSelect, hoveredSubunitI
 }) => {
     const selectedStructure = useAppSelector(selectSelectedStructure);
     const components = useAppSelector(state => selectComponentsForStructure(state, selectedStructure || ''));
+    const molstarService = React.useContext(MolstarContext)?.getService('main');
+
+    const [analyzedLigand, setAnalyzedLigand] = useState<LigandComponent | null>(null);
+    const [interactionData, setInteractionData] = useState<InteractionInfo[]>([]);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
 
     const polymerComponents = (components?.filter(c => c.type === 'polymer') as PolymerComponent[]) || [];
     const ligandComponents = (components?.filter(c => c.type === 'ligand') as LigandComponent[]) || [];
 
+    const handleAnalyzeLigand = useCallback(async (ligand: LigandComponent) => {
+        if (!molstarService) return;
+
+        if (analyzedLigand?.uniqueKey === ligand.uniqueKey) {
+            setAnalyzedLigand(null);
+            setInteractionData([]);
+            molstarService.controller.clearLigandInteractionView();
+            return;
+        }
+
+        setIsAnalyzing(true);
+        setInteractionData([]);
+        setAnalyzedLigand(ligand);
+        const data = await molstarService.controller.analyzeLigandInteractions(ligand);
+        if (data) {
+            setInteractionData(data);
+        }
+        setIsAnalyzing(false);
+    }, [molstarService, analyzedLigand]);
+
+    const handleFocusInteraction = useCallback((interaction: InteractionInfo) => {
+        molstarService?.controller.focusOnInteraction(interaction.partnerA.loci, interaction.partnerB.loci);
+    }, [molstarService]);
+
     return (
         <div className="w-64 h-full bg-gray-50 border-l border-gray-200 flex flex-col">
-            {/* 🎨 FIX: Flatter layout with better spacing control */}
             <div className="flex-1 overflow-y-auto p-2 space-y-4">
-                {/* --- Polymer Chains Section --- */}
                 <div>
                     <h3 className="text-sm font-semibold text-gray-800 mb-1 px-1">Polymer Chains</h3>
                     <div className="space-y-0.5">
@@ -156,20 +219,29 @@ export const EntitiesPanel = ({ onSubunitHover, onSubunitSelect, hoveredSubunitI
                     </div>
                 </div>
 
-                {/* --- Ligands Section --- */}
                 {ligandComponents.length > 0 && (
                     <div className="border-t border-gray-200 pt-3">
                         <h3 className="text-sm font-semibold text-gray-800 mb-1 px-1">Nonpolymer Ligands</h3>
                         <div className="space-y-0.5">
                             {ligandComponents
                                 .sort((a, b) => a.uniqueKey.localeCompare(b.uniqueKey, undefined, { numeric: true }))
-                                .map(comp => <LigandRow key={comp.uniqueKey} component={comp} />)
-                            }
+                                .map(comp => (
+                                    <React.Fragment key={comp.uniqueKey}>
+                                        <LigandRow component={comp} onAnalyze={handleAnalyzeLigand} />
+                                        {analyzedLigand?.uniqueKey === comp.uniqueKey && (
+                                            <LigandInteractionPanel
+                                                ligand={analyzedLigand}
+                                                data={interactionData}
+                                                onFocus={handleFocusInteraction}
+                                                isLoading={isAnalyzing}
+                                            />
+                                        )}
+                                    </React.Fragment>
+                                ))}
                         </div>
                     </div>
                 )}
 
-                {/* --- 2D Lattice Section --- */}
                 {selectedStructure && (
                     <div className="border-t border-gray-200 pt-3">
                         <ProtofilamentGrid

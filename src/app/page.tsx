@@ -1,22 +1,14 @@
 'use client'
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { useMolstarService, MolstarContext } from '@/components/molstar/molstar_service';
+import { useMolstarService } from '@/components/molstar/molstar_service';
 import { MolstarNode } from '@/components/molstar/molstar_spec';
 import { useAppDispatch, useAppSelector } from '@/store/store';
-import {
-  selectStructure,
-  selectSelectedStructure,
-  selectIsLoading,
-  selectError,
-  setLoading,
-  setError
-} from '@/store/slices/tubulin_structures';
+import { selectStructure, selectSelectedStructure, selectIsLoading, selectError, setLoading, setError } from '@/store/slices/tubulin_structures';
 import React from 'react';
 import { EntitiesPanel } from '@/components/entities_panel';
 import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 import { createTubulinClassificationMap } from '@/services/gql_parser';
 import { SubunitData } from '@/components/protofilament_grid';
-import { InteractionInfo } from '@/components/molstar/molstar_controller';
 import { TubulinClass } from '@/components/molstar/molstar_preset';
 import { SequenceViewer } from '@/components/sequence_viewer';
 import { useMolstarSync } from '@/hooks/useMolstarSync';
@@ -27,22 +19,11 @@ function SettingsPanel({
   isMolstarReady,
   onStructureSelect,
   onBackendStructureSelect,
-  onCreateGtpInterface,
-  onCreateGtpSurroundings,
-  onGetInterfaceData,
-  interactionData,
-  onInteractionClick
 }: {
   isMolstarReady: boolean;
   onStructureSelect: (pdbId: string) => void;
   onBackendStructureSelect: (filename: string) => void;
-  onCreateGtpInterface: () => void;
-  onCreateGtpSurroundings: () => void;
-  onGetInterfaceData: () => void;
-  interactionData: InteractionInfo[];
-  onInteractionClick: (interaction: InteractionInfo) => void;
 }) {
-
   const selectedStructure = useAppSelector(selectSelectedStructure);
   const isLoading = useAppSelector(selectIsLoading);
   const error = useAppSelector(selectError);
@@ -57,9 +38,7 @@ function SettingsPanel({
   }, [isMolstarReady, suggestedPdbId]);
 
   const handleSelect = (pdbId: string) => {
-    if (pdbId) {
-      onStructureSelect(pdbId);
-    }
+    if (pdbId) onStructureSelect(pdbId);
   };
 
   const handleCustomLoad = (e: React.FormEvent) => {
@@ -69,10 +48,6 @@ function SettingsPanel({
       handleSelect(trimmedId);
       setCustomPdbId('');
     }
-  };
-
-  const handleBackendLoad = () => {
-    onBackendStructureSelect('7sj7_with_metadata.cif');
   };
 
   const handleRandomize = () => {
@@ -86,7 +61,6 @@ function SettingsPanel({
   };
 
   const isInteractionDisabled = isLoading || !isMolstarReady;
-  const isLigandInteractionDisabled = isLoading || !isMolstarReady || !selectedStructure;
 
   return (
     <div className="w-80 h-full bg-gray-50 border-r border-gray-200 p-3 overflow-y-auto">
@@ -122,7 +96,7 @@ function SettingsPanel({
           <h3 className="text-sm font-medium text-gray-800">Load from Backend</h3>
           <p className="text-xs text-gray-500">Load structures with computed residue annotations.</p>
           <button
-            onClick={handleBackendLoad}
+            onClick={() => onBackendStructureSelect('7sj7_with_metadata.cif')}
             disabled={isInteractionDisabled}
             className="w-full px-3 py-1.5 text-sm font-semibold text-white bg-purple-600 rounded-md shadow-sm hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
@@ -148,73 +122,14 @@ function SettingsPanel({
             <button
               onClick={() => handleSelect(suggestedPdbId)}
               disabled={isInteractionDisabled}
-              className={`w-full text-left p-2 rounded-lg border transition-colors ${selectedStructure === suggestedPdbId
-                ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-500'
-                : 'bg-white border-gray-200 hover:bg-gray-100'
-                } ${isInteractionDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`w-full text-left p-2 rounded-lg border transition-colors ${selectedStructure === suggestedPdbId ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-500' : 'bg-white border-gray-200 hover:bg-gray-100'} ${isInteractionDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <span className="font-medium text-sm text-gray-900">{suggestedPdbId}</span>
               <p className="text-xs text-gray-400">Randomly selected example</p>
             </button>
           </div>
         )}
-
         {isLoading && <div className="text-sm text-gray-500">Loading...</div>}
-
-        <div className="space-y-3 pt-3 border-t border-gray-200">
-          <h3 className="text-sm font-medium text-gray-800">Ligand Interactions</h3>
-          <p className="text-xs text-gray-500 -mt-2">Visualize GTP interactions.</p>
-
-          <div className="flex space-x-2">
-            <button
-              onClick={onCreateGtpSurroundings}
-              disabled={isLigandInteractionDisabled}
-              className="flex-1 px-2 py-1.5 text-xs font-medium text-white bg-teal-600 rounded-md shadow-sm hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
-              title="Show GTP and surrounding residues (5Å)"
-            >
-              Surroundings
-            </button>
-            <button
-              onClick={onCreateGtpInterface}
-              disabled={isLigandInteractionDisabled}
-              className="flex-1 px-2 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
-              title="Show only the interaction bonds"
-            >
-              Interface
-            </button>
-          </div>
-          <button
-            onClick={onGetInterfaceData}
-            disabled={isLigandInteractionDisabled}
-            className="w-full px-2 py-1.5 text-xs font-medium text-white bg-orange-600 rounded-md shadow-sm hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            Get Interface Data
-          </button>
-
-          <div className="pt-2">
-            <h3 className="text-sm font-medium text-gray-800 mb-2">Interaction Data</h3>
-            <div className="max-h-48 overflow-y-auto text-xs space-y-1 pr-2">
-              {interactionData.length > 0 ? (
-                <ul className="space-y-1">
-                  {interactionData.map((interaction, index) => (
-                    <li
-                      key={index}
-                      className="p-1 bg-gray-100 rounded hover:bg-blue-100 cursor-pointer"
-                      onClick={() => onInteractionClick(interaction)}
-                    >
-                      <span className="font-semibold text-blue-700">{interaction.type}: </span>
-                      <span className='break-all'>{interaction.partnerA.label}</span>
-                      <span className="mx-1.5 text-gray-400">&harr;</span>
-                      <span className='break-all'>{interaction.partnerB.label}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-gray-500">Click "Get Interface Data" to populate.</p>
-              )}
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -225,13 +140,11 @@ export default function TubulinViewerPage() {
   const { isInitialized, service } = useMolstarService(molstarRef, 'main');
   const dispatch = useAppDispatch();
   const selectedStructure = useAppSelector(selectSelectedStructure);
+  useMolstarSync();
 
-  // 🚨 FIX: Re-introduce state and handlers for grid interactions
   const [selectedGridSubunit, setSelectedGridSubunit] = useState<string | null>(null);
   const [hoveredGridSubunit, setHoveredGridSubunit] = useState<string | null>(null);
   const [hoveredSubunitData, setHoveredSubunitData] = useState<SubunitData | null>(null);
-  const [interactionData, setInteractionData] = useState<InteractionInfo[]>([]);
-  useMolstarSync();
 
   const handleStructureSelect = useCallback(async (pdbId: string) => {
     if (!service?.controller) return;
@@ -269,23 +182,17 @@ export default function TubulinViewerPage() {
     }
   }, [service, dispatch]);
 
-  // 🚨 FIX: Re-introduce the original interaction handlers for the grid
   const handleSubunitHover = useCallback((subunit: SubunitData | null) => {
     const controller = service?.controller;
     if (!controller || !selectedStructure) return;
-
-    // Clear previous hover highlight
     if (hoveredSubunitData) {
       controller.highlightChain(selectedStructure, hoveredSubunitData.auth_asym_id, false);
     }
-
-    // Set new hover highlight
     if (subunit) {
       controller.highlightChain(selectedStructure, subunit.auth_asym_id, true);
       setHoveredGridSubunit(subunit.id);
       setHoveredSubunitData(subunit);
     } else {
-      // Clear state when mouse leaves
       setHoveredGridSubunit(null);
       setHoveredSubunitData(null);
     }
@@ -299,53 +206,6 @@ export default function TubulinViewerPage() {
     }
   }, [service, selectedStructure]);
 
-  const handleCreateGtpInterface = useCallback(async () => {
-    if (!service?.controller) return;
-    dispatch(setLoading(true));
-    try {
-      await service.controller.createLigandInterfaceBonds('GTP');
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to create GTP interface';
-      dispatch(setError(msg));
-    } finally {
-      dispatch(setLoading(false));
-    }
-  }, [service, dispatch]);
-
-  const handleCreateGtpSurroundings = useCallback(async () => {
-    if (!service?.controller) return;
-    dispatch(setLoading(true));
-    try {
-      await service.controller.createLigandSurroundings('GTP');
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to create GTP surroundings';
-      dispatch(setError(msg));
-    } finally {
-      dispatch(setLoading(false));
-    }
-  }, [service, dispatch]);
-
-  const handleGetInterfaceData = useCallback(async () => {
-    if (!service?.controller) return;
-    dispatch(setLoading(true));
-    setInteractionData([]);
-    try {
-      const data = await service.controller.getLigandInterfaceData('GTP');
-      if (data) setInteractionData(data);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Failed to get interface data';
-      dispatch(setError(msg));
-    } finally {
-      dispatch(setLoading(false));
-    }
-  }, [service, dispatch]);
-
-  const handleInteractionClick = (interaction: InteractionInfo) => {
-    if (service?.controller) {
-      service.controller.focusOnInteraction(interaction.partnerA.loci, interaction.partnerB.loci);
-    }
-  };
-
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-gray-100">
       <div className="flex flex-1 overflow-hidden">
@@ -353,13 +213,7 @@ export default function TubulinViewerPage() {
           isMolstarReady={isInitialized}
           onStructureSelect={handleStructureSelect}
           onBackendStructureSelect={handleBackendStructureSelect}
-          onCreateGtpInterface={handleCreateGtpInterface}
-          onCreateGtpSurroundings={handleCreateGtpSurroundings}
-          onGetInterfaceData={handleGetInterfaceData}
-          interactionData={interactionData}
-          onInteractionClick={handleInteractionClick}
         />
-
         <div className="flex-1 h-full bg-white relative">
           <MolstarNode ref={molstarRef} />
           {!isInitialized && (
@@ -371,7 +225,6 @@ export default function TubulinViewerPage() {
             </div>
           )}
         </div>
-        {/* 🚨 FIX: Pass down the handlers and state to the panel */}
         <EntitiesPanel
           onSubunitHover={handleSubunitHover}
           onSubunitSelect={handleSubunitSelect}
@@ -379,7 +232,6 @@ export default function TubulinViewerPage() {
           selectedSubunitId={selectedGridSubunit}
         />
       </div>
-
       <div className="flex-shrink-0 h-[250px] border-t bg-white shadow-inner">
         <SequenceViewer />
       </div>

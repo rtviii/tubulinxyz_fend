@@ -126,17 +126,114 @@ interface StateSnapshot {
     // components: Record<string, any>; 
     // structureRefs: Record<string, string>;
 }
+export interface InteractionInfo {
+    type: string;
+    partnerA: { label: string, loci: StructureElement.Loci };
+    partnerB: { label: string, loci: StructureElement.Loci };
+}
 
 export class MolstarController {
     private viewer: MolstarViewer;
     private dispatch: AppDispatch;
     private getState: () => RootState;
+    private activeInteractionComponentRef: string | null = null; // To track the component we create
+
 
     constructor(viewer: MolstarViewer, dispatch: AppDispatch, getState: () => RootState) {
         this.viewer = viewer;
         this.dispatch = dispatch;
         this.getState = getState;
     }
+
+
+    async analyzeLigandInteractions(ligand: LigandComponent): Promise<InteractionInfo[] | undefined> {
+        if (!this.viewer.ctx) {
+            this.dispatch(setError('Mol* context not available.'));
+            return;
+        }
+        const plugin = this.viewer.ctx;
+
+        // First, remove any previous interaction component to keep the view clean
+        if (this.activeInteractionComponentRef) {
+            await plugin.state.data.updateTree(plugin.state.data.build().delete(this.activeInteractionComponentRef));
+            this.activeInteractionComponentRef = null;
+        }
+
+        const structureRef = plugin.managers.structure.hierarchy.current.structures[0]?.cell;
+        if (!structureRef?.obj?.data) {
+            this.dispatch(setError('No structure loaded.'));
+            return;
+        }
+        const sourceStructure = structureRef.obj.data;
+
+        // 1. Create a query that uniquely identifies the specific ligand instance
+        const specificLigandQuery = MS.struct.generator.atomGroups({
+            'residue-test': MS.core.logic.and([
+                MS.core.rel.eq([MS.ammp('auth_comp_id'), ligand.compId]),
+                MS.core.rel.eq([MS.ammp('auth_asym_id'), ligand.auth_asym_id]),
+                MS.core.rel.eq([MS.ammp('auth_seq_id'), ligand.auth_seq_id])
+            ]),
+            'group-by': MS.ammp('residueKey')
+        });
+
+        // 2. Build the surroundings query based on this specific ligand
+        const surroundingsQuery = MS.struct.modifier.includeSurroundings({
+            0: specificLigandQuery,
+            radius: 5,
+            'as-whole-residues': true
+        });
+
+        // 3. Create a new component for the surroundings and visualize it
+        const stateUpdate = plugin.state.data.build();
+        const surroundingsComponent = stateUpdate.to(structureRef)
+            .apply(StateTransforms.Model.StructureSelectionFromExpression, {
+                expression: surroundingsQuery,
+                label: `[${ligand.compId}] Surroundings`
+            });
+
+        // Ball-and-stick for atoms
+        surroundingsComponent.apply(StateTransforms.Representation.StructureRepresentation3D,
+            createStructureRepresentationParams(plugin, sourceStructure, { type: 'ball-and-stick' })
+        );
+
+        // Interactions representation for bonds
+        surroundingsComponent.apply(StateTransforms.Representation.StructureRepresentation3D, {
+            type: { name: 'interactions', params: {} },
+            colorTheme: { name: 'interaction-type', params: {} },
+            sizeTheme: { name: 'uniform', params: { value: 0.15 } },
+        });
+
+        const updateResult = await stateUpdate.commit();
+        this.activeInteractionComponentRef = surroundingsComponent.ref; // Store the ref to delete it later
+
+        // 4. Extract interaction data from the newly created component's structure
+        const componentCell = plugin.state.data.cells.get(surroundingsComponent.ref);
+        if (!componentCell?.obj?.data) {
+            this.dispatch(setError(`Could not create surroundings component for ${ligand.compId}.`));
+            return [];
+        }
+        const focusedStructure = componentCell.obj.data;
+
+        const customPropertyContext = { runtime: SyncRuntimeContext, assetManager: new AssetManager() };
+        await InteractionsProvider.attach(customPropertyContext, focusedStructure, undefined, true);
+
+        const interactionData = getInteractionData(focusedStructure);
+
+        console.log(`Analyzed ${interactionData.length} interactions for ${ligand.uniqueKey}.`);
+        return interactionData;
+    }
+
+    async clearLigandInteractionView() {
+        if (!this.viewer.ctx || !this.activeInteractionComponentRef) return;
+        await this.viewer.ctx.state.updateTree(this.viewer.ctx.state.data.build().delete(this.activeInteractionComponentRef));
+        this.activeInteractionComponentRef = null;
+    }
+
+    async focusOnInteraction(lociA: Loci, lociB: Loci) {
+        if (!this.viewer.ctx) return;
+        this.viewer.ctx.managers.camera.focusLoci(Loci.union(lociA, lociB));
+    }
+
 
 
     async getLigandInterfaceData(ligandChemId: string): Promise<InteractionInfo[] | undefined> {
@@ -190,14 +287,14 @@ export class MolstarController {
      * @param lociA Loci for the first interaction partner.
      * @param lociB Loci for the second interaction partner.
      */
-    async focusOnInteraction(lociA: locii, lociB: locii) {
-        if (!this.viewer.ctx) return;
+    // async focusOnInteraction(lociA: locii, lociB: locii) {
+    //     if (!this.viewer.ctx) return;
 
-        // ** FIX: ** Create a bundle of the two loci to focus on them together.
-        // The camera manager will compute the bounding sphere for the bundle.
-        const bundle: locii.Bundle<2> = { loci: [lociA, lociB] };
-        this.viewer.ctx.managers.camera.focusLoci(Loci.union(lociA, lociB));
-    }
+    //     // ** FIX: ** Create a bundle of the two loci to focus on them together.
+    //     // The camera manager will compute the bounding sphere for the bundle.
+    //     const bundle: locii.Bundle<2> = { loci: [lociA, lociB] };
+    //     this.viewer.ctx.managers.camera.focusLoci(Loci.union(lociA, lociB));
+    // }
     private getCurrentState(): StateSnapshot {
         const state = this.getState();
         return {
