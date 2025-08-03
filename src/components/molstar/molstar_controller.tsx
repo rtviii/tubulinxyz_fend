@@ -125,6 +125,25 @@ export class MolstarController {
         this.getState = getState;
     }
 
+    async highlightInteraction(interaction: InteractionInfo | undefined, shouldHighlight: boolean = true) {
+        if (!this.viewer.ctx) return;
+        const plugin = this.viewer.ctx;
+
+        // If hovering ends or no interaction is provided, clear all highlights
+        if (!shouldHighlight || !interaction) {
+            plugin.managers.interactivity.lociHighlights.clearHighlights();
+            return;
+        }
+
+        // Combine the loci of both partners into a single loci to highlight them together
+        const lociA = interaction.partnerA.loci;
+        const lociB = interaction.partnerB.loci;
+        const combinedLoci = Loci.union(lociA, lociB);
+
+        plugin.managers.interactivity.lociHighlights.highlight({ loci: combinedLoci }, false);
+    }
+
+
     async analyzeLigandInteractions(ligand: LigandComponent): Promise<InteractionInfo[] | undefined> {
         if (!this.viewer.ctx) {
             this.dispatch(setError('Mol* context not available.'));

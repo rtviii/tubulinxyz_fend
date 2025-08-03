@@ -132,21 +132,28 @@ const LigandRow = ({ component, onAnalyze }: { component: LigandComponent, onAna
     );
 };
 
-const LigandInteractionPanel = ({ ligand, data, onFocus, isLoading }: {
+const LigandInteractionPanel = ({ ligand, data, onFocus, onHover, onLeave, isLoading }: {
     ligand: LigandComponent;
     data: InteractionInfo[];
     onFocus: (interaction: InteractionInfo) => void;
+    onHover: (interaction: InteractionInfo) => void;
+    onLeave: () => void;
     isLoading: boolean;
 }) => {
     return (
         <div className="bg-gray-100 p-2 rounded-md my-1 text-xs">
             <h4 className="font-bold mb-2 text-gray-700">Analysis: {ligand.uniqueKey}</h4>
-            {isLoading ? (
-                <p className="text-gray-500">Analyzing...</p>
-            ) : data.length > 0 ? (
+            {isLoading ? (<p>...</p>) : data.length > 0 ? (
                 <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
                     {data.map((interaction, index) => (
-                        <div key={index} onClick={() => onFocus(interaction)} className="p-1 bg-white rounded hover:bg-blue-50 cursor-pointer">
+                        <div
+                            key={index}
+                            onClick={() => onFocus(interaction)}
+                            // ✨ ADD THESE EVENT HANDLERS
+                            onMouseEnter={() => onHover(interaction)}
+                            onMouseLeave={onLeave}
+                            className="p-1 bg-white rounded hover:bg-blue-50 cursor-pointer"
+                        >
                             <span className="font-semibold text-blue-700">{interaction.type}: </span>
                             <span>{interaction.partnerA.label}</span>
                             <span className="mx-1.5 text-gray-400">&harr;</span>
@@ -154,9 +161,7 @@ const LigandInteractionPanel = ({ ligand, data, onFocus, isLoading }: {
                         </div>
                     ))}
                 </div>
-            ) : (
-                <p className="text-gray-500">No interactions found within 5Å.</p>
-            )}
+            ) : (<p>...</p>)}
         </div>
     );
 };
@@ -205,6 +210,15 @@ export const EntitiesPanel = ({ onSubunitHover, onSubunitSelect, hoveredSubunitI
     const handleFocusInteraction = useCallback((interaction: InteractionInfo) => {
         molstarService?.controller.focusOnInteraction(interaction.partnerA.loci, interaction.partnerB.loci);
     }, [molstarService]);
+    const handleInteractionHover = useCallback((interaction: InteractionInfo) => {
+        molstarService?.controller.highlightInteraction(interaction, true);
+    }, [molstarService]);
+
+    // ✨ NEW HANDLER: For when the user's mouse leaves an interaction row
+    const handleInteractionMouseLeave = useCallback(() => {
+        molstarService?.controller.highlightInteraction(undefined, false);
+    }, [molstarService]);
+
 
     return (
         <div className="w-64 h-full bg-gray-50 border-l border-gray-200 flex flex-col">
@@ -237,6 +251,9 @@ export const EntitiesPanel = ({ onSubunitHover, onSubunitSelect, hoveredSubunitI
                                                 ligand={analyzedLigand}
                                                 data={interactionData}
                                                 onFocus={handleFocusInteraction}
+                                                // ✨ PASS THE NEW HANDLERS
+                                                onHover={handleInteractionHover}
+                                                onLeave={handleInteractionMouseLeave}
                                                 isLoading={isAnalyzing}
                                             />
                                         )}
