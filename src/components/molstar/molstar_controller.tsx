@@ -22,6 +22,7 @@ import { StructureSelectionQuery } from 'molstar/lib/mol-plugin-state/helpers/st
 import { Loci as locii } from 'molstar/lib/mol-model/loci';
 import { OrderedSet } from 'molstar/lib/mol-data/int';
 import { InteractionsProvider, Interactions } from 'molstar/lib/mol-model-props/computed/interactions';
+import { TubulinChainColorThemeProvider } from './tubulin-color-theme'; // ✨ IMPORT OUR NEW THEME
 import { PluginContext } from 'molstar/lib/mol-plugin/context';
 import { StructureElement } from 'molstar/lib/mol-model/structure';
 import { interactionTypeLabel } from 'molstar/lib/mol-model-props/computed/interactions/common';
@@ -33,6 +34,8 @@ import { SequenceData } from '@/store/slices/sequence_viewer';
 import { setResidueHover, setResidueSelection } from '@/store/slices/sequence_structure_sync';
 import { Color } from 'molstar/lib/mol-util/color/color';
 import { clearActiveInteractionComponentRef, setActiveInteractionComponentRef } from '@/store/slices/interaction_slice';
+import { StructureFocusRepresentation } from 'molstar/lib/mol-plugin/behavior/dynamic/selection/structure-focus-representation';
+
 
 interface ComputedResidueAnnotation {
     auth_asym_id: string;
@@ -401,6 +404,22 @@ export class MolstarController {
             Object.keys(ligandComponents).forEach(uniqueKey => {
                 this.dispatch(initializeNonPolymer({ pdbId: pdbId.toUpperCase(), chemId: uniqueKey }));
             });
+            if (this.viewer.ctx) {
+                await this.viewer.ctx.state.updateBehavior(StructureFocusRepresentation, params => {
+                    // Color the SURROUNDING residues using our custom blue/orange theme
+                    params.surroundingsParams.colorTheme = {
+                        name: 'tubulin-chain-id',
+                        params: {
+                            classification: tubulinClassification
+                        }
+                    };
+                    // Color the TARGET ligand by chemical element
+                    params.targetParams.colorTheme = {
+                        name: 'element-symbol',
+                        params: {}
+                    };
+                });
+            }
 
             return true;
         } catch (error) {
@@ -838,7 +857,22 @@ export class MolstarController {
             Object.keys(ligandComponents).forEach(uniqueKey => {
                 this.dispatch(initializeNonPolymer({ pdbId: pdbId, chemId: uniqueKey }));
             });
-
+            if (this.viewer.ctx) {
+                await this.viewer.ctx.state.updateBehavior(StructureFocusRepresentation, params => {
+                    // Color the SURROUNDING residues using our custom blue/orange theme
+                    params.surroundingsParams.colorTheme = {
+                        name: 'tubulin-chain-id',
+                        params: {
+                            classification: tubulinClassification
+                        }
+                    };
+                    // Color the TARGET ligand by chemical element
+                    params.targetParams.colorTheme = {
+                        name: 'element-symbol',
+                        params: {}
+                    };
+                });
+            }
             return true;
         } catch (error) {
             console.error('Error loading structure from backend:', error);

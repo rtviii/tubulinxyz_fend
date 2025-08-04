@@ -6,6 +6,7 @@ import { useAppDispatch, useAppSelector } from '@/store/store';
 import { selectStructure, selectSelectedStructure, selectIsLoading, selectError, setLoading, setError } from '@/store/slices/tubulin_structures';
 import React from 'react';
 import { EntitiesPanel } from '@/components/entities_panel';
+import { ResearchPanel } from './research_panel';
 import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 import { createTubulinClassificationMap } from '@/services/gql_parser';
 import { SubunitData } from '@/components/protofilament_grid';
@@ -225,12 +226,16 @@ export default function TubulinViewerPage() {
             </div>
           )}
         </div>
-        <EntitiesPanel
-          onSubunitHover={handleSubunitHover}
-          onSubunitSelect={handleSubunitSelect}
-          hoveredSubunitId={hoveredGridSubunit}
-          selectedSubunitId={selectedGridSubunit}
-        />
+        {/* Both panels side by side */}
+        <div className="flex">
+          <EntitiesPanel
+            onSubunitHover={handleSubunitHover}
+            onSubunitSelect={handleSubunitSelect}
+            hoveredSubunitId={hoveredGridSubunit}
+            selectedSubunitId={selectedGridSubunit}
+          />
+          <ResearchPanel />
+        </div>
       </div>
       <div className="flex-shrink-0 h-[250px] border-t bg-white shadow-inner">
         <SequenceViewer />

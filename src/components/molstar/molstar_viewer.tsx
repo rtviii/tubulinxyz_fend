@@ -38,6 +38,7 @@ export class MolstarViewer {
             this.ctx = await createPluginUI({ target: parent, spec, render: renderReact18 });
             this.ctx.builders.structure.representation.registerPreset(TubulinSplitPreset);
             this.ctx.builders.structure.representation.registerPreset(EnhancedTubulinSplitPreset);
+
             this.setupBasicStyling();
             this.resolveInit?.();
         } catch (error) {
@@ -46,6 +47,7 @@ export class MolstarViewer {
             throw error;
         }
     }
+
 
     private setupBasicStyling() {
         // ... (this method is fine, no changes)
