@@ -30,6 +30,61 @@ export function SequenceViewer() {
     const [currentSelection, setCurrentSelection] = useState<SequenceSelection | null>(null);
     const [hoveredResidue, setHoveredResidue] = useState<number | null>(null);
 
+    // Create annotation tracks for alpha tubulin chains
+    const createAnnotationTracks = useCallback(() => {
+        if (!selectedSequence) return [];
+
+        // Only show annotations for alpha tubulin chains (you can customize this logic)
+        const isAlphaTubulin = selectedSequence.chainId === 'A' || selectedSequence.name?.toLowerCase().includes('alpha');
+
+        if (!isAlphaTubulin) return [];
+
+        // Disease mutations - individual residues only
+        const mutations = [
+            { start: 1, end: 1, name: "R2H", color: "#ef4444" },
+            { start: 4, end: 4, name: "I5L", color: "#ef4444" },
+            { start: 5, end: 5, name: "S6C", color: "#ef4444" },
+            { start: 27, end: 27, name: "G28A", color: "#ef4444" },
+            { start: 42, end: 42, name: "R43H", color: "#ef4444" },
+            { start: 95, end: 95, name: "P96L", color: "#ef4444" },
+            { start: 124, end: 124, name: "R125H", color: "#ef4444" },
+            { start: 183, end: 183, name: "R184C", color: "#ef4444" },
+            { start: 283, end: 283, name: "R284C", color: "#ef4444" },
+            { start: 350, end: 350, name: "D351Y", color: "#ef4444" },
+        ];
+
+        // Post-translational modifications - individual residues only  
+        const ptms = [
+            { start: 3, end: 3, name: "Palmitoylation", color: "#8b5cf6" },
+            { start: 5, end: 5, name: "Phosphorylation", color: "#8b5cf6" },
+            { start: 23, end: 23, name: "Phosphorylation", color: "#8b5cf6" },
+            { start: 39, end: 39, name: "Acetylation", color: "#8b5cf6" },
+            { start: 56, end: 56, name: "O-GlcNAc", color: "#8b5cf6" },
+            { start: 104, end: 104, name: "Methylation", color: "#8b5cf6" },
+            { start: 158, end: 158, name: "Phosphorylation", color: "#8b5cf6" },
+            { start: 251, end: 251, name: "Ubiquitination", color: "#8b5cf6" },
+            { start: 312, end: 312, name: "SUMOylation", color: "#8b5cf6" },
+            { start: 390, end: 390, name: "Methylation", color: "#8b5cf6" },
+        ];
+
+        // Ligand binding sites - can be ranges
+        const ligandSites = [
+            { start: 0, end: 4, name: "Pironetin Site", color: "#3b82f6" },
+            { start: 8, end: 12, name: "GTP Binding", color: "#3b82f6" },
+            { start: 156, end: 164, name: "Taxane Site", color: "#3b82f6" },
+            { start: 228, end: 238, name: "Vinca Domain", color: "#3b82f6" },
+            { start: 315, end: 325, name: "Maytansine Site", color: "#3b82f6" },
+            { start: 348, end: 358, name: "Colchicine Site", color: "#3b82f6" },
+        ];
+
+        // Return as simple array of annotations with different colors for different types
+        return [
+            ...mutations,
+            ...ptms,
+            ...ligandSites
+        ];
+    }, [selectedSequence]);
+
     // Handle sequence selection events from SeqViz
     const handleSequenceSelection = useCallback((selection: any) => {
         console.log('🧬 Sequence Selection Event:', selection);
@@ -64,13 +119,8 @@ export function SequenceViewer() {
             // Clear selection when nothing is selected
             setCurrentSelection(null);
             dispatch(clearSelection());
-
-            // ❌ REMOVE direct Molstar call - let the sync hook handle it
-            // if (molstarService?.controller && selectedSequence) {
-            //   molstarService.controller.clearResidueSelection(selectedSequence.chainId);
-            // }
         }
-    }, [selectedSequence, isSelectionSyncEnabled, dispatch]); // Remove molstarService from dependencies
+    }, [selectedSequence, isSelectionSyncEnabled, dispatch]);
 
     // Listen for selections from Molstar and update SeqViz
     useEffect(() => {
@@ -91,13 +141,6 @@ export function SequenceViewer() {
             });
         }
     }, [syncSelection, selectedSequence]);
-
-    // ❌ REMOVE THIS EFFECT - it causes double calls with useMolstarSync hook
-    // The sync hook should handle all Molstar communication
-    // useEffect(() => {
-    //   if (!currentSelection || !molstarService?.controller || !selectedSequence) return;
-    //   molstarService.controller.selectResiduesRange(...);
-    // }, [currentSelection, molstarService, selectedSequence]);
 
     // Effect to clear selection when component unmounts or sequence changes
     useEffect(() => {
@@ -123,6 +166,9 @@ export function SequenceViewer() {
         setCurrentSelection(null);
         setHoveredResidue(null);
     }, [dispatch]);
+
+    // Get the annotation tracks
+    const annotationTracks = createAnnotationTracks();
 
     // NOW we can do conditional rendering AFTER all hooks are called
     if (!isVisible || !selectedSequence) {
@@ -150,8 +196,8 @@ export function SequenceViewer() {
                             <button
                                 onClick={toggleSelectionSync}
                                 className={`text-xs px-2 py-1 rounded ${isSelectionSyncEnabled
-                                        ? 'bg-blue-100 text-blue-700'
-                                        : 'bg-gray-100 text-gray-500'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-gray-100 text-gray-500'
                                     }`}
                                 title="Toggle selection sync with 3D viewer"
                             >
@@ -160,8 +206,8 @@ export function SequenceViewer() {
                             <button
                                 onClick={toggleHoverSync}
                                 className={`text-xs px-2 py-1 rounded ${isHoverSyncEnabled
-                                        ? 'bg-green-100 text-green-700'
-                                        : 'bg-gray-100 text-gray-500'
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-gray-100 text-gray-500'
                                     }`}
                                 title="Toggle hover sync with 3D viewer"
                             >
@@ -173,6 +219,23 @@ export function SequenceViewer() {
                         <p className="text-xs text-gray-500">
                             {selectedSequence.sequence.length} residues
                         </p>
+                        {/* Annotation Legend */}
+                        {annotationTracks.length > 0 && (
+                            <div className="flex items-center space-x-3 text-xs">
+                                <div className="flex items-center space-x-1">
+                                    <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                                    <span className="text-gray-600">Mutations</span>
+                                </div>
+                                <div className="flex items-center space-x-1">
+                                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                                    <span className="text-gray-600">PTMs</span>
+                                </div>
+                                <div className="flex items-center space-x-1">
+                                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                    <span className="text-gray-600">Ligand Sites</span>
+                                </div>
+                            </div>
+                        )}
                         {currentSelection && (
                             <div className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">
                                 Selected: {currentSelection.start}-{currentSelection.end} ({currentSelection.length} residues)
@@ -201,13 +264,12 @@ export function SequenceViewer() {
             {/* SeqViz Container */}
             <div className="flex-1 overflow-hidden" ref={seqVizRef}>
                 <SeqViz
-                    // key={`${selectedSequence.pdbId}_${selectedSequence.chainId}`}
                     name={selectedSequence.name || `Chain ${selectedSequence.chainId}`}
                     seq={selectedSequence.sequence}
                     viewer="linear"
                     showComplement={false}
                     translations={[]} // Remove translation arrows
-                    annotations={[]} // Remove annotation arrows  
+                    annotations={annotationTracks} // ✨ ADD THE ANNOTATION TRACKS HERE
                     primers={[]} // Remove primer arrows
                     enzymes={[]} // Remove enzyme cut sites
                     highlights={[]} // Remove default highlights
