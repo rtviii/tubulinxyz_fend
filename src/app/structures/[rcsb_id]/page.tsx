@@ -3,9 +3,12 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { useMolstarService } from '@/components/molstar/molstar_service';
 import { MolstarNode } from '@/components/molstar/molstar_spec';
 import { useAppDispatch, useAppSelector } from '@/store/store';
+
 import { selectStructure, selectSelectedStructure, selectIsLoading, selectError, setLoading, setError } from '@/store/slices/tubulin_structures';
+
 import React from 'react';
 import { EntitiesPanel } from '@/components/entities_panel';
+
 import { useParams } from 'next/navigation';
 import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 import { createTubulinClassificationMap } from '@/services/gql_parser';
@@ -139,6 +142,7 @@ function SettingsPanel({
 
 export default function TubulinViewerPage() {
   const molstarRef = useRef<HTMLDivElement>(null);
+  const loadedPdbFromUrl = useRef<string | null>(null);
   const { isInitialized, service } = useMolstarService(molstarRef, 'main');
   const dispatch = useAppDispatch();
   const selectedStructure = useAppSelector(selectSelectedStructure);
@@ -150,41 +154,108 @@ export default function TubulinViewerPage() {
   const [hoveredSubunitData, setHoveredSubunitData] = useState<SubunitData | null>(null);
   const [classificationMap, setClassificationMap] = useState<TubulinClassification | null>(null);
 
-  const handleStructureSelect = useCallback(async (pdbId: string) => {
-    if (!service?.controller) return;
+  // Centralized structure loading function that ensures proper cleanup
+  const loadStructureWithCleanup = useCallback(async (
+    pdbId: string,
+    loadFunction: () => Promise<void>,
+    source: 'url' | 'manual' | 'backend'
+  ) => {
+    if (!service?.controller) {
+      console.log('Service or controller not ready');
+      return false;
+    }
+
+    console.log(`Loading structure ${pdbId} from ${source}...`);
+
+    // ALWAYS clear current structure and reset state before loading new one
+    try {
+      await service.controller.clearCurrentStructure();
+    } catch (clearError) {
+      console.warn('Error during structure cleanup:', clearError);
+    }
+
     dispatch(selectStructure(pdbId));
     dispatch(setLoading(true));
     dispatch(setError(null));
+
     try {
-      const gqlData = await fetchRcsbGraphQlData(pdbId);
-      const classificationMap = createTubulinClassificationMap(gqlData);
-      await service.controller.loadStructure(pdbId, classificationMap);
-      await service.viewer.representations.stylized_lighting();
+      await loadFunction();
+
+      // Mark as loaded if from URL
+      if (source === 'url') {
+        loadedPdbFromUrl.current = pdbId;
+      } else {
+        loadedPdbFromUrl.current = null; // Reset URL tracking for manual loads
+      }
+
+      console.log(`✅ Successfully loaded ${pdbId} from ${source}`);
+      return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
       dispatch(setError(errorMessage));
+      console.error(`❌ Failed to load ${pdbId} from ${source}:`, error);
+      return false;
     } finally {
       dispatch(setLoading(false));
     }
   }, [service, dispatch]);
 
-  const handleBackendStructureSelect = useCallback(async (filename: string) => {
-    if (!service?.controller) return;
-    const pdbId = filename.split('_')[0].toUpperCase();
-    dispatch(selectStructure(pdbId));
-    dispatch(setLoading(true));
-    dispatch(setError(null));
-    try {
-      const dummyClassificationMap = { A: TubulinClass.Alpha, B: TubulinClass.Beta };
-      await service.controller.loadStructureFromBackend(filename, dummyClassificationMap);
-      await service.viewer.representations.stylized_lighting();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      dispatch(setError(errorMessage));
-    } finally {
-      dispatch(setLoading(false));
+  // Load structure from URL with cleanup
+  const loadStructureFromUrl = useCallback(async (pdbId: string) => {
+    // Prevent duplicate loading
+    if (loadedPdbFromUrl.current === pdbId) {
+      console.log(`Structure ${pdbId} already loaded from URL`);
+      return true;
     }
-  }, [service, dispatch]);
+
+    return await loadStructureWithCleanup(pdbId, async () => {
+      const gqlData = await fetchRcsbGraphQlData(pdbId);
+      const classificationMap = createTubulinClassificationMap(gqlData);
+      await service!.controller.loadStructure(pdbId, classificationMap);
+      await service!.viewer.representations.stylized_lighting();
+    }, 'url');
+  }, [loadStructureWithCleanup, service]);
+
+  // Effect to handle URL-based structure loading
+  useEffect(() => {
+    if (!isInitialized || !service?.controller) {
+      console.log('Molstar not initialized yet');
+      return;
+    }
+
+    const pdbIdFromUrl = (params.rcsb_id as string)?.toUpperCase();
+    if (!pdbIdFromUrl) {
+      console.log('No PDB ID in URL');
+      return;
+    }
+
+    // Only load if we haven't already loaded this structure
+    if (loadedPdbFromUrl.current !== pdbIdFromUrl) {
+      console.log(`Triggering load for ${pdbIdFromUrl}`);
+      loadStructureFromUrl(pdbIdFromUrl);
+    }
+  }, [isInitialized, service?.controller, params.rcsb_id, loadStructureFromUrl]);
+
+  // Manual structure selection with cleanup
+  const handleStructureSelect = useCallback(async (pdbId: string) => {
+    return await loadStructureWithCleanup(pdbId, async () => {
+      const gqlData = await fetchRcsbGraphQlData(pdbId);
+      const classificationMap = createTubulinClassificationMap(gqlData);
+      await service!.controller.loadStructure(pdbId, classificationMap);
+      await service!.viewer.representations.stylized_lighting();
+    }, 'manual');
+  }, [loadStructureWithCleanup, service]);
+
+  // Backend structure selection with cleanup
+  const handleBackendStructureSelect = useCallback(async (filename: string) => {
+    const pdbId = filename.split('_')[0].toUpperCase();
+
+    return await loadStructureWithCleanup(pdbId, async () => {
+      const dummyClassificationMap = { A: TubulinClass.Alpha, B: TubulinClass.Beta };
+      await service!.controller.loadStructureFromBackend(filename, dummyClassificationMap);
+      await service!.viewer.representations.stylized_lighting();
+    }, 'backend');
+  }, [loadStructureWithCleanup, service]);
 
   const handleSubunitHover = useCallback((subunit: SubunitData | null) => {
     const controller = service?.controller;
@@ -209,60 +280,6 @@ export default function TubulinViewerPage() {
       controller.focusChain(selectedStructure, subunit.auth_asym_id);
     }
   }, [service, selectedStructure]);
-
-  // --- Effect 1: Fetch classification data when PDB ID from URL changes ---
-  useEffect(() => {
-    const pdbIdFromUrl = (params.pdbId as string)?.toUpperCase();
-    if (pdbIdFromUrl) {
-      // Reset previous data
-      setClassificationMap(null);
-      dispatch(setLoading(true));
-      dispatch(setError(null));
-
-      fetchRcsbGraphQlData(pdbIdFromUrl)
-        .then(gqlData => {
-          const map = createTubulinClassificationMap(gqlData);
-          setClassificationMap(map);
-        })
-        .catch(error => {
-          const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-          dispatch(setError(errorMessage));
-        })
-        .finally(() => {
-          // We set loading to false in the second effect after Mol* is done
-        });
-    }
-  }, [params.pdbId, dispatch]);
-
-  // --- Effect 2: Load structure into Mol* when viewer is ready AND data has been fetched ---
-  useEffect(() => {
-    const pdbIdFromUrl = (params.pdbId as string)?.toUpperCase();
-
-    if (!isInitialized || !service?.controller || !classificationMap || !pdbIdFromUrl) {
-      return;
-    }
-
-    if (selectedStructure === pdbIdFromUrl) {
-      return;
-    }
-
-    const loadStructure = async () => {
-      dispatch(selectStructure(pdbIdFromUrl));
-      try {
-        await service.controller.loadStructure(pdbIdFromUrl, classificationMap);
-        await service.viewer.representations.stylized_lighting();
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred loading structure.";
-        dispatch(setError(errorMessage));
-      } finally {
-        dispatch(setLoading(false));
-      }
-    };
-
-    loadStructure();
-
-  }, [isInitialized, service, classificationMap, params.pdbId, dispatch, selectedStructure]);
-
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-gray-100">
@@ -300,5 +317,3 @@ export default function TubulinViewerPage() {
     </div>
   );
 }
-
-

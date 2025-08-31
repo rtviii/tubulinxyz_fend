@@ -4,63 +4,7 @@ import * as React from 'react';
 import { useState, useEffect, useMemo } from 'react';
 import { Search, SlidersHorizontal, Eye, ChevronDown } from 'lucide-react';
 
-// --- MOCK DATA ---
-// Moved directly into the file to avoid path resolution issues.
-const MOCKED_STRUCTURES = [
-    {
-        "pdbId": "4O2B",
-        "title": "Crystal structure of T2R-TTL complex with Colchicine",
-        "conformation": "curved",
-        "organism": "Homo sapiens",
-        "year": 2014,
-        "resolution": 2.3,
-        "expMethod": "X-RAY DIFFRACTION",
-        "imageUrl": "https://cdn.rcsb.org/images/structures/2b/4o2b/4o2b_assembly-1.jpeg"
-    },
-    {
-        "pdbId": "5J2T",
-        "title": "Structure of two tubulin dimers in complex with vinblastine",
-        "conformation": "curved",
-        "organism": "Bos taurus",
-        "year": 2016,
-        "resolution": 2.4,
-        "expMethod": "X-RAY DIFFRACTION",
-        "imageUrl": "https://cdn.rcsb.org/images/structures/2t/5j2t/5j2t_assembly-1.jpeg"
-    },
-    {
-        "pdbId": "5SYF",
-        "title": "Structure of mammalian tubulin with paclitaxel",
-        "conformation": "straight",
-        "organism": "Sus scrofa",
-        "year": 2016,
-        "resolution": 5.5,
-        "expMethod": "ELECTRON CRYSTALLOGRAPHY",
-        "imageUrl": "https://cdn.rcsb.org/images/structures/yf/5syf/5syf_assembly-1.jpeg"
-    },
-    {
-        "pdbId": "6WVR",
-        "title": "Human alpha-1/beta-3 tubulin-DARPin D1 complex in a microtubule",
-        "conformation": "straight",
-        "organism": "Homo sapiens",
-        "year": 2020,
-        "resolution": 2.1,
-        "expMethod": "ELECTRON MICROSCOPY",
-        "imageUrl": "https://cdn.rcsb.org/images/structures/vr/6wvr/6wvr_assembly-1.jpeg"
-    },
-    {
-        "pdbId": "1SA0",
-        "title": "Tubulin-colchicine complex",
-        "conformation": "curved",
-        "organism": "Bos taurus",
-        "year": 2004,
-        "resolution": 3.58,
-        "expMethod": "ELECTRON CRYSTALLOGRAPHY",
-        "imageUrl": "https://cdn.rcsb.org/images/structures/a0/1sa0/1sa0_assembly-1.jpeg"
-    }
-];
-
-
-// Define the type for a single structure
+// --- Type Definition ---
 type TubulinStructure = {
     pdbId: string;
     title: string;
@@ -69,8 +13,58 @@ type TubulinStructure = {
     year: number;
     resolution: number;
     expMethod: string;
-    imageUrl: string;
 };
+
+// --- Mock Data ---
+// The JSON data is now directly included in the component file to resolve the import issue.
+const MOCKED_STRUCTURES: TubulinStructure[] = [
+    {
+        "pdbId": "4O2B",
+        "title": "Crystal structure of T2R-TTL complex with Colchicine",
+        "conformation": "curved",
+        "organism": "Homo sapiens",
+        "year": 2014,
+        "resolution": 2.3,
+        "expMethod": "X-RAY DIFFRACTION"
+    },
+    {
+        "pdbId": "5J2T",
+        "title": "Structure of two tubulin dimers in complex with vinblastine",
+        "conformation": "curved",
+        "organism": "Bos taurus",
+        "year": 2016,
+        "resolution": 3.4,
+        "expMethod": "ELECTRON CRYSTALLOGRAPHY"
+    },
+    {
+        "pdbId": "5SYF",
+        "title": "Structure of mammalian tubulin with paclitaxel",
+        "conformation": "straight",
+        "organism": "Sus scrofa",
+        "year": 2016,
+        "resolution": 3.5,
+        "expMethod": "ELECTRON CRYSTALLOGRAPHY"
+    },
+    {
+        "pdbId": "6WVR",
+        "title": "Human alpha-1B/beta-3 tubulin-DARPin D1 complex in the straight conformation",
+        "conformation": "straight",
+        "organism": "Homo sapiens",
+        "year": 2020,
+        "resolution": 2.1,
+        "expMethod": "X-RAY DIFFRACTION"
+    },
+    {
+        "pdbId": "1SA0",
+        "title": "Tubulin-colchicine complex",
+        "conformation": "curved",
+        "organism": "Bos taurus",
+        "year": 2004,
+        "resolution": 3.58,
+        "expMethod": "ELECTRON CRYSTALLOGRAPHY"
+    }
+];
+
 
 // --- Placeholder Card Component ---
 const PlaceholderCard = ({ pdbId }: { pdbId: string }) => {
@@ -106,15 +100,16 @@ const StructureCard = ({ structure }: { structure: TubulinStructure }) => {
         <a href={`/structures/${structure.pdbId}`} className="group block h-full">
             <div className="w-full h-full bg-white rounded-lg shadow-md overflow-hidden transform transition-all duration-300 hover:shadow-xl hover:-translate-y-1 border border-gray-200 flex flex-col">
                 <div className="relative h-40 bg-gray-100">
+                    {/* The image source is now dynamically pointing to your local public/thumbnails directory */}
                     <img
-                        src={structure.imageUrl}
-                        alt={`Image of ${structure.pdbId}`}
+                        src={`/thumbnails/${structure.pdbId}.png`}
+                        alt={`Thumbnail of PDB structure ${structure.pdbId}`}
                         className="w-full h-full object-cover"
-                        // Simple fallback in case the image fails
+                        // Fallback in case a specific thumbnail is missing
                         onError={(e) => {
                             const target = e.target as HTMLImageElement;
                             target.onerror = null; // prevent infinite loop
-                            target.src = `https://placehold.co/600x400/e5e7eb/9ca3af?text=Image+Not+Found`;
+                            target.src = `https://placehold.co/600x400/e5e7eb/9ca3af?text=${structure.pdbId}+Not+Found`;
                         }}
                     />
                     <div className="absolute top-2 left-2 bg-black/50 text-white text-xs font-mono px-2 py-1 rounded">
@@ -168,8 +163,8 @@ const FiltersPanel = ({
                             key={filter}
                             onClick={() => onFilterChange(filter)}
                             className={`w-1/3 py-1 text-sm rounded-md capitalize transition-colors duration-200 ${activeFilter === filter
-                                    ? 'bg-white text-blue-600 shadow-sm'
-                                    : 'bg-transparent text-gray-600 hover:bg-gray-300/50'
+                                ? 'bg-white text-blue-600 shadow-sm'
+                                : 'bg-transparent text-gray-600 hover:bg-gray-300/50'
                                 }`}
                         >
                             {filter}
@@ -203,7 +198,6 @@ const FiltersPanel = ({
                         <input type="number" placeholder="Max" disabled className="w-full p-2 border rounded-md text-sm" />
                     </div>
                 </div>
-                {/* --- NEW MOCKED FILTERS --- */}
                 <div className="space-y-2 pt-2 border-t">
                     <label className="text-sm font-medium text-gray-700">Ligands Present</label>
                     <div className="relative">
@@ -292,7 +286,7 @@ const StructureCatalogueContent = () => {
                         {filteredStructures.length > 0 ? (
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                                 {filteredStructures.map((structure) => (
-                                    <StructureCard key={structure.pdbId} structure={structure as TubulinStructure} />
+                                    <StructureCard key={structure.pdbId} structure={structure} />
                                 ))}
                                 {placeholderCards.map((p) => (
                                     <PlaceholderCard key={p.pdbId} pdbId={p.pdbId} />
