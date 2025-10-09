@@ -42,11 +42,14 @@ export const useMolstarService = (
     containerRef: React.RefObject<HTMLDivElement>,
     instanceId: MolstarInstanceId = 'main'
 ) => {
-    const context = useContext(MolstarContext);
-    const [isInitialized, setIsInitialized] = useState(false);
-    const dispatch = useAppDispatch();
-    const store = useStore<AppStore>();
-    const serviceRef = useRef<MolstarService | null>(null);
+
+    const context = useContext(MolstarContext);
+    const [isInitialized, setIsInitialized] = useState(false);
+    const [service, setService] = useState<MolstarService | null>(null);
+    const dispatch = useAppDispatch();
+    const store = useStore<AppStore>();
+    const serviceRef = useRef<MolstarService | null>(null);
+
 
     const getState = useCallback((): RootState => {
         return store.getState();
@@ -74,15 +77,18 @@ export const useMolstarService = (
                 }
 
                 const controller = new MolstarController(viewer, dispatch, getState);
-                const service = { viewer, controller, instanceId };
+                const serviceInstance = { viewer, controller, instanceId };
 
-                serviceRef.current = service;
-                context.registerService(instanceId, service);
-                setIsInitialized(true);
+
+                serviceRef.current = serviceInstance;
+                context.registerService(instanceId, serviceInstance);
+                setService(serviceInstance);
+                setIsInitialized(true);
+
 
             } catch (error) {
-                console.error(`Failed to initialize Molstar instance ${instanceId}:`, error);
-                // Optionally dispatch an error to the global state
+
+                console.error(`Failed to initialize Molstar instance ${instanceId}:`, error);
             }
         };
 
@@ -101,9 +107,9 @@ export const useMolstarService = (
                 }
             }
         };
-        // The dependency array ensures this effect runs only when these stable values change,
-        // which should be only on mount.
-    }, [containerRef, instanceId, context, dispatch, getState]);
+
+    }, [containerRef, instanceId, context, dispatch, getState]);
+
 
     return {
         service: context?.getService(instanceId) ?? null,

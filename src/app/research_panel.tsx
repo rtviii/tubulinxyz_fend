@@ -37,8 +37,11 @@ interface ClickablePDBPillProps {
 const ClickablePDBPill = ({ pdbId, onLoadStructure }: ClickablePDBPillProps) => {
   if (pdbId === 'N/A') {
     return (
-      <span className="inline-block px-1.5 py-0.5 text-xs font-mono font-medium rounded bg-gray-200 text-gray-500">
-        N/A
+      <span
+        className="inline-block px-1.5 py-0.5 text-xs font-mono font-medium rounded bg-gray-200 text-gray-500"
+        title="Literature-based finding, no specific crystal structure"
+      >
+        Literature
       </span>
     );
   }
@@ -74,9 +77,9 @@ const Tooltip = ({ children, content }: TooltipProps) => {
         {children}
       </div>
       {isVisible && (
-        <div className="absolute bottom-full left-0 mb-2 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-50 w-64 pointer-events-none">
+        <div className="absolute bottom-full right-0 mb-2 p-2 bg-gray-900 text-white text-xs rounded shadow-lg z-50 w-64 pointer-events-none">
           {content}
-          <div className="absolute top-full left-2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900"></div>
+          <div className="absolute top-full right-2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900"></div>
         </div>
       )}
     </div>
@@ -310,9 +313,9 @@ export const ResearchPanel = () => {
         </p>
         <p className="text-xs text-gray-400">
           <Info size={10} className="inline mr-1" />
-          Hover for details • Click PDB ID to load
+          Hover info icon for details • Blue PDB = clickable structure • Gray = literature finding
         </p>
       </div>
     </div>
   );
-};;
+};;;

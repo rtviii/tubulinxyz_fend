@@ -1,245 +1,252 @@
-'use client'
-import { useRef, useState, useEffect, useCallback } from 'react';
-import { useMolstarService } from '@/components/molstar/molstar_service';
-import { MolstarNode } from '@/components/molstar/molstar_spec';
-import { useAppDispatch, useAppSelector } from '@/store/store';
-import { selectStructure, selectSelectedStructure, selectIsLoading, selectError, setLoading, setError } from '@/store/slices/tubulin_structures';
-import React from 'react';
-import { EntitiesPanel } from '@/components/entities_panel';
-import { ResearchPanel } from './research_panel';
-import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
-import { createTubulinClassificationMap } from '@/services/gql_parser';
-import { SubunitData } from '@/components/protofilament_grid';
-import { TubulinClass } from '@/components/molstar/molstar_preset';
-import { SequenceViewer } from '@/components/sequence_viewer';
-import { useMolstarSync } from '@/hooks/useMolstarSync';
+'use client';
+import * as React from 'react';
+import { useState } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
+import { Search, ChevronRight } from 'lucide-react';
 
-const SUGGESTED_PDB_IDS = ["6WVR", "8QV0", "3JAT", "6O2R", "4TV9", "6U0H", "8VRK", "6E7B", "5J2T", "6FKJ", "4O2B", "6DPU", "1SA0", "6BR1", "7SJ8", "2MZ7", "7SJ9", "6O2T"];
+// Ligand data for the new section
+const popularLigands = [
+    {
+        name: "Taxol (Paclitaxel)",
+        chemicalId: "TA1",
+        type: "Stabilizer",
+        description: "Microtubule stabilizing agent used in cancer therapy",
+        mechanism: "Promotes polymerization",
+        color: "bg-emerald-50 border-emerald-200 text-emerald-800"
+    },
+    {
+        name: "Colchicine",
+        chemicalId: "COL",
+        type: "Inhibitor",
+        description: "Classical tubulin polymerization inhibitor",
+        mechanism: "Prevents assembly",
+        color: "bg-rose-50 border-rose-200 text-rose-800"
+    },
+    {
+        name: "Vinblastine",
+        chemicalId: "VLB",
+        type: "Inhibitor",
+        description: "Vinca alkaloid that disrupts microtubules",
+        mechanism: "Depolymerizes MT",
+        color: "bg-rose-50 border-rose-200 text-rose-800"
+    },
+    {
+        name: "Docetaxel",
+        chemicalId: "TXL",
+        type: "Stabilizer",
+        description: "Semi-synthetic taxane derivative",
+        mechanism: "Stabilizes microtubules",
+        color: "bg-emerald-50 border-emerald-200 text-emerald-800"
+    }
+];
 
-function SettingsPanel({
-  isMolstarReady,
-  onStructureSelect,
-  onBackendStructureSelect,
+// Ligand card component
+const LigandCard = ({ ligand }: { ligand: typeof popularLigands[0] }) => {
+    return (
+        <div className={`p-5 rounded-lg border transition-all duration-200 hover:shadow-md ${ligand.color} min-h-[220px]`}>
+            <div className="flex items-start justify-between mb-4">
+                <h3 className="font-medium text-sm">{ligand.name}</h3>
+                <span className="text-xs px-2 py-1 rounded-full bg-white/70 font-mono">
+                    {ligand.type}
+                </span>
+            </div>
+
+            <div className="flex flex-col items-center mb-4">
+                <div className="w-24 h-24 bg-white border border-gray-200 rounded-lg overflow-hidden mb-3 flex items-center justify-center">
+                    <img
+                        src={`https://cdn.rcsb.org/images/ccd/labeled/${ligand.chemicalId.toUpperCase()[0]
+                            }/${ligand.chemicalId.toUpperCase()}.svg`}
+                        alt={`${ligand.chemicalId} chemical structure`}
+                        className="w-full h-full object-contain p-1"
+                    />
+                </div>
+            </div>
+
+            <div className="space-y-2 text-center">
+                <p className="text-xs leading-relaxed">{ligand.description}</p>
+                <p className="text-xs opacity-75 italic font-medium">{ligand.mechanism}</p>
+            </div>
+        </div>
+    );
+};
+
+// Simple choice card with better button styling
+const ChoiceCard = ({
+    title,
+    description,
+    pdbId,
+    linkUrl
 }: {
-  isMolstarReady: boolean;
-  onStructureSelect: (pdbId: string) => void;
-  onBackendStructureSelect: (filename: string) => void;
-}) {
-  const selectedStructure = useAppSelector(selectSelectedStructure);
-  const isLoading = useAppSelector(selectIsLoading);
-  const error = useAppSelector(selectError);
-  const [customPdbId, setCustomPdbId] = useState('');
-  const [suggestedPdbId, setSuggestedPdbId] = useState<string | null>(null);
+    title: string,
+    description: string,
+    pdbId: string,
+    linkUrl: string
+}) => {
+    return (
+        <Link
+            href={linkUrl}
+            className="group relative block rounded-xl overflow-hidden shadow-sm hover:shadow-md transform transition-all duration-300 hover:scale-[1.01] border border-gray-200 cursor-pointer bg-white h-64"
+        >
+            <div className="relative w-full h-full bg-white">
+                <img
+                    src={`/thumbnails/${pdbId}_movie.gif`}
+                    alt={title}
+                    className="w-full h-full object-contain transition-opacity duration-300"
+                />
 
-  useEffect(() => {
-    if (isMolstarReady && !suggestedPdbId) {
-      const randomIndex = Math.floor(Math.random() * SUGGESTED_PDB_IDS.length);
-      setSuggestedPdbId(SUGGESTED_PDB_IDS[randomIndex]);
-    }
-  }, [isMolstarReady, suggestedPdbId]);
+                {/* Content overlay - only at the bottom */}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6">
+                    <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                                <h3 className="text-xl font-medium text-white">{title}</h3>
+                                <span className="text-xs font-mono text-gray-300 bg-black/40 px-2 py-1 rounded">
+                                    {pdbId}
+                                </span>
+                            </div>
+                            <p className="text-gray-200 text-sm leading-relaxed">{description}</p>
+                        </div>
+                    </div>
+                </div>
 
-  const handleSelect = (pdbId: string) => {
-    if (pdbId) onStructureSelect(pdbId);
-  };
-
-  const handleCustomLoad = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmedId = customPdbId.trim().toUpperCase();
-    if (trimmedId.length === 4) {
-      handleSelect(trimmedId);
-      setCustomPdbId('');
-    }
-  };
-
-  const handleRandomize = () => {
-    if (SUGGESTED_PDB_IDS.length <= 1) return;
-    let newPdbId;
-    do {
-      const randomIndex = Math.floor(Math.random() * SUGGESTED_PDB_IDS.length);
-      newPdbId = SUGGESTED_PDB_IDS[randomIndex];
-    } while (newPdbId === suggestedPdbId);
-    setSuggestedPdbId(newPdbId);
-  };
-
-  const isInteractionDisabled = isLoading || !isMolstarReady;
-
-  return (
-    <div className="w-80 h-full bg-gray-50 border-r border-gray-200 p-3 overflow-y-auto">
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-base font-semibold text-gray-900 mb-1">Tubulin Viewer</h2>
-          <p className="text-xs text-gray-600">Load a structure by PDB ID or try our suggestion.</p>
-        </div>
-
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium text-gray-800">Load Custom Structure</h3>
-          <form onSubmit={handleCustomLoad} className="flex items-center space-x-2">
-            <input
-              type="text"
-              placeholder="e.g., 6O2T"
-              value={customPdbId}
-              onChange={(e) => setCustomPdbId(e.target.value)}
-              maxLength={4}
-              className="flex-grow w-full px-2 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
-              disabled={isInteractionDisabled}
-            />
-            <button
-              type="submit"
-              className="px-3 py-1.5 text-sm font-semibold text-white bg-blue-600 rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
-              disabled={isInteractionDisabled || customPdbId.trim().length !== 4}
-            >
-              Load
-            </button>
-          </form>
-        </div>
-
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium text-gray-800">Load from Backend</h3>
-          <p className="text-xs text-gray-500">Load structures with computed residue annotations.</p>
-          <button
-            onClick={() => onBackendStructureSelect('7sj7_with_metadata.cif')}
-            disabled={isInteractionDisabled}
-            className="w-full px-3 py-1.5 text-sm font-semibold text-white bg-purple-600 rounded-md shadow-sm hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            Load 7SJ7 with Metadata
-          </button>
-        </div>
-
-        {error && <div className="text-red-500 text-sm p-2 bg-red-50 rounded-md">{error}</div>}
-
-        {suggestedPdbId && (
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-medium text-gray-800">Suggested Structure</h3>
-              <button
-                onClick={handleRandomize}
-                disabled={isInteractionDisabled}
-                className="p-1.5 rounded-full text-gray-500 hover:bg-gray-200 hover:text-gray-800 disabled:opacity-50"
-                title="Get another suggestion"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="8 21 3 21 3 16"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
-              </button>
+                {/* Hover arrow indicator */}
+                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
+                    <div className="w-8 h-8 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
+                        <ChevronRight className="h-4 w-4 text-white" />
+                    </div>
+                </div>
             </div>
-            <button
-              onClick={() => handleSelect(suggestedPdbId)}
-              disabled={isInteractionDisabled}
-              className={`w-full text-left p-2 rounded-lg border transition-colors ${selectedStructure === suggestedPdbId ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-500' : 'bg-white border-gray-200 hover:bg-gray-100'} ${isInteractionDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              <span className="font-medium text-sm text-gray-900">{suggestedPdbId}</span>
-              <p className="text-xs text-gray-400">Randomly selected example</p>
-            </button>
-          </div>
-        )}
-        {isLoading && <div className="text-sm text-gray-500">Loading...</div>}
-      </div>
-    </div>
-  );
-}
+        </Link>
+    );
+};
 
-export default function TubulinViewerPage() {
-  const molstarRef = useRef<HTMLDivElement>(null);
-  const { isInitialized, service } = useMolstarService(molstarRef, 'main');
-  const dispatch = useAppDispatch();
-  const selectedStructure = useAppSelector(selectSelectedStructure);
-  useMolstarSync();
-
-  const [selectedGridSubunit, setSelectedGridSubunit] = useState<string | null>(null);
-  const [hoveredGridSubunit, setHoveredGridSubunit] = useState<string | null>(null);
-  const [hoveredSubunitData, setHoveredSubunitData] = useState<SubunitData | null>(null);
-
-  const handleStructureSelect = useCallback(async (pdbId: string) => {
-    if (!service?.controller) return;
-    dispatch(selectStructure(pdbId));
-    dispatch(setLoading(true));
-    dispatch(setError(null));
-    try {
-      const gqlData = await fetchRcsbGraphQlData(pdbId);
-      const classificationMap = createTubulinClassificationMap(gqlData);
-      await service.controller.loadStructure(pdbId, classificationMap);
-      await service.viewer.representations.stylized_lighting();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      dispatch(setError(errorMessage));
-    } finally {
-      dispatch(setLoading(false));
-    }
-  }, [service, dispatch]);
-
-  const handleBackendStructureSelect = useCallback(async (filename: string) => {
-    if (!service?.controller) return;
-    const pdbId = filename.split('_')[0].toUpperCase();
-    dispatch(selectStructure(pdbId));
-    dispatch(setLoading(true));
-    dispatch(setError(null));
-    try {
-      const dummyClassificationMap = { A: TubulinClass.Alpha, B: TubulinClass.Beta };
-      await service.controller.loadStructureFromBackend(filename, dummyClassificationMap);
-      await service.viewer.representations.stylized_lighting();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      dispatch(setError(errorMessage));
-    } finally {
-      dispatch(setLoading(false));
-    }
-  }, [service, dispatch]);
-
-  const handleSubunitHover = useCallback((subunit: SubunitData | null) => {
-    const controller = service?.controller;
-    if (!controller || !selectedStructure) return;
-    if (hoveredSubunitData) {
-      controller.highlightChain(selectedStructure, hoveredSubunitData.auth_asym_id, false);
-    }
-    if (subunit) {
-      controller.highlightChain(selectedStructure, subunit.auth_asym_id, true);
-      setHoveredGridSubunit(subunit.id);
-      setHoveredSubunitData(subunit);
-    } else {
-      setHoveredGridSubunit(null);
-      setHoveredSubunitData(null);
-    }
-  }, [service, selectedStructure, hoveredSubunitData]);
-
-  const handleSubunitSelect = useCallback((subunit: SubunitData) => {
-    setSelectedGridSubunit(subunit.id);
-    const controller = service?.controller;
-    if (controller && selectedStructure) {
-      controller.focusChain(selectedStructure, subunit.auth_asym_id);
-    }
-  }, [service, selectedStructure]);
-
-  return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-gray-100">
-      <div className="flex flex-1 overflow-hidden">
-        <SettingsPanel
-          isMolstarReady={isInitialized}
-          onStructureSelect={handleStructureSelect}
-          onBackendStructureSelect={handleBackendStructureSelect}
-        />
-        <div className="flex-1 h-full bg-white relative">
-          <MolstarNode ref={molstarRef} />
-          {!isInitialized && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-75 z-10">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                <p className="text-gray-600">Initializing Molstar...</p>
-              </div>
+// Section header component
+const SectionHeader = ({ title, children }: { title: string, children: React.ReactNode }) => {
+    return (
+        <div className="space-y-4">
+            <div className="text-center">
+                <h2 className="text-lg font-medium text-gray-900 mb-1">{title}</h2>
             </div>
-          )}
+            {children}
         </div>
-        {/* Both panels side by side */}
-        <div className="flex">
-          <EntitiesPanel
-            onSubunitHover={handleSubunitHover}
-            onSubunitSelect={handleSubunitSelect}
-            hoveredSubunitId={hoveredGridSubunit}
-            selectedSubunitId={selectedGridSubunit}
-          />
-          <ResearchPanel />
+    );
+};
+
+// Todo placeholder component
+const TodoSection = () => {
+    return (
+        <div className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center">
+            <div className="text-gray-400 space-y-3">
+                <div className="w-16 h-16 mx-auto bg-gray-100 rounded-lg flex items-center justify-center">
+                    <ChevronRight className="w-8 h-8" />
+                </div>
+                <h3 className="text-lg font-medium">Comparative Analyses</h3>
+                <p className="text-sm max-w-md mx-auto">
+                    Cross-structure comparisons, conformational analysis tools, and interactive comparison interfaces will be available here.
+                </p>
+                <div className="text-xs text-gray-400 font-mono bg-gray-50 px-3 py-1 rounded-full inline-block">
+                    TODO: Implementation pending
+                </div>
+            </div>
         </div>
-      </div>
-      <div className="flex-shrink-0 h-[250px] border-t bg-white shadow-inner">
-        <SequenceViewer />
-      </div>
-    </div>
-  );
+    );
+};
+
+// Simplified footer
+const PageFooter = () => {
+    return (
+        <footer className="w-full border-t mt-16 py-8 bg-gray-50/50">
+            <div className="max-w-4xl mx-auto px-6 text-center text-gray-500">
+                <p className="text-xs">
+                    Built with structural data from the Protein Data Bank and powered by modern web technologies.
+                </p>
+                <div className="mt-4 flex justify-center space-x-6 text-xs">
+                    <span>University of British Columbia</span>
+                    <span>•</span>
+                    <span>Mol* Project</span>
+                    <span>•</span>
+                    <span>RCSB PDB</span>
+                </div>
+            </div>
+        </footer>
+    );
+};
+
+export default function HomePage() {
+    return (
+        <div className="min-h-screen bg-white font-['IBM_Plex_Sans',_sans-serif]">
+            <main>
+                {/* Hero Section */}
+                <div className="relative pt-20 pb-16 flex items-center justify-center text-center bg-gray-50">
+                    <div className="relative z-10 px-6">
+                        <h1 className="text-3xl md:text-4xl font-mono font-light tracking-tight mb-3 text-gray-900">tubulin.xyz</h1>
+                        <p className="text-sm md:text-base text-gray-600 max-w-2xl mx-auto mb-6 font-light">
+                            An interactive interface for the atomic structure of the tubulin dimer and the microtubule lattice.
+                        </p>
+                        <form className="max-w-lg mx-auto" onSubmit={(e) => e.preventDefault()}>
+                            <div className="relative">
+                                <input
+                                    type="search"
+                                    placeholder="Search structures, proteins, or ligands..."
+                                    className="w-full p-3 pl-10 text-sm text-gray-900 bg-white rounded-full shadow-sm border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+                                />
+                                <div className="absolute top-0 left-0 h-full flex items-center pl-3">
+                                    <Search className="h-4 w-4 text-gray-400" />
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                {/* Main Content Container */}
+                <div className="max-w-4xl mx-auto px-6 py-8 space-y-12">
+
+                    {/* Structure Selection - Updated to use grid and match section width */}
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <ChoiceCard
+                                title="Curved Structures"
+                                description="Explore tubulin in its soluble, unpolymerized state."
+                                linkUrl="/structures?conformation=curved"
+                                pdbId="4O2B"
+                            />
+                            <ChoiceCard
+                                title="Straight Structures"
+                                description="Analyze tubulin conformation within microtubule lattices."
+                                linkUrl="/structures?conformation=straight"
+                                pdbId="5SYF"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Ligands Section */}
+                    <SectionHeader title="Popular Tubulin-Targeting Compounds">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {popularLigands.map((ligand, index) => (
+                                <LigandCard key={index} ligand={ligand} />
+                            ))}
+                        </div>
+                        <div className="text-center mt-6">
+                            <Link
+                                href="/ligands"
+                                className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 transition-colors"
+                            >
+                                View all ligands
+                                <ChevronRight className="w-4 h-4" />
+                            </Link>
+                        </div>
+                    </SectionHeader>
+
+                    {/* Comparative Analyses Section */}
+                    <SectionHeader title="Comparative Analyses">
+                        <TodoSection />
+                    </SectionHeader>
+
+                </div>
+            </main>
+
+            <PageFooter />
+        </div>
+    );
 }
