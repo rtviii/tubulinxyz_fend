@@ -37,7 +37,7 @@ declare global {
 
 export default function MSAViewerPage() {
   const dispatch = useAppDispatch();
-  
+
   const [areComponentsLoaded, setAreComponentsLoaded] = useState(false);
   const [alignmentData, setAlignmentData] = useState<
     { name: string; sequence: string }[]
@@ -50,7 +50,7 @@ export default function MSAViewerPage() {
   const [lastEventLog, setLastEventLog] = useState<string | null>(null);
 
   const msaRef = useRef<any>(null);
-  
+
   const molstarNodeRef = useRef<HTMLDivElement>(null);
   const molstarNodeRef_secondary = useRef<HTMLDivElement>(null);
 
@@ -111,10 +111,10 @@ export default function MSAViewerPage() {
 
       console.log("Loading default structure: 5CJO (main)");
       mainStructureLoadedRef.current = true;
-      
+
       dispatch(setLoading(true));
       dispatch(selectStructure("5CJO"));
-      
+
       try {
         await mstar_service_main.service.controller.loadStructure("5CJO", {});
         console.log("Successfully loaded 5CJO (main)");
@@ -154,7 +154,7 @@ export default function MSAViewerPage() {
 
       console.log("Loading default structure: 1JFF (aux)");
       auxStructureLoadedRef.current = true;
-      
+
       try {
         await mstar_service_aux.service.controller.loadStructure("1JFF", {});
         console.log("Successfully loaded 1JFF (aux)");
@@ -291,7 +291,7 @@ export default function MSAViewerPage() {
   }, [areComponentsLoaded, alignmentData, maxLength]);
 
   return (
-    <div className="w-full min-h-screen bg-gray-50 p-4">
+    <div className="w-full h-full bg-gray-50 p-4 flex flex-col">
       {/* Loading overlay */}
       {(isLoading || !areComponentsLoaded) && (
         <div className="fixed inset-0 bg-white z-50 flex items-center justify-center">
@@ -342,13 +342,15 @@ export default function MSAViewerPage() {
          }
       `}</style>
 
-      <h1 className="text-2xl font-bold mb-4">Tubulin MSA Viewer</h1>
+      {/* <h1 className="text-2xl font-bold mb-4">Tubulin MSA Viewer</h1> */}
 
-      <div className="flex gap-4">
+      <div className="flex gap-4 h-full">
         {/* Left Panel - MSA */}
-        <div className="flex-1 border rounded-lg p-4 bg-white">
+
+        <div className="flex-1 h-full border rounded-lg p-4 bg-white flex flex-col">
           <h2 className="text-lg font-semibold mb-2">Alignment</h2>
-          <div className="border rounded overflow-auto">
+
+          <div className="border rounded overflow-auto flex-1">
             {areComponentsLoaded && alignmentData.length > 0 && maxLength > 0 ? (
               <>
                 <nightingale-manager style={{ minWidth: "800px" }}>
@@ -419,7 +421,8 @@ export default function MSAViewerPage() {
         </div>
 
         {/* Right Panel - Structure Viewer (Resizable) */}
-        <div className="flex-1 border rounded-lg p-4 bg-white flex flex-col">
+
+        <div className="flex-1 h-full border rounded-lg p-4 bg-white flex flex-col">
           <h2 className="text-lg font-semibold mb-2">Structure Viewer</h2>
 
           <ResizablePanelGroup
