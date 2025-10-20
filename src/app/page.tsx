@@ -1,252 +1,361 @@
-'use client';
-import * as React from 'react';
-import { useState } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { Search, ChevronRight } from 'lucide-react';
+'use client'
+import React, { useState } from 'react';
+import { Search, ChevronRight, Filter, X } from 'lucide-react';
 
-// Ligand data for the new section
-const popularLigands = [
+const HomePage = () => {
+  const [selectedSupergroup, setSelectedSupergroup] = useState(null);
+  const [filters, setFilters] = useState({
+    species: 'all',
+    isotype: [],
+    hasLigand: 'all',
+    hasPTM: 'all'
+  });
+  const [showFilters, setShowFilters] = useState(false);
+
+  const supergroups = [
     {
-        name: "Taxol (Paclitaxel)",
-        chemicalId: "TA1",
-        type: "Stabilizer",
-        description: "Microtubule stabilizing agent used in cancer therapy",
-        mechanism: "Promotes polymerization",
-        color: "bg-emerald-50 border-emerald-200 text-emerald-800"
+      id: 'dimers',
+      title: 'Single Dimers',
+      count: '~4,028',
+      description: 'Explore tubulin in its soluble, unpolymerized state. These structures reveal drug binding sites, nucleotide interactions, and the curved conformation of free αβ-dimers.',
+      color: 'from-blue-50 to-blue-100 border-blue-200'
     },
     {
-        name: "Colchicine",
-        chemicalId: "COL",
-        type: "Inhibitor",
-        description: "Classical tubulin polymerization inhibitor",
-        mechanism: "Prevents assembly",
-        color: "bg-rose-50 border-rose-200 text-rose-800"
+      id: 'oligomers',
+      title: 'Oligomers',
+      count: '~850',
+      description: 'Intermediate assembly states between free dimers and microtubules. These structures capture the dynamics of tubulin polymerization and depolymerization.',
+      color: 'from-purple-50 to-purple-100 border-purple-200'
     },
     {
-        name: "Vinblastine",
-        chemicalId: "VLB",
-        type: "Inhibitor",
-        description: "Vinca alkaloid that disrupts microtubules",
-        mechanism: "Depolymerizes MT",
-        color: "bg-rose-50 border-rose-200 text-rose-800"
-    },
-    {
-        name: "Docetaxel",
-        chemicalId: "TXL",
-        type: "Stabilizer",
-        description: "Semi-synthetic taxane derivative",
-        mechanism: "Stabilizes microtubules",
-        color: "bg-emerald-50 border-emerald-200 text-emerald-800"
+      id: 'lattices',
+      title: 'Microtubule Lattices',
+      count: '~3,517',
+      description: 'Analyze tubulin within intact microtubule walls. These structures show the straight, polymerized conformation and lateral interactions between protofilaments.',
+      color: 'from-emerald-50 to-emerald-100 border-emerald-200'
     }
-];
+  ];
 
-// Ligand card component
-const LigandCard = ({ ligand }: { ligand: typeof popularLigands[0] }) => {
-    return (
-        <div className={`p-5 rounded-lg border transition-all duration-200 hover:shadow-md ${ligand.color} min-h-[220px]`}>
-            <div className="flex items-start justify-between mb-4">
-                <h3 className="font-medium text-sm">{ligand.name}</h3>
-                <span className="text-xs px-2 py-1 rounded-full bg-white/70 font-mono">
-                    {ligand.type}
-                </span>
-            </div>
+  // Mock structure data
+  const mockStructures = Array.from({ length: 20 }, (_, i) => ({
+    pdbId: `${i + 1}ABC`,
+    title: `Tubulin structure ${i + 1}`,
+    isotype: ['TUBA1A', 'TUBB3'][i % 2],
+    species: 'Human',
+    resolution: (2.1 + Math.random()).toFixed(1),
+    hasLigand: i % 3 === 0,
+    ligand: i % 3 === 0 ? 'Taxol' : null
+  }));
 
-            <div className="flex flex-col items-center mb-4">
-                <div className="w-24 h-24 bg-white border border-gray-200 rounded-lg overflow-hidden mb-3 flex items-center justify-center">
-                    <img
-                        src={`https://cdn.rcsb.org/images/ccd/labeled/${ligand.chemicalId.toUpperCase()[0]
-                            }/${ligand.chemicalId.toUpperCase()}.svg`}
-                        alt={`${ligand.chemicalId} chemical structure`}
-                        className="w-full h-full object-contain p-1"
-                    />
-                </div>
-            </div>
+  const hasActiveFilters = selectedSupergroup || 
+    filters.species !== 'all' || 
+    filters.isotype.length > 0 ||
+    filters.hasLigand !== 'all' ||
+    filters.hasPTM !== 'all';
 
-            <div className="space-y-2 text-center">
-                <p className="text-xs leading-relaxed">{ligand.description}</p>
-                <p className="text-xs opacity-75 italic font-medium">{ligand.mechanism}</p>
-            </div>
+  const displayCount = hasActiveFilters ? 12 : 20;
+
+  const toggleIsotype = (isotype) => {
+    setFilters(prev => ({
+      ...prev,
+      isotype: prev.isotype.includes(isotype)
+        ? prev.isotype.filter(i => i !== isotype)
+        : [...prev.isotype, isotype]
+    }));
+  };
+
+  const clearFilters = () => {
+    setSelectedSupergroup(null);
+    setFilters({
+      species: 'all',
+      isotype: [],
+      hasLigand: 'all',
+      hasPTM: 'all'
+    });
+  };
+
+  return (
+    <div className="min-h-screen bg-white">
+      {/* Hero Section */}
+      <div className="relative pt-16 pb-12 bg-gradient-to-b from-gray-50 to-white border-b">
+        <div className="max-w-4xl mx-auto px-6 text-center">
+          <h1 className="text-4xl font-light tracking-tight mb-3 text-gray-900 font-mono">
+            tubulin.xyz
+          </h1>
+          <p className="text-gray-600 max-w-2xl mx-auto mb-8 font-light">
+            An interactive interface for the atomic structure of the tubulin dimer and the microtubule lattice.
+          </p>
+          <div className="max-w-lg mx-auto relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="search"
+              placeholder="Search structures, proteins, or ligands..."
+              className="w-full pl-11 pr-4 py-3 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/50 focus:border-transparent"
+            />
+          </div>
         </div>
-    );
-};
+      </div>
 
-// Simple choice card with better button styling
-const ChoiceCard = ({
-    title,
-    description,
-    pdbId,
-    linkUrl
-}: {
-    title: string,
-    description: string,
-    pdbId: string,
-    linkUrl: string
-}) => {
-    return (
-        <Link
-            href={linkUrl}
-            className="group relative block rounded-xl overflow-hidden shadow-sm hover:shadow-md transform transition-all duration-300 hover:scale-[1.01] border border-gray-200 cursor-pointer bg-white h-64"
-        >
-            <div className="relative w-full h-full bg-white">
-                <img
-                    src={`/thumbnails/${pdbId}_movie.gif`}
-                    alt={title}
-                    className="w-full h-full object-contain transition-opacity duration-300"
-                />
+      <div className="max-w-6xl mx-auto px-6 py-12">
+        {/* Supergroups */}
+        {!selectedSupergroup && (
+          <div className="mb-16">
+            <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-6 text-center">
+              Browse by Assembly State
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {supergroups.map(group => (
+                <button
+                  key={group.id}
+                  onClick={() => {
+                    setSelectedSupergroup(group.id);
+                    setShowFilters(true);
+                  }}
+                  className={`group relative p-6 rounded-lg border-2 bg-gradient-to-br ${group.color} hover:shadow-lg transition-all text-left`}
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <h3 className="text-lg font-medium text-gray-900">{group.title}</h3>
+                    <span className="text-xs font-mono px-2 py-1 bg-white/70 rounded">
+                      {group.count}
+                    </span>
+                  </div>
+                  
+                  {/* Placeholder visualization */}
+                  <div className="w-full h-32 bg-white/50 rounded-lg mb-4 flex items-center justify-center border border-gray-200/50">
+                    <div className="text-6xl opacity-20">🧬</div>
+                  </div>
 
-                {/* Content overlay - only at the bottom */}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6">
+                  <p className="text-sm text-gray-700 leading-relaxed mb-4">
+                    {group.description}
+                  </p>
+
+                  <div className="flex items-center text-sm text-gray-600 group-hover:text-gray-900">
+                    Explore structures
+                    <ChevronRight className="ml-1 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Active Filters Bar */}
+        {hasActiveFilters && (
+          <div className="mb-6 flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-medium text-gray-600">Active filters:</span>
+            {selectedSupergroup && (
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                {supergroups.find(g => g.id === selectedSupergroup)?.title}
+                <button onClick={() => setSelectedSupergroup(null)} className="ml-1 hover:bg-blue-200 rounded-full p-0.5">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+            {filters.species !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm">
+                {filters.species}
+                <button onClick={() => setFilters(prev => ({ ...prev, species: 'all' }))} className="ml-1 hover:bg-purple-200 rounded-full p-0.5">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+            {filters.isotype.map(iso => (
+              <span key={iso} className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                {iso}
+                <button onClick={() => toggleIsotype(iso)} className="ml-1 hover:bg-green-200 rounded-full p-0.5">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            <button 
+              onClick={clearFilters}
+              className="ml-auto text-sm text-gray-500 hover:text-gray-700 underline"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+
+        {/* Main Content Area */}
+        <div className="flex gap-6">
+          {/* Filters Sidebar */}
+          {(showFilters || hasActiveFilters) && (
+            <div className="w-64 flex-shrink-0">
+              <div className="sticky top-6 space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                    <Filter className="h-4 w-4" />
+                    Refine Results
+                  </h3>
+                  <button 
+                    onClick={() => setShowFilters(false)}
+                    className="lg:hidden text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Species Filter */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-gray-700 uppercase tracking-wide">
+                    Species
+                  </label>
+                  <select 
+                    value={filters.species}
+                    onChange={(e) => setFilters(prev => ({ ...prev, species: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+                  >
+                    <option value="all">All species</option>
+                    <option value="human">Human</option>
+                    <option value="bovine">Bovine</option>
+                    <option value="yeast">Yeast</option>
+                    <option value="pig">Pig</option>
+                  </select>
+                </div>
+
+                {/* Isotype Filter */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-gray-700 uppercase tracking-wide">
+                    Isotype
+                  </label>
+                  <div className="space-y-1">
+                    {['TUBA1A', 'TUBA1B', 'TUBB3', 'TUBB4B'].map(isotype => (
+                      <label key={isotype} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={filters.isotype.includes(isotype)}
+                          onChange={() => toggleIsotype(isotype)}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="font-mono text-xs">{isotype}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Ligand Filter */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-gray-700 uppercase tracking-wide">
+                    Ligand Presence
+                  </label>
+                  <select 
+                    value={filters.hasLigand}
+                    onChange={(e) => setFilters(prev => ({ ...prev, hasLigand: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+                  >
+                    <option value="all">All structures</option>
+                    <option value="yes">With ligand</option>
+                    <option value="no">Without ligand</option>
+                  </select>
+                </div>
+
+                {/* PTM Filter */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-gray-700 uppercase tracking-wide">
+                    Post-translational Modifications
+                  </label>
+                  <select 
+                    value={filters.hasPTM}
+                    onChange={(e) => setFilters(prev => ({ ...prev, hasPTM: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+                  >
+                    <option value="all">All structures</option>
+                    <option value="yes">With PTMs</option>
+                    <option value="no">Without PTMs</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Structure Grid */}
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-sm font-medium text-gray-700">
+                {hasActiveFilters ? 'Filtered Structures' : 'Recent Structures'}
+                <span className="ml-2 text-gray-400">({displayCount} results)</span>
+              </h2>
+              {!showFilters && !hasActiveFilters && (
+                <button
+                  onClick={() => setShowFilters(true)}
+                  className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1"
+                >
+                  <Filter className="h-4 w-4" />
+                  Show filters
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {mockStructures.slice(0, displayCount).map(structure => (
+                <div
+                  key={structure.pdbId}
+                  className="group border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg hover:border-gray-300 transition-all cursor-pointer bg-white"
+                >
+                  {/* Structure visualization placeholder */}
+                  <div className="aspect-square bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center relative overflow-hidden">
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(0,0,0,0.03)_1px,_transparent_1px)] bg-[length:20px_20px]"></div>
+                    <div className="text-6xl opacity-30">🧬</div>
+                    {structure.hasLigand && (
+                      <div className="absolute top-2 right-2 px-2 py-1 bg-emerald-500 text-white text-xs rounded">
+                        {structure.ligand}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Structure info */}
+                  <div className="p-3">
                     <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                                <h3 className="text-xl font-medium text-white">{title}</h3>
-                                <span className="text-xs font-mono text-gray-300 bg-black/40 px-2 py-1 rounded">
-                                    {pdbId}
-                                </span>
-                            </div>
-                            <p className="text-gray-200 text-sm leading-relaxed">{description}</p>
-                        </div>
+                      <span className="font-mono text-sm font-medium text-gray-900">
+                        {structure.pdbId}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {structure.resolution} Å
+                      </span>
                     </div>
-                </div>
-
-                {/* Hover arrow indicator */}
-                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
-                    <div className="w-8 h-8 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
-                        <ChevronRight className="h-4 w-4 text-white" />
+                    <p className="text-xs text-gray-600 mb-2 line-clamp-2">
+                      {structure.title}
+                    </p>
+                    <div className="flex gap-1 flex-wrap">
+                      <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded">
+                        {structure.isotype}
+                      </span>
+                      <span className="px-2 py-0.5 bg-gray-50 text-gray-600 text-xs rounded">
+                        {structure.species}
+                      </span>
                     </div>
+                  </div>
                 </div>
+              ))}
             </div>
-        </Link>
-    );
-};
 
-// Section header component
-const SectionHeader = ({ title, children }: { title: string, children: React.ReactNode }) => {
-    return (
-        <div className="space-y-4">
-            <div className="text-center">
-                <h2 className="text-lg font-medium text-gray-900 mb-1">{title}</h2>
-            </div>
-            {children}
+            {/* Load more */}
+            {hasActiveFilters && displayCount < mockStructures.length && (
+              <div className="mt-8 text-center">
+                <button className="px-6 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 transition-colors">
+                  Load more structures
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-    );
-};
+      </div>
 
-// Todo placeholder component
-const TodoSection = () => {
-    return (
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center">
-            <div className="text-gray-400 space-y-3">
-                <div className="w-16 h-16 mx-auto bg-gray-100 rounded-lg flex items-center justify-center">
-                    <ChevronRight className="w-8 h-8" />
-                </div>
-                <h3 className="text-lg font-medium">Comparative Analyses</h3>
-                <p className="text-sm max-w-md mx-auto">
-                    Cross-structure comparisons, conformational analysis tools, and interactive comparison interfaces will be available here.
-                </p>
-                <div className="text-xs text-gray-400 font-mono bg-gray-50 px-3 py-1 rounded-full inline-block">
-                    TODO: Implementation pending
-                </div>
-            </div>
+      {/* Footer */}
+      <footer className="border-t mt-16 py-8 bg-gray-50/50">
+        <div className="max-w-6xl mx-auto px-6 text-center text-gray-500 text-xs space-y-2">
+          <p>Built with structural data from the Protein Data Bank</p>
+          <div className="flex justify-center gap-4">
+            <span>Institut Curie</span>
+            <span>•</span>
+            <span>Paul Scherrer Institute</span>
+            <span>•</span>
+            <span>RCSB PDB</span>
+          </div>
         </div>
-    );
+      </footer>
+    </div>
+  );
 };
 
-// Simplified footer
-const PageFooter = () => {
-    return (
-        <footer className="w-full border-t mt-16 py-8 bg-gray-50/50">
-            <div className="max-w-4xl mx-auto px-6 text-center text-gray-500">
-                <p className="text-xs">
-                    Built with structural data from the Protein Data Bank and powered by modern web technologies.
-                </p>
-                <div className="mt-4 flex justify-center space-x-6 text-xs">
-                    <span>University of British Columbia</span>
-                    <span>•</span>
-                    <span>Mol* Project</span>
-                    <span>•</span>
-                    <span>RCSB PDB</span>
-                </div>
-            </div>
-        </footer>
-    );
-};
-
-export default function HomePage() {
-    return (
-        <div className="min-h-screen bg-white font-['IBM_Plex_Sans',_sans-serif]">
-            <main>
-                {/* Hero Section */}
-                <div className="relative pt-20 pb-16 flex items-center justify-center text-center bg-gray-50">
-                    <div className="relative z-10 px-6">
-                        <h1 className="text-3xl md:text-4xl font-mono font-light tracking-tight mb-3 text-gray-900">tubulin.xyz</h1>
-                        <p className="text-sm md:text-base text-gray-600 max-w-2xl mx-auto mb-6 font-light">
-                            An interactive interface for the atomic structure of the tubulin dimer and the microtubule lattice.
-                        </p>
-                        <form className="max-w-lg mx-auto" onSubmit={(e) => e.preventDefault()}>
-                            <div className="relative">
-                                <input
-                                    type="search"
-                                    placeholder="Search structures, proteins, or ligands..."
-                                    className="w-full p-3 pl-10 text-sm text-gray-900 bg-white rounded-full shadow-sm border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400/50"
-                                />
-                                <div className="absolute top-0 left-0 h-full flex items-center pl-3">
-                                    <Search className="h-4 w-4 text-gray-400" />
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                {/* Main Content Container */}
-                <div className="max-w-4xl mx-auto px-6 py-8 space-y-12">
-
-                    {/* Structure Selection - Updated to use grid and match section width */}
-                    <div className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <ChoiceCard
-                                title="Curved Structures"
-                                description="Explore tubulin in its soluble, unpolymerized state."
-                                linkUrl="/structures?conformation=curved"
-                                pdbId="4O2B"
-                            />
-                            <ChoiceCard
-                                title="Straight Structures"
-                                description="Analyze tubulin conformation within microtubule lattices."
-                                linkUrl="/structures?conformation=straight"
-                                pdbId="5SYF"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Ligands Section */}
-                    <SectionHeader title="Popular Tubulin-Targeting Compounds">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {popularLigands.map((ligand, index) => (
-                                <LigandCard key={index} ligand={ligand} />
-                            ))}
-                        </div>
-                        <div className="text-center mt-6">
-                            <Link
-                                href="/ligands"
-                                className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 transition-colors"
-                            >
-                                View all ligands
-                                <ChevronRight className="w-4 h-4" />
-                            </Link>
-                        </div>
-                    </SectionHeader>
-
-                    {/* Comparative Analyses Section */}
-                    <SectionHeader title="Comparative Analyses">
-                        <TodoSection />
-                    </SectionHeader>
-
-                </div>
-            </main>
-
-            <PageFooter />
-        </div>
-    );
-}
+export default HomePage;

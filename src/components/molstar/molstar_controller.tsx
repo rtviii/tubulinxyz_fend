@@ -132,13 +132,11 @@ export class MolstarController {
         if (!this.viewer.ctx) return;
         const plugin = this.viewer.ctx;
 
-        // If hovering ends or no interaction is provided, clear all highlights
         if (!shouldHighlight || !interaction) {
             plugin.managers.interactivity.lociHighlights.clearHighlights();
             return;
         }
 
-        // Combine the loci of both partners into a single loci to highlight them together
         const lociA = interaction.partnerA.loci;
         const lociB = interaction.partnerB.loci;
         const combinedLoci = Loci.union(lociA, lociB);
@@ -268,7 +266,6 @@ export class MolstarController {
         return interactionData;
     }
 
-    // ✨ NEW METHOD: A simple way to clear the focus visualization.
     async clearLigandFocus() {
         if (!this.viewer.ctx) return;
         this.viewer.ctx.managers.structure.focus.clear();
@@ -337,19 +334,6 @@ export class MolstarController {
         return interactionData;
     }
 
-    /**
-     * Focuses the camera on the bounding sphere of two interaction partners.
-     * @param lociA Loci for the first interaction partner.
-     * @param lociB Loci for the second interaction partner.
-     */
-    // async focusOnInteraction(lociA: locii, lociB: locii) {
-    //     if (!this.viewer.ctx) return;
-
-    //     // ** FIX: ** Create a bundle of the two loci to focus on them together.
-    //     // The camera manager will compute the bounding sphere for the bundle.
-    //     const bundle: locii.Bundle<2> = { loci: [lociA, lociB] };
-    //     this.viewer.ctx.managers.camera.focusLoci(Loci.union(lociA, lociB));
-    // }
     private getCurrentState(): StateSnapshot {
         const state = this.getState();
         return {
@@ -880,7 +864,6 @@ export class MolstarController {
             return false;
         }
     }
-
 
 
     getChainSequence(pdbId: string, chainId: string): string | null {

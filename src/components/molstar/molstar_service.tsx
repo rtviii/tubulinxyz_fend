@@ -42,14 +42,10 @@ export const useMolstarService = (
     containerRef: React.RefObject<HTMLDivElement>,
     instanceId: MolstarInstanceId = 'main'
 ) => {
-
-    const context = useContext(MolstarContext);
-    const [isInitialized, setIsInitialized] = useState(false);
-    const [service, setService] = useState<MolstarService | null>(null);
-    const dispatch = useAppDispatch();
-    const store = useStore<AppStore>();
-    const serviceRef = useRef<MolstarService | null>(null);
-
+    const context = useContext(MolstarContext);
+    const [isInitialized, setIsInitialized] = useState(false);
+    const dispatch = useAppDispatch();
+    const store = useStore<AppStore>();
 
     const getState = useCallback((): RootState => {
         return store.getState();
@@ -57,10 +53,10 @@ export const useMolstarService = (
 
     useEffect(() => {
         let didUnmount = false;
+        let serviceInstance: MolstarService | null = null;
 
         const initMolstar = async () => {
-            // Ensure container is mounted and we haven't initialized yet
-            if (!containerRef.current || serviceRef.current || !context) {
+            if (!containerRef.current || !context || didUnmount) {
                 return;
             }
 
@@ -70,25 +66,20 @@ export const useMolstarService = (
                 const viewer = new MolstarViewer();
                 await viewer.init(containerRef.current);
 
-                // Check if component was unmounted during async init
                 if (didUnmount) {
                     viewer.dispose();
                     return;
                 }
 
                 const controller = new MolstarController(viewer, dispatch, getState);
-                const serviceInstance = { viewer, controller, instanceId };
+                serviceInstance = { viewer, controller, instanceId };
 
-
-                serviceRef.current = serviceInstance;
-                context.registerService(instanceId, serviceInstance);
-                setService(serviceInstance);
-                setIsInitialized(true);
-
+                context.registerService(instanceId, serviceInstance);
+                setIsInitialized(true);
+                console.log(`Successfully initialized Molstar instance: ${instanceId}`);
 
             } catch (error) {
-
-                console.error(`Failed to initialize Molstar instance ${instanceId}:`, error);
+                console.error(`Failed to initialize Molstar instance ${instanceId}:`, error);
             }
         };
 
@@ -96,20 +87,14 @@ export const useMolstarService = (
 
         return () => {
             didUnmount = true;
-            if (context && serviceRef.current) {
+            if (context && serviceInstance) {
                 console.log(`Cleaning up Molstar instance: ${instanceId}`);
                 context.unregisterService(instanceId);
-                serviceRef.current = null;
+                serviceInstance = null;
             }
-            if (containerRef.current) {
-                while (containerRef.current.firstChild) {
-                    containerRef.current.removeChild(containerRef.current.firstChild);
-                }
-            }
+            setIsInitialized(false);
         };
-
-    }, [containerRef, instanceId, context, dispatch, getState]);
-
+    }, [containerRef, instanceId, context, dispatch, getState]);
 
     return {
         service: context?.getService(instanceId) ?? null,

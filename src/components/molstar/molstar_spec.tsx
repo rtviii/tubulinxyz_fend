@@ -149,3 +149,5 @@ export const MolstarNode = React.forwardRef<HTMLDivElement>((props, ref) => {
   );
 });
 MolstarNode.displayName = 'MolstarNode';
+
+export const MolstarNode_secondary = forwardRef<HTMLDivElement, {}>( function MolstarNode(_, ref) { return <div ref={ref} id='molstar-wrapper-secondary'/> })
