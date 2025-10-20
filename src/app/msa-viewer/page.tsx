@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useRef, useState, useCallback } from "react";
+
+import { useEffect, useRef, useState } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -35,6 +36,8 @@ declare global {
 }
 
 export default function MSAViewerPage() {
+  const dispatch = useAppDispatch();
+  
   const [areComponentsLoaded, setAreComponentsLoaded] = useState(false);
   const [alignmentData, setAlignmentData] = useState<
     { name: string; sequence: string }[]
@@ -47,57 +50,124 @@ export default function MSAViewerPage() {
   const [lastEventLog, setLastEventLog] = useState<string | null>(null);
 
   const msaRef = useRef<any>(null);
-  const molstarRef = useRef<HTMLDivElement>(null);
-  const molstarRef_secondary = useRef<HTMLDivElement>(null);
+  
+  const molstarNodeRef = useRef<HTMLDivElement>(null);
+  const molstarNodeRef_secondary = useRef<HTMLDivElement>(null);
 
-  // --- ADD THESE REFS ---
-  // These "gates" will prevent Strict Mode's double-mount from re-running the load
-  const mainLoadedRef = useRef(false);
-  const auxLoadedRef = useRef(false);
+  const mstar_service_main = useMolstarService(molstarNodeRef, 'main');
+  const mstar_service_aux = useMolstarService(molstarNodeRef_secondary, 'auxiliary');
 
-  const { isInitialized: isInitialized_main, service: service_main } =
-    useMolstarService(molstarRef, "main");
-  const { isInitialized: isInitialized_aux, service: service_aux } =
-    useMolstarService(molstarRef_secondary, "auxiliary");
-
-  const dispatch = useAppDispatch();
   const selectedStructure = useAppSelector(selectSelectedStructure);
   const isLoadingStructure = useAppSelector(selectIsLoading);
   const errorStructure = useAppSelector(selectError);
 
-  // Simplified default structure loading
+  // CRITICAL: Render MolstarNodes immediately (hidden during loading)
+  // This ensures refs are available for the service hook
+  const showContent = !isLoading && areComponentsLoaded && !error;
+
+  // DEBUG: Check ref and service status
   useEffect(() => {
-    const loadDefaultStructures = async () => {
-      // Load main structure only after everything is ready
-      if (service_main && isInitialized_main && !mainLoadedRef.current) {
-        mainLoadedRef.current = true;
-        console.log("Loading default structure: 5CJO (main)");
-        try {
-          await service_main.controller.loadStructure("5CJO", {});
-          console.log("Successfully loaded 5CJO (main)");
-        } catch (e) {
-          console.error("Error loading 5CJO (main):", e);
-        }
+    console.log('🔍 DEBUG - Ref status:', {
+      main_ref_current: !!molstarNodeRef.current,
+      aux_ref_current: !!molstarNodeRef_secondary.current,
+      main_ref_element: molstarNodeRef.current?.tagName,
+      aux_ref_element: molstarNodeRef_secondary.current?.tagName,
+    });
+  }, []);
+
+  useEffect(() => {
+    console.log('🔍 DEBUG - Service states:', {
+      main_initialized: mstar_service_main.isInitialized,
+      main_has_service: !!mstar_service_main.service,
+      main_has_ctx: !!mstar_service_main.service?.viewer?.ctx,
+      aux_initialized: mstar_service_aux.isInitialized,
+      aux_has_service: !!mstar_service_aux.service,
+      aux_has_ctx: !!mstar_service_aux.service?.viewer?.ctx,
+    });
+  }, [mstar_service_main, mstar_service_aux]);
+
+  // CRITICAL FIX: Use refs to track if structures have been loaded
+  const mainStructureLoadedRef = useRef(false);
+  const auxStructureLoadedRef = useRef(false);
+
+  // FIXED: Separate effects for each service with proper guards
+  useEffect(() => {
+    const loadMainStructure = async () => {
+      // Guard: Only load once
+      if (mainStructureLoadedRef.current) {
+        return;
       }
 
-      // Load aux structure
-      if (service_aux && isInitialized_aux && !auxLoadedRef.current) {
-        auxLoadedRef.current = true;
-        console.log("Loading default structure: 1JFF (aux)");
-        try {
-          await service_aux.controller.loadStructure("1JFF", {});
-          console.log("Successfully loaded 1JFF (aux)");
-        } catch (e) {
-          console.error("Error loading 1JFF (aux):", e);
-        }
+      // Guard: Ensure service is truly ready
+      if (!mstar_service_main.service?.viewer?.ctx) {
+        console.log("Main viewer not ready yet, skipping load");
+        return;
+      }
+
+      if (!mstar_service_main.isInitialized) {
+        console.log("Main service not initialized yet");
+        return;
+      }
+
+      console.log("Loading default structure: 5CJO (main)");
+      mainStructureLoadedRef.current = true;
+      
+      dispatch(setLoading(true));
+      dispatch(selectStructure("5CJO"));
+      
+      try {
+        await mstar_service_main.service.controller.loadStructure("5CJO", {});
+        console.log("Successfully loaded 5CJO (main)");
+      } catch (e) {
+        console.error("Error loading 5CJO (main):", e);
+        mainStructureLoadedRef.current = false; // Allow retry on error
+        dispatch(
+          setError(
+            e instanceof Error ? e.message : "Failed to load main structure"
+          )
+        );
+      } finally {
+        dispatch(setLoading(false));
       }
     };
 
-    // Add a small delay to ensure DOM is ready
-    const timer = setTimeout(loadDefaultStructures, 100);
-    return () => clearTimeout(timer);
-  }, [service_main, isInitialized_main, service_aux, isInitialized_aux]);;
+    loadMainStructure();
+  }, [mstar_service_main.isInitialized, dispatch]);
 
+  useEffect(() => {
+    const loadAuxStructure = async () => {
+      // Guard: Only load once
+      if (auxStructureLoadedRef.current) {
+        return;
+      }
+
+      // Guard: Ensure service is truly ready
+      if (!mstar_service_aux.service?.viewer?.ctx) {
+        console.log("Aux viewer not ready yet, skipping load");
+        return;
+      }
+
+      if (!mstar_service_aux.isInitialized) {
+        console.log("Aux service not initialized yet");
+        return;
+      }
+
+      console.log("Loading default structure: 1JFF (aux)");
+      auxStructureLoadedRef.current = true;
+      
+      try {
+        await mstar_service_aux.service.controller.loadStructure("1JFF", {});
+        console.log("Successfully loaded 1JFF (aux)");
+      } catch (e) {
+        console.error("Error loading 1JFF (aux):", e);
+        auxStructureLoadedRef.current = false; // Allow retry on error
+      }
+    };
+
+    loadAuxStructure();
+  }, [mstar_service_aux.isInitialized, dispatch]);
+
+  // Nightingale components loading
   useEffect(() => {
     const loadNightingaleComponents = async () => {
       try {
@@ -119,6 +189,7 @@ export default function MSAViewerPage() {
     loadNightingaleComponents();
   }, []);
 
+  // Fetch alignment data
   useEffect(() => {
     const fetchAlignmentData = async () => {
       try {
@@ -148,6 +219,7 @@ export default function MSAViewerPage() {
     fetchAlignmentData();
   }, []);
 
+  // MSA event handlers
   useEffect(() => {
     const msaComponent = msaRef.current;
 
@@ -218,33 +290,34 @@ export default function MSAViewerPage() {
     }
   }, [areComponentsLoaded, alignmentData, maxLength]);
 
-  if (isLoading || !areComponentsLoaded) {
-    return (
-      <div className="p-8">
-        <h1 className="text-2xl font-bold mb-4">Loading...</h1>
-        {!areComponentsLoaded && <p>Loading Nightingale Components...</p>}
-        {isLoading && <p>Fetching alignment data from the server...</p>}
-        <p>
-          If this takes more than a few seconds, please check the browser
-          console for errors.
-        </p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="p-8 bg-red-50 border border-red-200 rounded-lg">
-        <h1 className="text-2xl font-bold text-red-700 mb-4">
-          An Error Occurred
-        </h1>
-        <p className="text-red-600">{error}</p>
-      </div>
-    );
-  }
-
   return (
     <div className="w-full min-h-screen bg-gray-50 p-4">
+      {/* Loading overlay */}
+      {(isLoading || !areComponentsLoaded) && (
+        <div className="fixed inset-0 bg-white z-50 flex items-center justify-center">
+          <div className="p-8">
+            <h1 className="text-2xl font-bold mb-4">Loading...</h1>
+            {!areComponentsLoaded && <p>Loading Nightingale Components...</p>}
+            {isLoading && <p>Fetching alignment data from the server...</p>}
+            <p>
+              If this takes more than a few seconds, please check the browser
+              console for errors.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Error overlay */}
+      {error && (
+        <div className="fixed inset-0 bg-white z-50 flex items-center justify-center">
+          <div className="p-8 bg-red-50 border border-red-200 rounded-lg max-w-2xl">
+            <h1 className="text-2xl font-bold text-red-700 mb-4">
+              An Error Occurred
+            </h1>
+            <p className="text-red-600">{error}</p>
+          </div>
+        </div>
+      )}
       <style>{`
          nightingale-msa .biowc-msa-label {
              font-size: 0.8rem;  
@@ -276,63 +349,72 @@ export default function MSAViewerPage() {
         <div className="flex-1 border rounded-lg p-4 bg-white">
           <h2 className="text-lg font-semibold mb-2">Alignment</h2>
           <div className="border rounded overflow-auto">
-            <nightingale-manager style={{ minWidth: "800px" }}>
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  width: "100%",
-                }}
-              >
-                <div
-                  style={{
-                    lineHeight: 0,
-                    paddingLeft: "100px",
-                    marginBottom: "10px",
-                  }}
-                >
-                  <nightingale-navigation
-                    height="50"
-                    length={maxLength}
-                    display-start="1"
-                    display-end={maxLength}
-                    highlight-color="#EB3BFF22"
-                  />
+            {areComponentsLoaded && alignmentData.length > 0 && maxLength > 0 ? (
+              <>
+                <nightingale-manager style={{ minWidth: "800px" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      width: "100%",
+                    }}
+                  >
+                    <div
+                      style={{
+                        lineHeight: 0,
+                        paddingLeft: "100px",
+                        marginBottom: "10px",
+                      }}
+                    >
+                      <nightingale-navigation
+                        height="50"
+                        length={maxLength}
+                        display-start="1"
+                        display-end={maxLength}
+                        highlight-color="#EB3BFF22"
+                      />
+                    </div>
+
+                    <nightingale-msa
+                      ref={msaRef}
+                      height="300"
+                      length={maxLength.toString()}
+                      display-start="1"
+                      display-end={maxLength.toString()}
+                      color-scheme="clustal2"
+                      label-width="100"
+                      highlight-event="onmouseover"
+                      highlight-color="#EB3BFF22"
+                      overlay-conservation={false}
+                    />
+                  </div>
+                </nightingale-manager>
+
+                <div className="mt-4 p-4 border-t text-left">
+                  <div className="mb-2">
+                    <span className="text-sm font-semibold text-gray-600">
+                      Active Sequence:{" "}
+                    </span>
+                    <span className="font-mono text-blue-600 font-bold">
+                      {activeLabel || "None"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-sm font-semibold text-gray-600">
+                      Last Event Log:
+                    </span>
+                    <pre className="text-sm text-gray-800 bg-gray-100 p-2 rounded mt-1 overflow-x-auto">
+                      {lastEventLog || "No events yet. Click or hover on the MSA."}
+                    </pre>
+                  </div>
                 </div>
-
-                <nightingale-msa
-                  ref={msaRef}
-                  height="300"
-                  length={maxLength.toString()}
-                  display-start="1"
-                  display-end={maxLength.toString()}
-                  color-scheme="clustal2"
-                  label-width="100"
-                  highlight-event="onmouseover"
-                  highlight-color="#EB3BFF22"
-                  overlay-conservation={false}
-                />
+              </>
+            ) : (
+              <div className="p-8 text-center text-gray-500">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                <p>Loading alignment visualization...</p>
               </div>
-            </nightingale-manager>
-
-            <div className="mt-4 p-4 border-t text-left">
-              <div className="mb-2">
-                <span className="text-sm font-semibold text-gray-600">
-                  Active Sequence:{" "}
-                </span>
-                <span className="font-mono text-blue-600 font-bold">
-                  {activeLabel || "None"}
-                </span>
-              </div>
-              <div>
-                <span className="text-sm font-semibold text-gray-600">
-                  Last Event Log:
-                </span>
-                <pre className="text-sm text-gray-800 bg-gray-100 p-2 rounded mt-1 overflow-x-auto">
-                  {lastEventLog || "No events yet. Click or hover on the MSA."}
-                </pre>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -347,10 +429,10 @@ export default function MSAViewerPage() {
             {/* Main Viewer Panel */}
             <ResizablePanel defaultSize={50} minSize={20}>
               <div className="h-full w-full relative bg-gray-100">
-                <MolstarNode ref={molstarRef} />
+                <MolstarNode ref={molstarNodeRef} />
 
                 {/* Overlays for Main Viewer */}
-                {!isInitialized_main && (
+                {!mstar_service_main.isInitialized && (
                   <div className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-75 z-10">
                     <div className="text-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
@@ -376,10 +458,10 @@ export default function MSAViewerPage() {
             {/* Auxiliary Viewer Panel */}
             <ResizablePanel defaultSize={50} minSize={20}>
               <div className="h-full w-full relative bg-gray-100">
-                <MolstarNode_secondary ref={molstarRef_secondary} />
+                <MolstarNode_secondary ref={molstarNodeRef_secondary} />
 
                 {/* Overlay for Aux Viewer */}
-                {!isInitialized_aux && (
+                {!mstar_service_aux.isInitialized && (
                   <div className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-75 z-10">
                     <div className="text-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-400 mx-auto mb-2"></div>
@@ -387,14 +469,12 @@ export default function MSAViewerPage() {
                         Initializing Aux Molstar...
                       </p>
                     </div>
-
                   </div>
                 )}
               </div>
             </ResizablePanel>
           </ResizablePanelGroup>
 
-          {/* Updated text to show both viewers */}
           <div className="mt-2 text-sm text-gray-600">
             <p>Loaded (Main): {selectedStructure || "5CJO"}</p>
             <p>Loaded (Aux): 1JFF</p>
