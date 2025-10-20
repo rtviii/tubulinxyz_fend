@@ -6,18 +6,14 @@ import { PluginCommands } from 'molstar/lib/mol-plugin/commands';
 import { Color } from 'molstar/lib/mol-util/color';
 import { ribxzSpec } from './molstar_spec';
 import { TubulinSplitPreset } from './molstar_preset';
-
-// --- Important Imports from riboxyz ---
 import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state';
 import { StateSelection } from 'molstar/lib/mol-state';
-import { Structure, StructureElement } from 'molstar/lib/mol-model/structure';
-import { MolScriptBuilder } from 'molstar/lib/mol-script/language/builder';
-import { StructureQueryHelper } from 'molstar/lib/mol-plugin-state/helpers/structure-query';
-import { StateTransforms } from 'molstar/lib/mol-plugin-state/transforms';
+import { Structure } from 'molstar/lib/mol-model/structure';
 import { EnhancedTubulinSplitPreset } from './molstar_preset_computed_residues';
 
 
 export class MolstarViewer {
+
     ctx: PluginUIContext | null = null;
     private resolveInit: (() => void) | null = null;
     private initializedPromise: Promise<void>;
@@ -27,7 +23,7 @@ export class MolstarViewer {
             this.resolveInit = resolve;
         });
     }
-
+    
     async init(parent: HTMLElement, spec: PluginUISpec = ribxzSpec) {
         if (this.ctx) {
             await this.initializedPromise;
@@ -48,9 +44,7 @@ export class MolstarViewer {
         }
     }
 
-
     private setupBasicStyling() {
-        // ... (this method is fine, no changes)
         if (!this.ctx) return;
         const rendererParams = { backgroundColor: Color.fromRgb(255, 255, 255) };
         const renderer = this.ctx.canvas3d?.props.renderer;
@@ -74,12 +68,11 @@ export class MolstarViewer {
 
             const cell = this.ctx.state.data.select(StateSelection.Generators.byRef(ref))[0];
             if (!cell?.obj) return;
-
-            // This is the correct way to get Loci for a component
             const loci = Structure.toStructureElementLoci(cell.obj.data);
             this.ctx.managers.interactivity.lociHighlights.highlight({ loci }, false);
         }
     };
+
     representations = {
         stylized_lighting: async () => {
             this.ctx.managers.structure.component.setOptions({

@@ -1,11 +1,7 @@
 "use client";
-
 import { useEffect, useRef, useState } from "react";
-
-// Define the base URL for your API
+import { useMolstarService } from '@/components/molstar/molstar_service';
 const API_BASE_URL = "http://localhost:8000";
-
-// TypeScript declarations for the web components
 declare global {
   namespace JSX {
     interface IntrinsicElements {
@@ -19,21 +15,20 @@ declare global {
 }
 
 export default function MSAViewerPage() {
-  // State for component and data loading status
   const [areComponentsLoaded, setAreComponentsLoaded] = useState(false);
   const [alignmentData, setAlignmentData] = useState<{ name: string, sequence: string }[]>([]);
   const [maxLength, setMaxLength] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // State for event tracking
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [lastEventLog, setLastEventLog] = useState<string | null>(null);
 
-  // Ref for the main MSA component
   const msaRef = useRef<any>(null);
+  const molstarContainerRef = useRef<HTMLDivElement>(null);
 
-  // Effect to load Nightingale web components dynamically
+  const { service, isInitialized } = useMolstarService(molstarContainerRef, 'main');
+
   useEffect(() => {
     const loadNightingaleComponents = async () => {
       try {
@@ -69,6 +64,7 @@ export default function MSAViewerPage() {
         }));
         
         setAlignmentData(formattedSequences);
+        // This is the correct alignment length from your API
         setMaxLength(data.alignment_length);
         console.log("Alignment data fetched and processed.");
       } catch (err: any) {
@@ -81,31 +77,89 @@ export default function MSAViewerPage() {
     fetchAlignmentData();
   }, []);
 
+  // Effect to initialize Molstar with a default structure
+  useEffect(() => {
+    const loadDefaultStructure = async () => {
+      if (service && isInitialized) {
+        try {
+          // Load a default tubulin structure - using 6S8L as an example
+          const defaultPdbId = "5CJO";
+          // const defaultClassification: TubulinClassification = {
+          //   alpha: ['A', 'C', 'E'],
+          //   beta: ['B', 'D', 'F'],
+          //   gamma: [],
+          //   delta: [],
+          //   epsilon: [],
+          //   other: []
+          // };
+          
+          console.log(`Loading default structure: ${defaultPdbId}`);
+          const success = await service.controller.loadStructure(defaultPdbId, {});
+          
+          if (success) {
+            console.log(`Successfully loaded structure ${defaultPdbId} in MSA viewer`);
+          } else {
+            console.warn(`Failed to load default structure ${defaultPdbId}`);
+          }
+        } catch (error) {
+          console.error("Error loading default structure:", error);
+        }
+      }
+    };
+
+    loadDefaultStructure();
+  }, [service, isInitialized]);
+
   // Effect to set data on Nightingale components and add event listeners
   useEffect(() => {
     const msaComponent = msaRef.current;
     
-    // Check if components are loaded, data is present, and ref is attached
-    if (areComponentsLoaded && alignmentData.length > 0 && msaComponent) {
+    // Ensure all dependencies are ready
+    if (areComponentsLoaded && alignmentData.length > 0 && maxLength > 0 && msaComponent) {
       
       // --- Event Handlers ---
 
-      // 1. Handles clicks on the sequence labels (as per your wiki)
+      // 1. Handles clicks on the sequence labels
       const handleLabelClick = (event: any) => {
         const { label } = event.detail;
-        setActiveLabel(label);
+        setActiveLabel(label); // Update React state
         setLastEventLog(`EVENT: msa-active-label | Label: "${label}"`);
-        console.log("msa-active-label event:", event.detail);
+
+        // Find the index of the clicked label to create the highlight
+        const rowIndex = alignmentData.findIndex(seq => seq.name === label);
+        if (rowIndex !== -1) {
+          const highlight = {
+            sequences: { from: rowIndex, to: rowIndex }, // Row index
+            residues: { from: 1, to: maxLength },       // Full width
+            fillColor: "rgba(59, 130, 246, 0.2)",     // Light blue fill
+            borderColor: "#3B82F6",                   // Blue border
+          };
+          msaComponent.features = [highlight]; // Set the highlight feature
+          // Note: The component updates its own 'activeLabel' property internally here
+        }
       };
 
       // 2. Handles clicks on the residues (canvas area)
       const handleResidueClick = (event: any) => {
-        const { position, i } = event.detail;
-        // Correlate row index 'i' with our data
+        const { position, i } = event.detail; // 'i' is the row index
         const sequenceName = alignmentData[i]?.name || 'Unknown';
-        setActiveLabel(sequenceName); // Also set active label on residue click
+        
+        setActiveLabel(sequenceName); // Update React state
         setLastEventLog(`EVENT: onResidueClick | Seq: "${sequenceName}" (Row ${i}) | Pos: ${position}`);
-        console.log("onResidueClick event:", event.detail);
+
+        // Create highlight feature for the clicked row index 'i'
+        const highlight = {
+          sequences: { from: i, to: i },
+          residues: { from: 1, to: maxLength },
+          fillColor: "rgba(59, 130, 246, 0.2)",
+          borderColor: "#3B82F6",
+        };
+        msaComponent.features = [highlight]; // Set the highlight feature
+        
+        // --- THIS IS THE FIX ---
+        // Programmatically set the component's 'activeLabel' property
+        // to make the label bold, syncing it with the canvas click.
+        msaComponent.activeLabel = sequenceName;
       };
       
       // 3. Handles mouse hover over residues (canvas area)
@@ -117,24 +171,21 @@ export default function MSAViewerPage() {
 
       // --- Set Data & Attach Listeners ---
       
-      // Set the MSA data
       msaComponent.data = alignmentData;
 
-      // Add all event listeners
       msaComponent.addEventListener('msa-active-label', handleLabelClick);
       msaComponent.addEventListener('onResidueClick', handleResidueClick);
       msaComponent.addEventListener('onResidueMouseEnter', handleResidueHover);
 
       // --- Cleanup Function ---
-      // This is crucial to prevent memory leaks when the component unmounts
       return () => {
         msaComponent.removeEventListener('msa-active-label', handleLabelClick);
         msaComponent.removeEventListener('onResidueClick', handleResidueClick);
         msaComponent.removeEventListener('onResidueMouseEnter', handleResidueHover);
       };
     }
-    // Re-run this effect if components or data change
-  }, [areComponentsLoaded, alignmentData]);
+  // Re-run this effect if components, data, or maxLength change
+  }, [areComponentsLoaded, alignmentData, maxLength]);
 
   if (isLoading || !areComponentsLoaded) {
     return (
@@ -169,7 +220,7 @@ export default function MSAViewerPage() {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            cursor: pointer; /* Add cursor pointer */
+            cursor: pointer;
         }
         nightingale-msa .biowc-msa-label:nth-child(1),
         nightingale-msa .biowc-msa-label:nth-child(2) {
@@ -179,6 +230,31 @@ export default function MSAViewerPage() {
         nightingale-msa .biowc-msa-label:hover {
             background-color: #DBEAFE !important; 
             font-weight: bold;
+        }
+        
+        /* This style is now controlled by the component's 'activeLabel' prop */
+        /*
+        nightingale-msa .biowc-msa-label.active {
+            font-weight: bold;
+            background-color: #DBEAFE;
+        }
+        */
+        
+        /* Molstar container styling */
+        .molstar-container {
+          width: 100%;
+          height: 100%;
+          position: relative;
+        }
+        
+        .molstar-loading {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          height: 100%;
+          background-color: #f8fafc;
+          color: #64748b;
         }
     `}</style>
 
@@ -193,11 +269,12 @@ export default function MSAViewerPage() {
               <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                 
                 <div style={{ lineHeight: 0, paddingLeft: '100px', marginBottom: '10px' }}>
+                  {/* Both length and display-end are set by maxLength from the API */}
                   <nightingale-navigation
                     height="50"
-                    length={maxLength.toString()}
+                    length={maxLength}
                     display-start="1"
-                    display-end={maxLength.toString()}
+                    display-end={maxLength}
                     highlight-color="#EB3BFF22"
                   />
                 </div>
@@ -211,7 +288,7 @@ export default function MSAViewerPage() {
                   display-end={maxLength.toString()}
                   color-scheme="clustal2"
                   label-width="100" 
-                  highlight-event="onmouseover" /* Re-enabled for hover */
+                  highlight-event="onmouseover"
                   highlight-color="#EB3BFF22"
                   overlay-conservation={false}
                 />
@@ -237,11 +314,26 @@ export default function MSAViewerPage() {
         {/* Right Panel - Structure Viewer */}
         <div className="flex-1 border rounded-lg p-4 bg-white">
           <h2 className="text-lg font-semibold mb-2">Structure Viewer</h2>
-          <div className="w-full h-96 border rounded bg-gray-100 flex items-center justify-center">
-            <div className="text-center text-gray-500">
-              <p>Molstar Structure Viewer</p>
-              <p className="text-sm mt-2">Select a sequence to load structure</p>
+          <div className="w-full h-96 border rounded bg-gray-100 overflow-hidden">
+            
+            <div 
+              ref={molstarContainerRef} 
+              className="molstar-container"
+              style={{ width: '100%', height: '100%', minHeight: '384px' }}
+            >
+              {!isInitialized && (
+                <div className="molstar-loading">
+                  <div className="text-center">
+                    <p className="mb-2">Loading Molstar Structure Viewer...</p>
+                    <p className="text-sm text-gray-500">Loading structure 6S8L</p>
+                  </div>
+                </div>
+              )}
             </div>
+          </div>
+          <div className="mt-2 text-sm text-gray-600">
+            <p>Loaded: 6S8L (Tubulin structure)</p>
+            <p className="text-xs">Select sequences in the MSA to explore corresponding structures</p>
           </div>
         </div>
       </div>
