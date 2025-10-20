@@ -1222,4 +1222,35 @@ export class MolstarController {
             console.error('Error focusing on residues:', error);
         }
     }
+    getAllChains(pdbId: string): string[] {
+        const state = this.getState();
+        const pdbIdUpper = pdbId.toUpperCase();
+
+        // Get all components
+        const components = state.molstarRefs.components;
+
+        if (!components) {
+            console.warn(`No components found in state`);
+            return [];
+        }
+
+        // Filter for polymer components matching this pdbId
+        const chainIds: string[] = [];
+
+        Object.entries(components).forEach(([key, component]) => {
+            // Check if this is a polymer component for our pdbId
+            if (component.type === 'polymer' && component.pdbId === pdbIdUpper) {
+                // Extract chainId from the component
+                if ('chainId' in component && component.chainId) {
+                    chainIds.push(component.chainId);
+                }
+            }
+        });
+
+        // Remove duplicates and sort
+        const uniqueChains = [...new Set(chainIds)].sort();
+
+        console.log(`Found ${uniqueChains.length} chains in ${pdbIdUpper}:`, uniqueChains);
+        return uniqueChains;
+    }
 }
