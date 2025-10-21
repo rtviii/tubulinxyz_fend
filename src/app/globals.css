@@ -35,7 +35,7 @@ html, body {
   height: 100% !important;
 }
 
-
+/* 
 nightingale-manager,
 nightingale-navigation,
 nightingale-track,
@@ -44,7 +44,6 @@ nightingale-msa {
   width: 100%;
 }
 
-/* Fix for web component rendering */
 nightingale-manager {
   min-height: 400px;
-}
+} */

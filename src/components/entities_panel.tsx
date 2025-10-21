@@ -9,7 +9,7 @@ import { setSelectedSequence } from '@/store/slices/sequence_viewer';
 import { MolstarContext } from '@/components/molstar/molstar_service';
 import { Eye, EyeOff, Focus, FileText, Search } from 'lucide-react';
 import { ProtofilamentGrid, SubunitData } from './protofilament_grid';
-import { InteractionInfo } from '@/components/molstar/molstar_controller';
+import { InteractionInfo } from '@/components/molstar/_molstar_controller';
 
 const PolymerRow = ({ component }: { component: PolymerComponent }) => {
     const dispatch = useAppDispatch();

@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from 'react-redux';
 import { MolstarViewer } from './molstar_viewer';
-import { MolstarController } from './molstar_controller';
+import { MolstarController } from './_molstar_controller';
 import { AppStore, RootState, useAppDispatch } from '@/store/store';
 
 type MolstarInstanceId = 'main' | 'auxiliary';
