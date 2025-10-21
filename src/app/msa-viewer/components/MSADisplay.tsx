@@ -100,7 +100,7 @@ export function MSADisplay({
   onResidueLeave,
   activeAnnotations
 }: MSADisplayProps) {
-  
+
   const [activeRow, setActiveRow] = useState<MsaHighlight | null>(null);
   const [hoveredCell, setHoveredCell] = useState<MsaHover | null>(null);
 
@@ -112,24 +112,24 @@ export function MSADisplay({
     onLabelClick(label, seqId);
     setActiveRow({ msaKey, rowIndex });
   };
-  
+
   const handleResidueClick = (seqId: string, position: number, msaKey: string, rowIndex: number) => {
     onResidueClick(seqId, position);
     setActiveRow({ msaKey, rowIndex });
   };
-  
+
   const handleResidueHover = (seqId: string, position: number, msaKey: string, rowIndex: number) => {
     onResidueHover(seqId, position);
     setHoveredCell({ msaKey, rowIndex, position });
   };
-  
+
   const handleResidueLeave = () => {
     onResidueLeave();
     setHoveredCell(null);
   };
 
   // Define label width once
-  const labelWidthPx = 100;
+  const labelWidthPx = 120;
   const labelWidthStr = `${labelWidthPx}`;
   const navigationPadding = `${labelWidthPx}px`;
 
@@ -148,61 +148,19 @@ export function MSADisplay({
   }, [activeAnnotations]);
 
   return (
-    <div style={{ width: "100%", overflow: "hidden" }}>
+    <div style={{ width: "100%", }}>
       <nightingale-manager style={{ width: "100%", overflow: "visible" }}>
         <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
-          
-          {/* Annotation Tracks */}
-          {Object.entries(annotationData).map(([annotationId, annotation]) => (
-            <div 
-              key={annotationId}
-              style={{ 
-                display: activeAnnotations.has(annotationId) ? 'block' : 'none',
-                paddingLeft: navigationPadding,
-                marginBottom: '2px'
-              }}
-            >
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                fontSize: '10px', 
-                color: '#666',
-                marginBottom: '2px',
-                paddingLeft: '5px'
-              }}>
-                <div 
-                  style={{ 
-                    width: '8px', 
-                    height: '8px', 
-                    backgroundColor: annotation.color,
-                    borderRadius: annotation.shape === 'circle' ? '50%' : '2px',
-                    marginRight: '5px'
-                  }} 
-                />
-                {annotation.name}
-              </div>
-              <nightingale-track
-                ref={el => trackRefs.current[annotationId] = el}
-                height="20"
-                length={maxLength}
-                display-start="1"
-                display-end={maxLength}
-                layout="non-overlapping"
-                style={{ width: '100%' }}
-              />
-            </div>
-          ))}
 
-          {/* Navigation */}
-          <div style={{ 
-            lineHeight: 0, 
-            paddingLeft: navigationPadding, 
+          <div style={{
+            lineHeight: 0,
+            paddingLeft: navigationPadding,
             paddingRight: "15px",
             boxSizing: "border-box",
-            marginBottom: "10px" 
+            marginBottom: "8px"
           }}>
             <nightingale-navigation
-              height="40"
+              height="35"
               length={maxLength}
               display-start="1"
               display-end={maxLength}
@@ -210,43 +168,67 @@ export function MSADisplay({
             />
           </div>
 
-          {/* Master Alignment Section */}
+          {/* Master MSA Track */}
           {masterSequences.length > 0 && (
-            <MsaInstance
-              msaKey="master"
-              title={`Master Alignment (${masterSequences.length} sequences)`}
-              sequences={masterSequences}
-              maxLength={maxLength}
-              labelWidthPx={labelWidthPx}
-              labelWidthStr={labelWidthStr}
-              activeRow={activeRow}
-              hoveredCell={hoveredCell}
-              onLabelClick={handleLabelClick}
-              onResidueClick={handleResidueClick}
-              onResidueHover={handleResidueHover}
-              onResidueLeave={handleResidueLeave}
-              isMaster={true}
-            />
+            <div style={{ marginBottom: '4px' }}>
+              <MsaTrack
+                trackId="master-msa"
+                title={`Master (${masterSequences.length})`}
+                sequences={masterSequences}
+                maxLength={maxLength}
+                labelWidthPx={labelWidthPx}
+                labelWidthStr={labelWidthStr}
+                activeRow={activeRow}
+                hoveredCell={hoveredCell}
+                onLabelClick={handleLabelClick}
+                onResidueClick={handleResidueClick}
+                onResidueHover={handleResidueHover}
+                onResidueLeave={handleResidueLeave}
+                isMaster={true}
+              />
+            </div>
           )}
 
-          {/* Added Sequences Sections */}
-          {addedSequenceGroups.map((group) => (
-            <MsaInstance
-              key={group.title}
-              msaKey={group.title}
-              title={`${group.title} (${group.sequences.length})`}
-              sequences={group.sequences}
-              maxLength={maxLength}
-              labelWidthPx={labelWidthPx}
-              labelWidthStr={labelWidthStr}
-              activeRow={activeRow}
-              hoveredCell={hoveredCell}
-              onLabelClick={handleLabelClick}
-              onResidueClick={handleResidueClick}
-              onResidueHover={handleResidueHover}
-              onResidueLeave={handleResidueLeave}
-              isMaster={false}
-            />
+          {/* Active Annotation Tracks */}
+          {Array.from(activeAnnotations).map(annotationId => {
+            const annotation = annotationData[annotationId as keyof typeof annotationData];
+            if (!annotation) return null;
+
+            return (
+              <div key={annotationId} style={{ marginBottom: '4px' }}>
+                <AnnotationTrack
+                  trackId={annotationId}
+                  title={annotation.name}
+                  color={annotation.color}
+                  shape={annotation.shape}
+                  features={annotation.features}
+                  maxLength={maxLength}
+                  labelWidthPx={labelWidthPx}
+                  trackRefs={trackRefs}
+                />
+              </div>
+            );
+          })}
+
+          {/* Added Sequence Tracks */}
+          {addedSequenceGroups.map((group, groupIndex) => (
+            <div key={groupIndex} style={{ marginBottom: '4px' }}>
+              <MsaTrack
+                trackId={`added-${groupIndex}`}
+                title={`${group.title} (${group.sequences.length})`}
+                sequences={group.sequences}
+                maxLength={maxLength}
+                labelWidthPx={labelWidthPx}
+                labelWidthStr={labelWidthStr}
+                activeRow={activeRow}
+                hoveredCell={hoveredCell}
+                onLabelClick={handleLabelClick}
+                onResidueClick={handleResidueClick}
+                onResidueHover={handleResidueHover}
+                onResidueLeave={handleResidueLeave}
+                isMaster={false}
+              />
+            </div>
           ))}
         </div>
       </nightingale-manager>
@@ -254,9 +236,96 @@ export function MSADisplay({
   );
 }
 
-// MsaInstance component remains the same as before
-function MsaInstance({
-  msaKey,
+// Annotation Track Component
+interface AnnotationTrackProps {
+  trackId: string;
+  title: string;
+  color: string;
+  shape: string;
+  features: any[];
+  maxLength: number;
+  labelWidthPx: number;
+  trackRefs: React.MutableRefObject<{ [key: string]: any }>;
+}
+
+function AnnotationTrack({
+  trackId,
+  title,
+  color,
+  shape,
+  features,
+  maxLength,
+  labelWidthPx,
+  trackRefs
+}: AnnotationTrackProps) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'stretch', width: '100%' }}>
+      {/* Label */}
+      <div
+        style={{
+          width: `${labelWidthPx}px`,
+          padding: '6px 8px', // Consistent padding
+          display: 'flex',
+          alignItems: 'center',
+          fontSize: '11px',
+          fontWeight: '500',
+          color: '#374151',
+          userSelect: 'none',
+          flexShrink: 0,
+          backgroundColor: '#f9fafb',
+        }}
+      >
+        <div
+          style={{
+            width: '8px',
+            height: '8px',
+            backgroundColor: color,
+            borderRadius: shape === 'circle' ? '50%' : '2px',
+            marginRight: '6px',
+            flexShrink: 0
+          }}
+        />
+        <span style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+          {title}
+        </span>
+      </div>
+
+      {/* Track */}
+      <div style={{ flex: 1, lineHeight: 0 }}>
+        <nightingale-track
+          ref={el => trackRefs.current[trackId] = el}
+          height="20"
+          length={maxLength}
+          display-start="1"
+          display-end={maxLength}
+          layout="non-overlapping"
+          style={{ width: '100%' }}
+          data={features}
+        />
+      </div>
+    </div>
+  );
+}
+
+// MSA Track Component
+interface MsaTrackProps {
+  trackId: string;
+  title: string;
+  sequences: SequenceData[];
+  maxLength: number;
+  labelWidthPx: number;
+  labelWidthStr: string;
+  activeRow: MsaHighlight | null;
+  hoveredCell: MsaHover | null;
+  onLabelClick: (label: string, seqId: string, trackId: string, rowIndex: number) => void;
+  onResidueClick: (seqId: string, position: number, trackId: string, rowIndex: number) => void;
+  onResidueHover: (seqId: string, position: number, trackId: string, rowIndex: number) => void;
+  onResidueLeave: () => void;
+  isMaster: boolean;
+}
+
+function MsaTrack({
+  trackId,
   title,
   sequences,
   maxLength,
@@ -269,10 +338,10 @@ function MsaInstance({
   onResidueHover,
   onResidueLeave,
   isMaster
-}: MsaInstanceProps) {
-  
+}: MsaTrackProps) {
+
   const msaRef = useRef<any>(null);
-  
+
   // Setup event listeners
   useEffect(() => {
     const msaComponent = msaRef.current;
@@ -284,21 +353,21 @@ function MsaInstance({
       const { label } = event.detail;
       const rowIndex = sequences.findIndex((seq) => seq.name === label);
       if (rowIndex !== -1) {
-        onLabelClick(label, sequences[rowIndex].id, msaKey, rowIndex);
+        onLabelClick(label, sequences[rowIndex].id, trackId, rowIndex);
       }
     };
-    
+
     const handleResidueClick = (event: any) => {
       const { position, i } = event.detail;
       if (i >= 0 && i < sequences.length) {
-        onResidueClick(sequences[i].id, position, msaKey, i);
+        onResidueClick(sequences[i].id, position, trackId, i);
       }
     };
-    
+
     const handleResidueMouseEnter = (event: any) => {
       const { position, i } = event.detail;
       if (i >= 0 && position >= 0 && i < sequences.length) {
-        onResidueHover(sequences[i].id, position, msaKey, i);
+        onResidueHover(sequences[i].id, position, trackId, i);
       }
     };
 
@@ -317,7 +386,7 @@ function MsaInstance({
       msaComponent.removeEventListener("onResidueMouseEnter", handleResidueMouseEnter);
       msaComponent.removeEventListener("onResidueMouseLeave", handleResidueMouseLeave);
     };
-  }, [sequences, msaKey, onLabelClick, onResidueClick, onResidueHover, onResidueLeave]);
+  }, [sequences, trackId, onLabelClick, onResidueClick, onResidueHover, onResidueLeave]);
 
   // Update features (highlighting)
   useEffect(() => {
@@ -325,9 +394,9 @@ function MsaInstance({
     if (!msaComponent) return;
 
     const features = [];
-    
+
     // Active row highlight
-    if (activeRow && activeRow.msaKey === msaKey) {
+    if (activeRow && activeRow.msaKey === trackId) {
       features.push({
         id: 'active-row-highlight',
         sequences: { from: activeRow.rowIndex, to: activeRow.rowIndex },
@@ -336,9 +405,9 @@ function MsaInstance({
         borderColor: isMaster ? "#3B82F6" : "#22C55E",
       });
     }
-    
+
     // Hover cell highlight
-    if (hoveredCell && hoveredCell.msaKey === msaKey) {
+    if (hoveredCell && hoveredCell.msaKey === trackId) {
       features.push({
         id: 'hover-cell-highlight',
         sequences: { from: hoveredCell.rowIndex, to: hoveredCell.rowIndex },
@@ -349,59 +418,58 @@ function MsaInstance({
     }
 
     msaComponent.features = features;
-  }, [msaRef, activeRow, hoveredCell, msaKey, maxLength, isMaster]);
+  }, [msaRef, activeRow, hoveredCell, trackId, maxLength, isMaster]);
+
+  const height = Math.min(200, sequences.length * 16 + 30);
 
   return (
-    <div style={ isMaster ? {} : { marginTop: "20px" }}>
-      {/* Title aligned with sequence start */}
-      <div style={{ 
-        paddingLeft: `${labelWidthPx}px`, 
-        marginBottom: "8px", 
-        ...(isMaster ? {} : { paddingTop: "10px", borderTop: "2px solid #E5E7EB" }) 
-      }}>
-        <h3 style={{ fontSize: "14px", fontWeight: "600", 
-                     color: isMaster ? "#374151" : "#059669" }}>
+    // In MsaTrack component - replace the main container and label div
+    <div style={{ display: 'flex', alignItems: 'stretch', width: '100%' }}>
+      {/* Label */}
+      <div
+        style={{
+          width: `${labelWidthPx}px`,
+          padding: '8px', // Increased padding
+          display: 'flex',
+          alignItems: 'center', // Center vertically
+          fontSize: '11px',
+          fontWeight: '500',
+          color: isMaster ? '#1E40AF' : '#059669',
+          userSelect: 'none',
+          flexShrink: 0,
+          backgroundColor: '#f9fafb', // Light background to distinguish
+        }}
+      >
+        <div
+          style={{
+            width: '3px',
+            height: '12px',
+            backgroundColor: isMaster ? '#3B82F6' : '#10B981',
+            marginRight: '6px',
+            flexShrink: 0,
+            borderRadius: '1px'
+          }}
+        />
+        <span style={{ whiteSpace: 'nowrap' }}>
           {title}
-        </h3>
+        </span>
       </div>
-      
-      {/* Add wrapper div with proper overflow handling */}
-      <div style={{ 
-        width: "100%", 
-        overflowX: "auto",
-        overflowY: "hidden"
-      }}>
+
+      {/* MSA Track */}
+      <div style={{ flex: 1, lineHeight: 0 }}>
         <nightingale-msa
           ref={msaRef}
-          height={Math.min(300, sequences.length * 20 + 50)}
+          height={height}
           length={maxLength}
           display-start="1"
           display-end={maxLength}
           color-scheme="clustal2"
-          label-width={labelWidthStr}
+          label-width="0"
           highlight-event="onmouseover"
           highlight-color="#00FF0044"
           overlay-conservation={false}
-          min-width="800"
         />
       </div>
     </div>
   );
-}
-
-// Add the missing interface
-interface MsaInstanceProps {
-  msaKey: string;
-  title: string;
-  sequences: SequenceData[];
-  maxLength: number;
-  labelWidthPx: number;
-  labelWidthStr: string;
-  activeRow: MsaHighlight | null;
-  hoveredCell: MsaHover | null;
-  onLabelClick: (label: string, seqId: string, msaKey: string, rowIndex: number) => void;
-  onResidueClick: (seqId: string, position: number, msaKey: string, rowIndex: number) => void;
-  onResidueHover: (seqId: string, position: number, msaKey: string, rowIndex: number) => void;
-  onResidueLeave: () => void;
-  isMaster: boolean;
 }

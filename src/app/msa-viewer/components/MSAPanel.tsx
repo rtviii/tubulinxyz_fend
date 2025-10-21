@@ -10,7 +10,7 @@ interface MSAPanelProps {
   registry: ReturnType<typeof useSequenceStructureRegistry>;
   setActiveLabel: (label: string | null) => void;
   setLastEventLog: (log: string | null) => void;
-  activeAnnotations: Set<string>; // New prop
+  activeAnnotations: Set<string>;
 }
 
 export function MSAPanel({ 
@@ -20,7 +20,7 @@ export function MSAPanel({
   registry,
   setActiveLabel,
   setLastEventLog,
-  activeAnnotations // New prop,
+  activeAnnotations
 }: MSAPanelProps) {
 
   const masterSequences = registry.getMasterSequences().map(seq => ({
@@ -113,17 +113,10 @@ export function MSAPanel({
     }
   };
 
-     return (
+  return (
     <div className="w-full h-full border rounded-lg p-3 bg-white flex flex-col">
-      {/* Header with annotation status */}
-      <div className="flex justify-between items-center mb-2">
-        <h2 className="text-lg font-semibold">Multiple Sequence Alignment</h2>
-        {activeAnnotations.size > 0 && (
-          <div className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded">
-            {activeAnnotations.size} annotation(s) active
-          </div>
-        )}
-      </div>
+      {/* Simple header without annotation status */}
+      <h2 className="text-lg font-semibold mb-2">Multiple Sequence Alignment</h2>
       
       <div className="flex-1 overflow-x-auto">
         {areComponentsLoaded && (masterSequences.length > 0 || totalAddedSequences > 0) && maxLength > 0 ? (
@@ -135,7 +128,7 @@ export function MSAPanel({
             onResidueClick={handleResidueClick}
             onResidueHover={handleResidueHover}
             onResidueLeave={handleResidueLeave}
-            activeAnnotations={activeAnnotations} // Pass to MSADisplay
+            activeAnnotations={activeAnnotations}
           />
         ) : (
           <div className="p-8 text-center text-gray-500">
@@ -145,5 +138,5 @@ export function MSAPanel({
         )}
       </div>
     </div>
-  );;;
+  );
 }
