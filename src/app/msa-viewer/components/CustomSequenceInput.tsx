@@ -34,15 +34,8 @@ export function CustomSequenceInput({ registry }: CustomSequenceInputProps) {
       const result = await response.json();
       const customId = `custom_${Date.now()}`;
       
-      registry.addSequence(
-        customId,
-        customId,
-        result.aligned_sequence,
-        { type: 'custom' }
-      );
-      
+      registry.addSequence(customId, customId, result.aligned_sequence, { type: 'custom' });
       setInput("");
-      console.log('✅ Added custom sequence:', customId);
     } catch (err) {
       console.error("Failed to align custom sequence:", err);
       alert(`Failed to align sequence: ${err}`);
@@ -70,9 +63,7 @@ export function CustomSequenceInput({ registry }: CustomSequenceInputProps) {
           {isAdding ? "Adding..." : "Add Sequence"}
         </button>
       </div>
-      <p className="text-xs text-gray-500 mt-1">
-        Sequence will be aligned and added as the last row.
-      </p>
+      <p className="text-xs text-gray-500 mt-1">Sequence will be aligned and added as the last row.</p>
     </div>
   );
 }
