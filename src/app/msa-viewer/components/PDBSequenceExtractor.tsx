@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useSequenceStructureRegistry } from '../hooks/useSequenceStructureSync';
 import { createTubulinClassificationMap } from '@/services/gql_parser';
 import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
-import { MolstarService, useMolstarService } from '@/components/molstar/molstar_service';
+import { MolstarService } from '@/components/molstar/molstar_service';
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -14,7 +14,7 @@ interface ChainInfo {
 }
 
 interface PDBSequenceExtractorProps {
-  molstarService: MolstarService;
+  molstarService: MolstarService | null;
   registry: ReturnType<typeof useSequenceStructureRegistry>;
 }
 
@@ -34,17 +34,13 @@ export function PDBSequenceExtractor({ molstarService, registry }: PDBSequenceEx
     setLoadedPdbId(null);
 
     try {
-
-
-
       const normalizedPdbId = pdbIdUpper.toUpperCase();
       const gqlData = await fetchRcsbGraphQlData(normalizedPdbId);
       const classification = createTubulinClassificationMap(gqlData);
 
-
       await molstarService.controller.loadStructure(pdbIdUpper, classification);
       const allChains = molstarService.controller.getAllChains(pdbIdUpper);
-      await molstarService.viewer.representations.stylized_lighting()  
+      await molstarService.viewer.representations.stylized_lighting();
 
       if (!allChains || allChains.length === 0) {
         alert(`No chains found in ${pdbIdUpper}`);
@@ -119,11 +115,18 @@ export function PDBSequenceExtractor({ molstarService, registry }: PDBSequenceEx
     }
   };
 
-  return (
-    <div className="p-4 border-t bg-gray-50">
-      <h3 className="text-md font-semibold mb-2">Load Structure & Extract Chains</h3>
+  const alignedChains = loadedPdbId ? registry.getSequencesByStructure(loadedPdbId) : [];
+  const alignedChainIds = new Set(alignedChains.map(seq => 
+    seq.origin.type === 'pdb' ? seq.origin.chainId : ''
+  ));
 
-      <div className="flex gap-2 mb-4">
+  return (
+    <div>
+      <h3 className="text-sm font-semibold mb-2 text-gray-800">
+        Load Structure
+      </h3>
+
+      <div className="flex gap-2 mb-2">
         <div className="flex-grow">
           <label className="block text-xs font-medium text-gray-600 mb-1">PDB ID</label>
           <input
@@ -132,57 +135,86 @@ export function PDBSequenceExtractor({ molstarService, registry }: PDBSequenceEx
             onChange={(e) => setPdbId(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleLoadStructure()}
             placeholder="e.g., 5CJO"
-            className="p-2 w-full border rounded text-sm font-mono uppercase"
+            className="p-1.5 w-full border border-gray-300 rounded-md text-sm font-mono uppercase focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
             disabled={isLoading}
           />
         </div>
         <button
           onClick={handleLoadStructure}
           disabled={isLoading || !pdbId.trim()}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm self-end"
+          className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm self-end font-medium shadow-sm hover:shadow transition-all"
         >
-          {isLoading ? "Loading..." : "Load Structure"}
+          {isLoading ? "..." : "Load"}
         </button>
       </div>
 
       {loadedPdbId && chains.length > 0 && (
-        <div className="mt-4">
-          <h4 className="text-sm font-semibold text-gray-700 mb-2">Chains in {loadedPdbId}:</h4>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
+        <div className="mt-3">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-semibold text-gray-700">
+              Chains in {loadedPdbId}
+            </h4>
+            <div className="text-xs text-gray-500">
+              {alignedChainIds.size} / {chains.length} aligned
+            </div>
+          </div>
+          
+          {/* Removed max-h and overflow-y to let parent scroll */}
+          <div className="space-y-1.5 pr-1">
             {chains.map((chain) => {
+              const isAligned = alignedChainIds.has(chain.chainId);
               const existingSeq = registry.getSequenceByChain(loadedPdbId, chain.chainId);
-              const isAligned = existingSeq !== null;
 
               return (
                 <div
                   key={chain.chainId}
-                  className={`flex items-start gap-2 p-3 border rounded transition-colors ${
-                    isAligned ? 'bg-green-50 border-green-300' : 'bg-white hover:border-blue-300'
+                  // Removed border, using just bg and rounded
+                  className={`flex items-start gap-2 p-1.5 rounded-md transition-all ${
+                    isAligned 
+                      ? 'bg-green-50' 
+                      : 'bg-gray-50 hover:bg-gray-100'
                   }`}
                 >
                   <div className="flex-grow min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="font-mono font-bold text-blue-600">Chain {chain.chainId}</span>
-                      <span className="text-xs text-gray-500">({chain.length} residues)</span>
-                      {isAligned && (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">
-                          Row {existingSeq.rowIndex + 1}
+                      <span className={`font-mono font-bold text-sm ${isAligned ? 'text-green-700' : 'text-blue-600'}`}>
+                        {chain.chainId}
+                      </span>
+                      <span className="text-xs text-gray-500 bg-gray-200 px-1.5 py-0.5 rounded-full">
+                        {chain.length} res
+                      </span>
+                      {isAligned && existingSeq && (
+                        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
+                          ✓ Row {existingSeq.rowIndex + 1}
                         </span>
                       )}
                     </div>
-                    <div className="text-xs font-mono text-gray-600 overflow-hidden">
-                      <span className="bg-gray-100 px-2 py-1 rounded">
-                        {chain.sequence.substring(0, 60)}
-                        {chain.sequence.length > 60 && "..."}
-                      </span>
+                    {/* Brought back sequence preview */}
+                    <div className="text-xs font-mono text-gray-600">
+                      <div className="bg-white px-1 py-1 rounded border border-gray-200 overflow-hidden">
+                        {chain.sequence.substring(0, 50)}
+                        {chain.sequence.length > 50 && (
+                          <span className="text-gray-400">...</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <button
                     onClick={() => handleAlignChain(chain)}
                     disabled={aligningChain === chain.chainId || isAligned}
-                    className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
+                    className={`px-2 py-1 text-white text-xs rounded-md font-medium whitespace-nowrap flex-shrink-0 transition-all shadow-sm hover:shadow self-center ${
+                      isAligned
+                        ? 'bg-gray-300 cursor-not-allowed'
+                        : aligningChain === chain.chainId
+                        ? 'bg-blue-400 cursor-wait'
+                        : 'bg-green-600 hover:bg-green-700'
+                    }`}
                   >
-                    {aligningChain === chain.chainId ? "Aligning..." : isAligned ? "Aligned" : "Align"}
+                    {aligningChain === chain.chainId ? (
+                      "..."
+                    ) : isAligned ? (
+                      "Aligned"
+                    ) : "Align"}
                   </button>
                 </div>
               );
@@ -191,7 +223,9 @@ export function PDBSequenceExtractor({ molstarService, registry }: PDBSequenceEx
         </div>
       )}
 
-      <p className="text-xs text-gray-500 mt-2">Load a PDB structure to view and align its chains</p>
+      <p className="text-xs text-gray-500 mt-2">
+         Load a PDB structure to align its chains.
+      </p>
     </div>
   );
 }

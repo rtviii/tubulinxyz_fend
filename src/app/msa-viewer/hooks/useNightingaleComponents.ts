@@ -1,3 +1,4 @@
+// hooks/useNightingaleComponents.ts
 import { useState, useEffect } from 'react';
 
 export function useNightingaleComponents() {
@@ -14,9 +15,10 @@ export function useNightingaleComponents() {
         await new Promise((resolve) => setTimeout(resolve, 100));
         setAreLoaded(true);
       } catch (err) {
-        setError("Failed to load Nightingale visualization components.");
+        setError("Failed to load Nightingale components.");
       }
     };
+
     loadComponents();
   }, []);
 

@@ -1,7 +1,7 @@
 // page.tsx
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { MSAPanel } from './components/MSAPanel';
 import { StructureViewerPanel } from './components/StructureViewerPanel';
 import { useAlignmentData } from './hooks/useAlignmentData';
@@ -10,12 +10,20 @@ import { useMolstarService } from '@/components/molstar/molstar_service';
 import { useSequenceStructureRegistry } from './hooks/useSequenceStructureSync';
 import { createTubulinClassificationMap } from '@/services/gql_parser';
 import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
+import { ControlPanel } from './ControlPanel';
+import { AnnotationsLibrary } from './components/AnnotationsLibrary'; // New component
 
 export default function MSAViewerPage() {
   const molstarNodeRef = useRef<HTMLDivElement>(null);
 
   const mainStructureLoaded = useRef(false);
   const masterSequencesInitialized = useRef(false);
+
+  // State lifted from MSAPanel
+  const [activeLabel, setActiveLabel] = useState<string | null>(null);
+  const [lastEventLog, setLastEventLog] = useState<string | null>(null);
+  // New state for annotations
+  const [activeAnnotations, setActiveAnnotations] = useState<Set<string>>(new Set());
 
   const { service: mainService, isInitialized: mainInitialized } = useMolstarService(molstarNodeRef, 'main');
 
@@ -31,16 +39,14 @@ export default function MSAViewerPage() {
 
     const loadDefault = async () => {
       try {
-
         const RCSB_ID = "5JCO"
-
-      const normalizedPdbId = RCSB_ID.toUpperCase();
-      const gqlData = await fetchRcsbGraphQlData(normalizedPdbId);
-      const classification = createTubulinClassificationMap(gqlData);
+        const normalizedPdbId = RCSB_ID.toUpperCase();
+        const gqlData = await fetchRcsbGraphQlData(normalizedPdbId);
+        const classification = createTubulinClassificationMap(gqlData);
         await mainService.controller.loadStructure(RCSB_ID, classification)
         const chains = mainService.controller.getAllChains(RCSB_ID);
         
-      await mainService.viewer.representations.stylized_lighting()  
+        await mainService.viewer.representations.stylized_lighting()  
 
         if (chains.length > 0) {
           registry.registerStructure(RCSB_ID, chains);
@@ -53,10 +59,10 @@ export default function MSAViewerPage() {
     };
     
     loadDefault();
-  }, [mainInitialized, mainService]);
+  }, [mainInitialized, mainService, registry]);
 
   useEffect(() => {
-    if (alignmentData.length === 0 || masterSequencesInitialized.current) {
+    if (alignmentData.length === 0 || masterSequencesInitialized.current || !registry) {
       return;
     }
 
@@ -65,26 +71,56 @@ export default function MSAViewerPage() {
     });
     
     masterSequencesInitialized.current = true;
-  }, [alignmentData]);
+  }, [alignmentData, registry]);
 
   return (
-    <div className="h-screen flex flex-col p-4 bg-gray-50">
-      <h1 className="text-2xl font-bold mb-4">MSA & Structure Viewer</h1>
+    <div className="h-screen flex flex-col p-3 bg-gray-50">
       
-      <div className="flex-1 flex gap-4 min-h-0">
-        <MSAPanel
-          maxLength={maxLength}
-          areComponentsLoaded={componentsLoaded}
-          molstarService={mainService}
-          registry={registry}
-        />
+      {/* New top section with annotations library and MSA */}
+      <div className="flex flex-row gap-3 mb-3" style={{ height: '40vh' }}>
+        {/* Annotations Library - Left side */}
+        <div className="w-1/4">
+          <AnnotationsLibrary 
+            activeAnnotations={activeAnnotations}
+            setActiveAnnotations={setActiveAnnotations}
+          />
+        </div>
         
-        <StructureViewerPanel
-          molstarNodeRef={molstarNodeRef}
-          mainInitialized={mainInitialized}
-          mainService={mainService}
-          registry={registry}
-        />
+        {/* MSA Panel - Right side (reduced width) */}
+        <div className="w-3/4">
+          <MSAPanel
+            maxLength={maxLength}
+            areComponentsLoaded={componentsLoaded}
+            molstarService={mainService}
+            registry={registry}
+            setActiveLabel={setActiveLabel}
+            setLastEventLog={setLastEventLog}
+            activeAnnotations={activeAnnotations} // Pass active annotations
+          />
+        </div>
+      </div>
+      
+      {/* Bottom section with controls and structure viewer */}
+      <div className="flex-1 flex flex-row gap-3 min-h-0">
+        {/* Left Control Panel (1/3) */}
+        <div className="w-1/3 flex flex-col gap-3">
+          <ControlPanel
+            molstarService={mainService}
+            registry={registry}
+            activeLabel={activeLabel}
+            lastEventLog={lastEventLog}
+          />
+        </div>
+
+        {/* Right Structure Viewer (2/3) */}
+        <div className="w-2/3 h-full min-h-0">
+          <StructureViewerPanel
+            molstarNodeRef={molstarNodeRef}
+            mainInitialized={mainInitialized}
+            mainService={mainService}
+            registry={registry}
+          />
+        </div>
       </div>
     </div>
   );

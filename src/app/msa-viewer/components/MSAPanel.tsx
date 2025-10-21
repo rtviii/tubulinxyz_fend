@@ -1,42 +1,64 @@
 // components/MSAPanel.tsx
-import { useState } from 'react';
 import { MSADisplay } from './MSADisplay';
-import { PDBSequenceExtractor } from './PDBSequenceExtractor';
-import { CustomSequenceInput } from './CustomSequenceInput';
 import { useSequenceStructureRegistry } from '../hooks/useSequenceStructureSync';
+import { MolstarService } from '@/components/molstar/molstar_service';
 
 interface MSAPanelProps {
   maxLength: number;
   areComponentsLoaded: boolean;
-  molstarService: any;
+  molstarService: MolstarService | null;
   registry: ReturnType<typeof useSequenceStructureRegistry>;
+  setActiveLabel: (label: string | null) => void;
+  setLastEventLog: (log: string | null) => void;
+  activeAnnotations: Set<string>; // New prop
 }
 
-export function MSAPanel({ maxLength, areComponentsLoaded, molstarService, registry }: MSAPanelProps) {
-  const [activeLabel, setActiveLabel] = useState<string | null>(null);
-  const [lastEventLog, setLastEventLog] = useState<string | null>(null);
+export function MSAPanel({ 
+  maxLength, 
+  areComponentsLoaded, 
+  molstarService, 
+  registry,
+  setActiveLabel,
+  setLastEventLog,
+  activeAnnotations // New prop,
+}: MSAPanelProps) {
 
-  const alignmentData = registry.getOrderedSequences().map(seq => ({
+  const masterSequences = registry.getMasterSequences().map(seq => ({
+    id: seq.id,
     name: seq.name,
     sequence: seq.sequence
   }));
+  
+  const addedSequenceGroups = registry.getAddedSequenceGroups().map(group => ({
+    title: group.title,
+    sequences: group.sequences.map(seq => ({
+      id: seq.id,
+      name: seq.name,
+      sequence: seq.sequence
+    }))
+  }));
+  
+  const totalAddedSequences = addedSequenceGroups.reduce((acc, group) => acc + group.sequences.length, 0);
 
-  const handleLabelClick = (label: string, rowIndex: number) => {
+  const handleLabelClick = (label: string, sequenceId: string) => {
     setActiveLabel(label);
-    const seq = registry.getSequenceByRow(rowIndex);
+    const seq = registry.getSequenceById(sequenceId);
     
     let logMsg = `Label clicked: "${label}"`;
     if (seq?.origin.type === 'pdb') {
       logMsg += ` | ${seq.origin.pdbId} Chain ${seq.origin.chainId}`;
+    } else if (seq?.origin.type === 'custom') {
+      logMsg += ` | Custom sequence`;
     }
     setLastEventLog(logMsg);
   };
 
-  const handleResidueClick = async (sequenceName: string, rowIndex: number, position: number) => {
-    setActiveLabel(sequenceName);
-    const seq = registry.getSequenceByRow(rowIndex);
+  const handleResidueClick = async (sequenceId: string, position: number) => {
+    const seq = registry.getSequenceById(sequenceId);
+    if (!seq) return;
     
-    let logMsg = `Residue clicked: "${sequenceName}" Row ${rowIndex} | MSA Pos ${position}`;
+    setActiveLabel(seq.name);
+    let logMsg = `Residue clicked: "${seq.name}" | MSA Pos ${position}`;
     
     if (seq?.origin.type === 'pdb' && seq.origin.pdbId && seq.origin.chainId) {
       const { pdbId, chainId, positionMapping } = seq.origin;
@@ -54,14 +76,14 @@ export function MSAPanel({ maxLength, areComponentsLoaded, molstarService, regis
         logMsg += ` -> ${pdbId}:${chainId} (gap)`;
       }
     }
-    
     setLastEventLog(logMsg);
   };
 
-  const handleResidueHover = async (sequenceName: string, rowIndex: number, position: number) => {
-    const seq = registry.getSequenceByRow(rowIndex);
+  const handleResidueHover = async (sequenceId: string, position: number) => {
+    const seq = registry.getSequenceById(sequenceId);
+    if (!seq) return;
     
-    let logMsg = `Residue hover: "${sequenceName}" Row ${rowIndex} | MSA Pos ${position}`;
+    let logMsg = `Residue hover: "${seq.name}" | MSA Pos ${position}`;
     
     if (seq?.origin.type === 'pdb' && seq.origin.pdbId && seq.origin.chainId) {
       const { pdbId, chainId, positionMapping } = seq.origin;
@@ -79,8 +101,6 @@ export function MSAPanel({ maxLength, areComponentsLoaded, molstarService, regis
         logMsg += ` -> ${pdbId}:${chainId} (gap)`;
       }
     }
-    
-    setLastEventLog(logMsg);
   };
 
   const handleResidueLeave = async () => {
@@ -93,38 +113,30 @@ export function MSAPanel({ maxLength, areComponentsLoaded, molstarService, regis
     }
   };
 
-  return (
-    <div className="flex-1 h-full border rounded-lg p-4 bg-white flex flex-col">
-      <h2 className="text-lg font-semibold mb-2">Alignment</h2>
+     return (
+    <div className="w-full h-full border rounded-lg p-3 bg-white flex flex-col">
+      {/* Header with annotation status */}
+      <div className="flex justify-between items-center mb-2">
+        <h2 className="text-lg font-semibold">Multiple Sequence Alignment</h2>
+        {activeAnnotations.size > 0 && (
+          <div className="text-sm text-blue-600 bg-blue-50 px-2 py-1 rounded">
+            {activeAnnotations.size} annotation(s) active
+          </div>
+        )}
+      </div>
       
-      <div className="border rounded overflow-auto flex-1">
-        {areComponentsLoaded && alignmentData.length > 0 && maxLength > 0 ? (
-          <>
-            <MSADisplay
-              alignmentData={alignmentData}
-              maxLength={maxLength}
-              onLabelClick={handleLabelClick}
-              onResidueClick={handleResidueClick}
-              onResidueHover={handleResidueHover}
-              onResidueLeave={handleResidueLeave}
-            />
-            
-            <CustomSequenceInput registry={registry} />
-            <PDBSequenceExtractor molstarService={molstarService} registry={registry} />
-
-            <div className="mt-4 p-4 border-t text-left">
-              <div className="mb-2">
-                <span className="text-sm font-semibold text-gray-600">Active Sequence: </span>
-                <span className="font-mono text-blue-600 font-bold">{activeLabel || "None"}</span>
-              </div>
-              <div>
-                <span className="text-sm font-semibold text-gray-600">Last Event:</span>
-                <pre className="text-sm text-gray-800 bg-gray-100 p-2 rounded mt-1 overflow-x-auto">
-                  {lastEventLog || "No events yet"}
-                </pre>
-              </div>
-            </div>
-          </>
+      <div className="flex-1 overflow-x-auto">
+        {areComponentsLoaded && (masterSequences.length > 0 || totalAddedSequences > 0) && maxLength > 0 ? (
+          <MSADisplay
+            masterSequences={masterSequences}
+            addedSequenceGroups={addedSequenceGroups}
+            maxLength={maxLength}
+            onLabelClick={handleLabelClick}
+            onResidueClick={handleResidueClick}
+            onResidueHover={handleResidueHover}
+            onResidueLeave={handleResidueLeave}
+            activeAnnotations={activeAnnotations} // Pass to MSADisplay
+          />
         ) : (
           <div className="p-8 text-center text-gray-500">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
@@ -133,5 +145,5 @@ export function MSAPanel({ maxLength, areComponentsLoaded, molstarService, regis
         )}
       </div>
     </div>
-  );
+  );;;
 }

@@ -1,11 +1,12 @@
 // components/StructureViewerPanel.tsx
 import { MolstarNode } from "@/components/molstar/molstar_spec";
 import { useSequenceStructureRegistry } from "../hooks/useSequenceStructureSync";
+import { MolstarService } from "@/components/molstar/molstar_service";
 
 interface StructureViewerPanelProps {
   molstarNodeRef: React.RefObject<HTMLDivElement>;
   mainInitialized: boolean;
-  mainService: any;
+  mainService: MolstarService | null;
   registry: ReturnType<typeof useSequenceStructureRegistry>;
 }
 
@@ -18,10 +19,11 @@ export function StructureViewerPanel({
   const loadedStructures = Array.from(registry.structures.values()).map(s => s.pdbId);
 
   return (
-    <div className="flex-1 h-full border rounded-lg p-4 bg-white flex flex-col">
-      <h2 className="text-lg font-semibold mb-2">Structure Viewer</h2>
+    <div className="w-full h-full border rounded-lg p-2 bg-white flex flex-col">
+      <h2 className="text-lg font-semibold mb-1">Structure Viewer</h2>
       
-      <div className="flex-1 border rounded-lg overflow-hidden relative bg-gray-100">
+      {/* Removed nested border */}
+      <div className="flex-1 overflow-hidden relative bg-gray-100 min-h-0 rounded-md">
         <MolstarNode ref={molstarNodeRef} />
         {!mainInitialized && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-75 z-10">
@@ -33,12 +35,12 @@ export function StructureViewerPanel({
         )}
       </div>
 
-      <div className="mt-2 text-sm text-gray-600">
+      <div className="mt-1 text-xs text-gray-600">
         <p>Loaded: {loadedStructures.join(', ') || 'Loading...'}</p>
-        <p className="text-xs mt-1">Select sequences in the MSA to explore corresponding structures.</p>
+        <p className="mt-0.5">Select sequences in the MSA to explore corresponding structures.</p>
         <button
           onClick={() => registry.logState()}
-          className="mt-2 px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+          className="mt-1 px-1.5 py-0.5 text-xs bg-gray-200 hover:bg-gray-300 rounded"
         >
           Debug Registry
         </button>
