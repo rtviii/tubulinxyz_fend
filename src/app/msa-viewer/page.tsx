@@ -8,6 +8,8 @@ import { useAlignmentData } from './hooks/useAlignmentData';
 import { useNightingaleComponents } from './hooks/useNightingaleComponents';
 import { useMolstarService } from '@/components/molstar/molstar_service';
 import { useSequenceStructureRegistry } from './hooks/useSequenceStructureSync';
+import { createTubulinClassificationMap } from '@/services/gql_parser';
+import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 
 export default function MSAViewerPage() {
   const molstarNodeRef = useRef<HTMLDivElement>(null);
@@ -29,12 +31,20 @@ export default function MSAViewerPage() {
 
     const loadDefault = async () => {
       try {
-        await mainService.controller.loadStructure('5CJO', {});
-        const chains = mainService.controller.getAllChains('5CJO');
+
+        const RCSB_ID = "5JCO"
+
+      const normalizedPdbId = RCSB_ID.toUpperCase();
+      const gqlData = await fetchRcsbGraphQlData(normalizedPdbId);
+      const classification = createTubulinClassificationMap(gqlData);
+        await mainService.controller.loadStructure(RCSB_ID, classification)
+        const chains = mainService.controller.getAllChains(RCSB_ID);
         
+      await mainService.viewer.representations.stylized_lighting()  
+
         if (chains.length > 0) {
-          registry.registerStructure('5CJO', chains);
-          mainStructureLoaded.current = true;
+          registry.registerStructure(RCSB_ID, chains);
+          mainStructureLoaded.current =  true;
         }
       } catch (error) {
         console.error('Failed to load 5CJO:', error);

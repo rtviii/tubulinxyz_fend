@@ -1,6 +1,9 @@
 // components/PDBSequenceExtractor.tsx
 import { useState } from 'react';
 import { useSequenceStructureRegistry } from '../hooks/useSequenceStructureSync';
+import { createTubulinClassificationMap } from '@/services/gql_parser';
+import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
+import { MolstarService, useMolstarService } from '@/components/molstar/molstar_service';
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -11,7 +14,7 @@ interface ChainInfo {
 }
 
 interface PDBSequenceExtractorProps {
-  molstarService: any;
+  molstarService: MolstarService;
   registry: ReturnType<typeof useSequenceStructureRegistry>;
 }
 
@@ -31,8 +34,17 @@ export function PDBSequenceExtractor({ molstarService, registry }: PDBSequenceEx
     setLoadedPdbId(null);
 
     try {
-      await molstarService.controller.loadStructure(pdbIdUpper, {});
+
+
+
+      const normalizedPdbId = pdbIdUpper.toUpperCase();
+      const gqlData = await fetchRcsbGraphQlData(normalizedPdbId);
+      const classification = createTubulinClassificationMap(gqlData);
+
+
+      await molstarService.controller.loadStructure(pdbIdUpper, classification);
       const allChains = molstarService.controller.getAllChains(pdbIdUpper);
+      await molstarService.viewer.representations.stylized_lighting()  
 
       if (!allChains || allChains.length === 0) {
         alert(`No chains found in ${pdbIdUpper}`);

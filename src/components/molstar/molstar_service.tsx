@@ -6,7 +6,7 @@ import { AppStore, RootState, useAppDispatch } from '@/store/store';
 
 type MolstarInstanceId = 'main' | 'auxiliary';
 
-interface MolstarService {
+export interface MolstarService {
     viewer: MolstarViewer;
     controller: MolstarController;
     instanceId: MolstarInstanceId;
