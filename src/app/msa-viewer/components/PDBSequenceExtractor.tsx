@@ -16,10 +16,10 @@ interface PDBSequenceExtractorProps {
   viewerInstance: 'main' | 'aux';
 }
 
-export function PDBSequenceExtractor({ 
-  molstarService, 
+export function PDBSequenceExtractor({
+  molstarService,
   registry,
-  viewerInstance 
+  viewerInstance
 }: PDBSequenceExtractorProps) {
   const [pdbId, setPdbId] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -38,25 +38,25 @@ export function PDBSequenceExtractor({
     try {
       // Load structure into Molstar
       await molstarService.controller.loadStructure(pdbIdUpper, {});
-      
+
       // Get all chains from the loaded structure
       const allChains = molstarService.controller.getAllChains(pdbIdUpper);
-      
+
       console.log(`🔍 Found chains in ${pdbIdUpper}:`, allChains);
-      
+
       if (!allChains || allChains.length === 0) {
         alert(`No chains found in ${pdbIdUpper}`);
         return;
       }
 
       // Register structure in registry
-      registry.registerStructure(pdbIdUpper, allChains, viewerInstance);
+      registry.registerStructure(pdbIdUpper, allChains, 'main');
 
       // Extract sequence for each chain
       const chainInfos: ChainInfo[] = [];
       for (const chainId of allChains) {
         const sequence = molstarService.controller.getChainSequence(pdbIdUpper, chainId);
-        
+
         if (sequence && sequence.length > 0) {
           chainInfos.push({
             chainId,
@@ -79,58 +79,69 @@ export function PDBSequenceExtractor({
     }
   };
 
+  // components/PDBSequenceExtractor.tsx
   const handleAlignChain = async (chainInfo: ChainInfo) => {
-    if (!loadedPdbId) return;
+  if (!loadedPdbId) return;
 
-    setAligningChain(chainInfo.chainId);
-    
-    try {
-      // Send to backend for alignment
-      const response = await fetch(`${API_BASE_URL}/msaprofile/sequence`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sequence: chainInfo.sequence,
-          sequence_id: `${loadedPdbId}_${chainInfo.chainId}`,
-          annotations: [],
-        }),
-      });
+  setAligningChain(chainInfo.chainId);
+  
+  try {
+    const response = await fetch(`${API_BASE_URL}/msaprofile/sequence`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sequence: chainInfo.sequence,
+        sequence_id: `${loadedPdbId}_${chainInfo.chainId}`,
+        annotations: [],
+      }),
+    });
 
-      if (!response.ok) {
-        throw new Error(`Alignment failed: ${response.status}`);
-      }
-
-      const result = await response.json();
-      
-      // Add to registry with full metadata
-      registry.addSequence(
-        `${loadedPdbId}_${chainInfo.chainId}`, // unique id
-        `${loadedPdbId}_${chainInfo.chainId}`, // display name
-        result.aligned_sequence, // aligned sequence
-        {
-          type: 'pdb',
-          pdbId: loadedPdbId,
-          chainId: chainInfo.chainId,
-          viewerInstance: viewerInstance
-        }
-      );
-
-      console.log(`✅ Added ${loadedPdbId} Chain ${chainInfo.chainId} to alignment`);
-
-    } catch (err: any) {
-      console.error("Failed to align chain:", err);
-      alert(`Failed to align: ${err.message}`);
-    } finally {
-      setAligningChain(null);
+    if (!response.ok) {
+      throw new Error(`Alignment failed: ${response.status}`);
     }
-  };
+
+    const result = await response.json();
+    
+    // ✨ Convert array mapping to object for easier lookup
+    // mapping[alignedPos] = originalResidue (1-based) or -1
+    const positionMapping: Record<number, number> = {};
+    result.mapping.forEach((originalResidue: number, alignedPos: number) => {
+      if (originalResidue !== -1) {
+        positionMapping[alignedPos] = originalResidue;
+      }
+    });
+    
+    console.log(`📍 Created position mapping with ${Object.keys(positionMapping).length} non-gap positions`);
+    
+    registry.addSequence(
+      `${loadedPdbId}_${chainInfo.chainId}`,
+      `${loadedPdbId}_${chainInfo.chainId}`,
+      result.aligned_sequence,
+      {
+        type: 'pdb',
+        pdbId: loadedPdbId,
+        chainId: chainInfo.chainId,
+        viewerInstance: viewerInstance,
+        positionMapping: positionMapping // ✨ Store as object
+      }
+    );
+
+    console.log(`✅ Added ${loadedPdbId} Chain ${chainInfo.chainId} to alignment`);
+
+  } catch (err: any) {
+    console.error("Failed to align chain:", err);
+    alert(`Failed to align: ${err.message}`);
+  } finally {
+    setAligningChain(null);
+  }
+};;;
 
   return (
     <div className="p-4 border-t bg-gray-50">
       <h3 className="text-md font-semibold mb-2">
         Load Structure & Extract Chains ({viewerInstance})
       </h3>
-      
+
       <div className="flex gap-2 mb-4">
         <div className="flex-grow">
           <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -164,13 +175,12 @@ export function PDBSequenceExtractor({
             {chains.map((chain) => {
               const existingSeq = registry.getSequenceByChain(loadedPdbId, chain.chainId);
               const isAligned = existingSeq !== null;
-              
+
               return (
                 <div
                   key={chain.chainId}
-                  className={`flex items-start gap-2 p-3 border rounded transition-colors ${
-                    isAligned ? 'bg-green-50 border-green-300' : 'bg-white hover:border-blue-300'
-                  }`}
+                  className={`flex items-start gap-2 p-3 border rounded transition-colors ${isAligned ? 'bg-green-50 border-green-300' : 'bg-white hover:border-blue-300'
+                    }`}
                 >
                   <div className="flex-grow min-w-0">
                     <div className="flex items-center gap-2 mb-1">

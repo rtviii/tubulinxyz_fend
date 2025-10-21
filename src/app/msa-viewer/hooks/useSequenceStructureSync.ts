@@ -5,16 +5,17 @@ export interface SequenceOrigin {
   type: 'master' | 'pdb' | 'custom';
   pdbId?: string;
   chainId?: string;
-  viewerInstance?: 'main' | 'aux'; // which Molstar viewer it came from
+  viewerInstance?: 'main' | 'aux';
+  positionMapping?: Record<number, number>; // ✨ NEW: MSA pos → original residue
 }
 
 export interface SequenceRecord {
-  id: string; // unique identifier
-  name: string; // display name in MSA
-  sequence: string; // aligned sequence
-  rowIndex: number; // current position in MSA
+  id: string;
+  name: string;
+  sequence: string;
+  rowIndex: number;
   origin: SequenceOrigin;
-  addedAt: number; // timestamp for ordering
+  addedAt: number;
 }
 
 export interface StructureRecord {

@@ -7,14 +7,17 @@ interface MSADisplayProps {
   onLabelClick: (label: string, rowIndex: number) => void;
   onResidueClick: (sequenceName: string, rowIndex: number, position: number) => void;
   onResidueHover: (sequenceName: string, rowIndex: number, position: number) => void;
+  onResidueLeave?: () => void; // ✨ NEW
 }
+
 
 export function MSADisplay({
   alignmentData,
   maxLength,
   onLabelClick,
   onResidueClick,
-  onResidueHover
+  onResidueHover,
+  onResidueLeave
 }: MSADisplayProps) {
   const msaRef = useRef<any>(null);
   const [hoveredCell, setHoveredCell] = useState<{
@@ -25,19 +28,21 @@ export function MSADisplay({
   // Update features when hover changes
   useEffect(() => {
     const msaComponent = msaRef.current;
-    if (!msaComponent) return;
+    if (!msaComponent || alignmentData.length === 0) return;
+
+    msaComponent.data = alignmentData;
 
     if (hoveredCell) {
       // Create a single-cell highlight feature
       msaComponent.features = [{
         id: 'hover-highlight',
-        residues: { 
+        residues: {
           from: hoveredCell.position + 1,  // 1-based
-          to: hoveredCell.position + 1 
+          to: hoveredCell.position + 1
         },
-        sequences: { 
-          from: hoveredCell.rowIndex, 
-          to: hoveredCell.rowIndex 
+        sequences: {
+          from: hoveredCell.rowIndex,
+          to: hoveredCell.rowIndex
         },
         fillColor: '#00FF0066',       // Semi-transparent green
         borderColor: '#00FF00',        // Solid green border
@@ -47,6 +52,7 @@ export function MSADisplay({
       msaComponent.features = [];
     }
   }, [hoveredCell]);
+
 
   useEffect(() => {
     const msaComponent = msaRef.current;
@@ -61,7 +67,7 @@ export function MSADisplay({
       const rowIndex = alignmentData.findIndex((seq) => seq.name === label);
       if (rowIndex !== -1) {
         onLabelClick(label, rowIndex);
-        
+
         // Highlight entire row
         const highlight = {
           id: 'row-highlight',
@@ -79,7 +85,7 @@ export function MSADisplay({
       const { position, i } = event.detail;
       const sequenceName = alignmentData[i]?.name || "Unknown";
       onResidueClick(sequenceName, i, position);
-      
+
       // Highlight entire row
       const highlight = {
         id: 'row-highlight',
@@ -95,18 +101,22 @@ export function MSADisplay({
     // Residue hover handler - THIS IS THE KEY EVENT
     const handleResidueMouseEnter = (event: any) => {
       const { position, i } = event.detail;
-      
+
       if (i >= 0 && position >= 0 && i < alignmentData.length) {
         setHoveredCell({ rowIndex: i, position });
-        
+
         const sequenceName = alignmentData[i]?.name || "Unknown";
         onResidueHover(sequenceName, i, position);
       }
     };
 
     // Clear hover when mouse leaves a residue
+    // const handleResidueMouseLeave = (event: any) => {
+    //   setHoveredCell(null);
+    // };
     const handleResidueMouseLeave = (event: any) => {
       setHoveredCell(null);
+      onResidueLeave?.(); // ✨ Call parent handler
     };
 
     // Add all event listeners
@@ -115,12 +125,16 @@ export function MSADisplay({
     msaComponent.addEventListener("onResidueMouseEnter", handleResidueMouseEnter);
     msaComponent.addEventListener("onResidueMouseLeave", handleResidueMouseLeave);
 
+
     return () => {
       msaComponent.removeEventListener("msa-active-label", handleLabelClick);
       msaComponent.removeEventListener("onResidueClick", handleResidueClick);
       msaComponent.removeEventListener("onResidueMouseEnter", handleResidueMouseEnter);
       msaComponent.removeEventListener("onResidueMouseLeave", handleResidueMouseLeave);
     };
+
+    msaComponent.addEventListener("onResidueMouseLeave", handleResidueMouseLeave);
+
   }, [alignmentData, maxLength, onLabelClick, onResidueClick, onResidueHover]);
 
   return (

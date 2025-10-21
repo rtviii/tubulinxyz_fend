@@ -44,27 +44,78 @@ export function MSAPanel({
     }
   };
 
-  const handleResidueClick = (sequenceName: string, rowIndex: number, position: number) => {
+  const handleResidueClick = async (sequenceName: string, rowIndex: number, position: number) => {
     setActiveLabel(sequenceName);
     const seq = registry.getSequenceByRow(rowIndex);
     
-    let logMsg = `EVENT: onResidueClick | Seq: "${sequenceName}" (Row ${rowIndex}) | Pos: ${position}`;
-    if (seq?.origin.type === 'pdb') {
-      logMsg += ` | PDB: ${seq.origin.pdbId} Chain: ${seq.origin.chainId}`;
+    let logMsg = `EVENT: onResidueClick | Seq: "${sequenceName}" (Row ${rowIndex}) | MSA Pos: ${position}`;
+    
+    // ✨ Sync with Molstar if this is a PDB sequence
+    if (seq?.origin.type === 'pdb' && seq.origin.pdbId && seq.origin.chainId) {
+      const { pdbId, chainId, positionMapping } = seq.origin;
+      
+      const originalResidue = positionMapping?.[position];
+      
+      if (originalResidue !== undefined && molstarService?.controller) {
+        logMsg += ` → ${pdbId}:${chainId}:${originalResidue}`;
+        
+        try {
+          // Focus on the clicked residue
+          await molstarService.controller.focusOnResidues(
+            pdbId,
+            chainId,
+            originalResidue,
+            originalResidue
+          );
+          console.log(`🎯 Focused on ${pdbId} chain ${chainId} residue ${originalResidue}`);
+        } catch (error) {
+          console.error('Failed to focus in Molstar:', error);
+        }
+      } else {
+        logMsg += ` → ${pdbId}:${chainId} (gap)`;
+      }
     }
     
     setLastEventLog(logMsg);
   };
 
-  const handleResidueHover = (sequenceName: string, rowIndex: number, position: number) => {
+  const handleResidueHover = async (sequenceName: string, rowIndex: number, position: number) => {
     const seq = registry.getSequenceByRow(rowIndex);
     
-    let logMsg = `EVENT: onResidueMouseEnter | Seq: "${sequenceName}" (Row ${rowIndex}) | Pos: ${position}`;
-    if (seq?.origin.type === 'pdb') {
-      logMsg += ` | PDB: ${seq.origin.pdbId} Chain: ${seq.origin.chainId}`;
+    let logMsg = `EVENT: onResidueMouseEnter | Seq: "${sequenceName}" (Row ${rowIndex}) | MSA Pos: ${position}`;
+    
+    // ✨ Sync with Molstar if this is a PDB sequence
+    if (seq?.origin.type === 'pdb' && seq.origin.pdbId && seq.origin.chainId) {
+      const { pdbId, chainId, positionMapping } = seq.origin;
+      
+      // Map MSA position to original chain residue
+      const originalResidue = positionMapping?.[position];
+      
+      if (originalResidue !== undefined && molstarService?.controller) {
+        logMsg += ` → ${pdbId}:${chainId}:${originalResidue}`;
+        
+        try {
+          await molstarService.controller.hoverResidue(pdbId, chainId, originalResidue, true);
+          console.log(`🎯 Highlighted ${pdbId} chain ${chainId} residue ${originalResidue}`);
+        } catch (error) {
+          console.error('Failed to highlight in Molstar:', error);
+        }
+      } else {
+        logMsg += ` → ${pdbId}:${chainId} (gap)`;
+      }
     }
     
     setLastEventLog(logMsg);
+  };
+
+  const handleResidueLeave = async () => {
+    if (molstarService?.controller) {
+      try {
+        await molstarService.controller.hoverResidue('', '', 0, false);
+      } catch (error) {
+        console.error('Failed to clear Molstar highlight:', error);
+      }
+    }
   };
 
   return (
@@ -80,6 +131,7 @@ export function MSAPanel({
               onLabelClick={handleLabelClick}
               onResidueClick={handleResidueClick}
               onResidueHover={handleResidueHover}
+              onResidueLeave={handleResidueLeave}
             />
             
             <CustomSequenceInput 
