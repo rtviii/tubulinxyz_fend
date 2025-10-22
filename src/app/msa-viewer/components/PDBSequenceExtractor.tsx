@@ -14,19 +14,27 @@ interface ChainInfo {
 }
 
 interface PDBSequenceExtractorProps {
-  molstarService: MolstarService | null;
+  mainService: MolstarService | null;
+  auxiliaryService: MolstarService | null;
   registry: ReturnType<typeof useSequenceStructureRegistry>;
 }
 
-export function PDBSequenceExtractor({ molstarService, registry }: PDBSequenceExtractorProps) {
+export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }: PDBSequenceExtractorProps) {
   const [pdbId, setPdbId] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [chains, setChains] = useState<ChainInfo[]>([]);
   const [loadedPdbId, setLoadedPdbId] = useState<string | null>(null);
   const [aligningChain, setAligningChain] = useState<string | null>(null);
+  const [selectedViewer, setSelectedViewer] = useState<'main' | 'auxiliary'>('main');
 
   const handleLoadStructure = async () => {
-    if (!pdbId.trim() || !molstarService) return;
+    if (!pdbId.trim()) return;
+    
+    const molstarService = selectedViewer === 'main' ? mainService : auxiliaryService;
+    if (!molstarService) {
+      alert(`${selectedViewer === 'main' ? 'Main' : 'Auxiliary'} viewer not initialized`);
+      return;
+    }
 
     const pdbIdUpper = pdbId.trim().toUpperCase();
     setIsLoading(true);
@@ -47,7 +55,7 @@ export function PDBSequenceExtractor({ molstarService, registry }: PDBSequenceEx
         return;
       }
 
-      registry.registerStructure(pdbIdUpper, allChains);
+      registry.registerStructure(pdbIdUpper, allChains, selectedViewer);
 
       const chainInfos: ChainInfo[] = [];
       for (const chainId of allChains) {
@@ -69,49 +77,55 @@ export function PDBSequenceExtractor({ molstarService, registry }: PDBSequenceEx
 
   const handleAlignChain = async (chainInfo: ChainInfo) => {
     if (!loadedPdbId) return;
+    
+    const molstarService = selectedViewer === 'main' ? mainService : auxiliaryService;
+    if (!molstarService) return;
 
     setAligningChain(chainInfo.chainId);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/msaprofile/sequence`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sequence: chainInfo.sequence,
-          sequence_id: `${loadedPdbId}_${chainInfo.chainId}`,
-          annotations: [],
-        }),
-      });
+        const response = await fetch(`${API_BASE_URL}/msaprofile/sequence`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                sequence: chainInfo.sequence,
+                sequence_id: `${loadedPdbId}_${chainInfo.chainId}`,
+                annotations: [],
+            }),
+        });
 
-      if (!response.ok) {
-        throw new Error(`Alignment failed: ${response.status}`);
-      }
+        if (!response.ok) {
+            throw new Error(`Alignment failed: ${response.status}`);
+        }
 
-      const result = await response.json();
-      
-      const positionMapping: Record<number, number> = {};
-      result.mapping.forEach((originalResidue: number, alignedPos: number) => {
-        if (originalResidue !== -1) {
-          positionMapping[alignedPos] = originalResidue;
-        }
-      });
-      
-      registry.addSequence(
-        `${loadedPdbId}_${chainInfo.chainId}`,
-        `${loadedPdbId}_${chainInfo.chainId}`,
-        result.aligned_sequence,
-        {
-          type: 'pdb',
-          pdbId: loadedPdbId,
-          chainId: chainInfo.chainId,
-          positionMapping: positionMapping
-        }
-      );
+        const result = await response.json();
+        
+        const positionMapping: Record<number, number> = {};
+        result.mapping.forEach((originalResidue: number, alignedPos: number) => {
+            if (originalResidue !== -1) {
+                positionMapping[alignedPos] = originalResidue;
+            }
+        });
+        
+        registry.addSequence(
+            `${loadedPdbId}_${chainInfo.chainId}`,
+            `${loadedPdbId}_${chainInfo.chainId}`,
+            result.aligned_sequence,
+            {
+                type: 'pdb',
+                pdbId: loadedPdbId,
+                chainId: chainInfo.chainId,
+                positionMapping: positionMapping
+            }
+        );
+
+        await molstarService.controller.isolateChain(loadedPdbId, chainInfo.chainId);
+        
     } catch (err: any) {
-      console.error("Failed to align chain:", err);
-      alert(`Failed to align: ${err.message}`);
+        console.error("Failed to align chain:", err);
+        alert(`Failed to align: ${err.message}`);
     } finally {
-      setAligningChain(null);
+        setAligningChain(null);
     }
   };
 
@@ -125,6 +139,18 @@ export function PDBSequenceExtractor({ molstarService, registry }: PDBSequenceEx
       <h3 className="text-sm font-semibold mb-2 text-gray-800">
         Load Structure
       </h3>
+
+      <div className="mb-2">
+        <label className="block text-xs font-medium text-gray-600 mb-1">Target Viewer</label>
+        <select
+          value={selectedViewer}
+          onChange={(e) => setSelectedViewer(e.target.value as 'main' | 'auxiliary')}
+          className="w-full p-1.5 border border-gray-300 rounded-md text-sm"
+        >
+          <option value="main">Main Viewer</option>
+          <option value="auxiliary">Auxiliary Viewer</option>
+        </select>
+      </div>
 
       <div className="flex gap-2 mb-2">
         <div className="flex-grow">
@@ -159,7 +185,6 @@ export function PDBSequenceExtractor({ molstarService, registry }: PDBSequenceEx
             </div>
           </div>
           
-          {/* Removed max-h and overflow-y to let parent scroll */}
           <div className="space-y-1.5 pr-1">
             {chains.map((chain) => {
               const isAligned = alignedChainIds.has(chain.chainId);
@@ -168,7 +193,6 @@ export function PDBSequenceExtractor({ molstarService, registry }: PDBSequenceEx
               return (
                 <div
                   key={chain.chainId}
-                  // Removed border, using just bg and rounded
                   className={`flex items-start gap-2 p-1.5 rounded-md transition-all ${
                     isAligned 
                       ? 'bg-green-50' 
@@ -185,11 +209,10 @@ export function PDBSequenceExtractor({ molstarService, registry }: PDBSequenceEx
                       </span>
                       {isAligned && existingSeq && (
                         <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
-                          ✓ Row {existingSeq.rowIndex + 1}
+                          Row {existingSeq.rowIndex + 1}
                         </span>
                       )}
                     </div>
-                    {/* Brought back sequence preview */}
                     <div className="text-xs font-mono text-gray-600">
                       <div className="bg-white px-1 py-1 rounded border border-gray-200 overflow-hidden">
                         {chain.sequence.substring(0, 50)}

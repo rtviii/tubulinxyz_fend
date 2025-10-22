@@ -33,8 +33,7 @@ interface MSADisplayProps {
 
 // State types for highlighting
 interface MsaHighlight {
-  msaKey: string;
-  rowIndex: number;
+  seqId: string;
 }
 interface MsaHover extends MsaHighlight {
   position: number;
@@ -101,26 +100,24 @@ export function MSADisplay({
   activeAnnotations
 }: MSADisplayProps) {
 
-  const [activeRow, setActiveRow] = useState<MsaHighlight | null>(null);
+  const [activeSeq, setActiveSeq] = useState<MsaHighlight | null>(null);
   const [hoveredCell, setHoveredCell] = useState<MsaHover | null>(null);
 
-  // Track refs for setting data
   const trackRefs = useRef<{ [key: string]: any }>({});
 
-  // Event handlers to be passed to MsaInstance
-  const handleLabelClick = (label: string, seqId: string, msaKey: string, rowIndex: number) => {
+  const handleLabelClick = (label: string, seqId: string) => {
     onLabelClick(label, seqId);
-    setActiveRow({ msaKey, rowIndex });
+    setActiveSeq({ seqId });
   };
 
-  const handleResidueClick = (seqId: string, position: number, msaKey: string, rowIndex: number) => {
+  const handleResidueClick = (seqId: string, position: number) => {
     onResidueClick(seqId, position);
-    setActiveRow({ msaKey, rowIndex });
+    setActiveSeq({ seqId });
   };
 
-  const handleResidueHover = (seqId: string, position: number, msaKey: string, rowIndex: number) => {
+  const handleResidueHover = (seqId: string, position: number) => {
     onResidueHover(seqId, position);
-    setHoveredCell({ msaKey, rowIndex, position });
+    setHoveredCell({ seqId, position });
   };
 
   const handleResidueLeave = () => {
@@ -128,12 +125,9 @@ export function MSADisplay({
     setHoveredCell(null);
   };
 
-  // Define label width once
   const labelWidthPx = 120;
-  const labelWidthStr = `${labelWidthPx}`;
   const navigationPadding = `${labelWidthPx}px`;
 
-  // Set track data when annotations change
   useEffect(() => {
     Object.keys(trackRefs.current).forEach(annotationId => {
       const track = trackRefs.current[annotationId];
@@ -148,7 +142,7 @@ export function MSADisplay({
   }, [activeAnnotations]);
 
   return (
-    <div style={{ width: "100%", }}>
+    <div style={{ width: "100%" }}>
       <nightingale-manager style={{ width: "100%", overflow: "visible" }}>
         <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
 
@@ -168,34 +162,13 @@ export function MSADisplay({
             />
           </div>
 
-          {/* Master MSA Track */}
-          {masterSequences.length > 0 && (
-            <div style={{ marginBottom: '4px' }}>
-              <MsaTrack
-                trackId="master-msa"
-                title={`Master (${masterSequences.length})`}
-                sequences={masterSequences}
-                maxLength={maxLength}
-                labelWidthPx={labelWidthPx}
-                labelWidthStr={labelWidthStr}
-                activeRow={activeRow}
-                hoveredCell={hoveredCell}
-                onLabelClick={handleLabelClick}
-                onResidueClick={handleResidueClick}
-                onResidueHover={handleResidueHover}
-                onResidueLeave={handleResidueLeave}
-                isMaster={true}
-              />
-            </div>
-          )}
-
-          {/* Active Annotation Tracks */}
+          {/* Annotation Tracks */}
           {Array.from(activeAnnotations).map(annotationId => {
             const annotation = annotationData[annotationId as keyof typeof annotationData];
             if (!annotation) return null;
 
             return (
-              <div key={annotationId} style={{ marginBottom: '4px' }}>
+              <div key={annotationId} style={{ marginBottom: '2px' }}>
                 <AnnotationTrack
                   trackId={annotationId}
                   title={annotation.name}
@@ -210,26 +183,43 @@ export function MSADisplay({
             );
           })}
 
-          {/* Added Sequence Tracks */}
-          {addedSequenceGroups.map((group, groupIndex) => (
-            <div key={groupIndex} style={{ marginBottom: '4px' }}>
-              <MsaTrack
-                trackId={`added-${groupIndex}`}
-                title={`${group.title} (${group.sequences.length})`}
-                sequences={group.sequences}
+          {/* Master Sequences */}
+          {masterSequences.map((seq) => (
+            <div key={seq.id} style={{ marginBottom: '1px' }}>
+              <SingleSequenceTrack
+                sequence={seq}
                 maxLength={maxLength}
                 labelWidthPx={labelWidthPx}
-                labelWidthStr={labelWidthStr}
-                activeRow={activeRow}
+                activeSeq={activeSeq}
                 hoveredCell={hoveredCell}
                 onLabelClick={handleLabelClick}
                 onResidueClick={handleResidueClick}
                 onResidueHover={handleResidueHover}
                 onResidueLeave={handleResidueLeave}
-                isMaster={false}
+                isMaster={true}
               />
             </div>
           ))}
+
+          {/* Added Sequences */}
+          {addedSequenceGroups.flatMap(group => 
+            group.sequences.map(seq => (
+              <div key={seq.id} style={{ marginBottom: '1px' }}>
+                <SingleSequenceTrack
+                  sequence={seq}
+                  maxLength={maxLength}
+                  labelWidthPx={labelWidthPx}
+                  activeSeq={activeSeq}
+                  hoveredCell={hoveredCell}
+                  onLabelClick={handleLabelClick}
+                  onResidueClick={handleResidueClick}
+                  onResidueHover={handleResidueHover}
+                  onResidueLeave={handleResidueLeave}
+                  isMaster={false}
+                />
+              </div>
+            ))
+          )}
         </div>
       </nightingale-manager>
     </div>
@@ -259,39 +249,42 @@ function AnnotationTrack({
   trackRefs
 }: AnnotationTrackProps) {
   return (
-    <div style={{ display: 'flex', alignItems: 'stretch', width: '100%' }}>
-      {/* Label */}
+    <div style={{ display: 'flex', width: '100%', height: '20px' }}>
       <div
         style={{
           width: `${labelWidthPx}px`,
-          padding: '6px 8px', // Consistent padding
+          minWidth: `${labelWidthPx}px`,
+          height: '20px',
+          padding: '2px 6px',
           display: 'flex',
           alignItems: 'center',
-          fontSize: '11px',
+          fontSize: '10px',
           fontWeight: '500',
           color: '#374151',
-          userSelect: 'none',
-          flexShrink: 0,
           backgroundColor: '#f9fafb',
+          boxSizing: 'border-box',
         }}
       >
         <div
           style={{
-            width: '8px',
-            height: '8px',
+            width: '6px',
+            height: '6px',
             backgroundColor: color,
             borderRadius: shape === 'circle' ? '50%' : '2px',
-            marginRight: '6px',
+            marginRight: '4px',
             flexShrink: 0
           }}
         />
-        <span style={{ whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+        <div style={{ 
+          // overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
           {title}
-        </span>
+        </div>
       </div>
 
-      {/* Track */}
-      <div style={{ flex: 1, lineHeight: 0 }}>
+      <div style={{ flex: 1, height: '20px', lineHeight: 0 }}>
         <nightingale-track
           ref={el => trackRefs.current[trackId] = el}
           height="20"
@@ -307,67 +300,55 @@ function AnnotationTrack({
   );
 }
 
-// MSA Track Component
-interface MsaTrackProps {
-  trackId: string;
-  title: string;
-  sequences: SequenceData[];
+// Single Sequence Track Component
+interface SingleSequenceTrackProps {
+  sequence: SequenceData;
   maxLength: number;
   labelWidthPx: number;
-  labelWidthStr: string;
-  activeRow: MsaHighlight | null;
+  activeSeq: MsaHighlight | null;
   hoveredCell: MsaHover | null;
-  onLabelClick: (label: string, seqId: string, trackId: string, rowIndex: number) => void;
-  onResidueClick: (seqId: string, position: number, trackId: string, rowIndex: number) => void;
-  onResidueHover: (seqId: string, position: number, trackId: string, rowIndex: number) => void;
+  onLabelClick: (label: string, seqId: string) => void;
+  onResidueClick: (seqId: string, position: number) => void;
+  onResidueHover: (seqId: string, position: number) => void;
   onResidueLeave: () => void;
   isMaster: boolean;
 }
 
-function MsaTrack({
-  trackId,
-  title,
-  sequences,
+function SingleSequenceTrack({
+  sequence,
   maxLength,
   labelWidthPx,
-  labelWidthStr,
-  activeRow,
+  activeSeq,
   hoveredCell,
   onLabelClick,
   onResidueClick,
   onResidueHover,
   onResidueLeave,
   isMaster
-}: MsaTrackProps) {
+}: SingleSequenceTrackProps) {
 
   const msaRef = useRef<any>(null);
+  const rowHeight = 18;
 
-  // Setup event listeners
   useEffect(() => {
     const msaComponent = msaRef.current;
-    if (!msaComponent || sequences.length === 0) return;
+    if (!msaComponent) return;
 
-    msaComponent.data = sequences;
+    msaComponent.data = [sequence];
 
-    const handleLabelClick = (event: any) => {
-      const { label } = event.detail;
-      const rowIndex = sequences.findIndex((seq) => seq.name === label);
-      if (rowIndex !== -1) {
-        onLabelClick(label, sequences[rowIndex].id, trackId, rowIndex);
-      }
+    const handleLabelClick = () => {
+      onLabelClick(sequence.name, sequence.id);
     };
 
     const handleResidueClick = (event: any) => {
-      const { position, i } = event.detail;
-      if (i >= 0 && i < sequences.length) {
-        onResidueClick(sequences[i].id, position, trackId, i);
-      }
+      const { position } = event.detail;
+      onResidueClick(sequence.id, position);
     };
 
     const handleResidueMouseEnter = (event: any) => {
-      const { position, i } = event.detail;
-      if (i >= 0 && position >= 0 && i < sequences.length) {
-        onResidueHover(sequences[i].id, position, trackId, i);
+      const { position } = event.detail;
+      if (position >= 0) {
+        onResidueHover(sequence.id, position);
       }
     };
 
@@ -386,31 +367,28 @@ function MsaTrack({
       msaComponent.removeEventListener("onResidueMouseEnter", handleResidueMouseEnter);
       msaComponent.removeEventListener("onResidueMouseLeave", handleResidueMouseLeave);
     };
-  }, [sequences, trackId, onLabelClick, onResidueClick, onResidueHover, onResidueLeave]);
+  }, [sequence, onLabelClick, onResidueClick, onResidueHover, onResidueLeave]);
 
-  // Update features (highlighting)
   useEffect(() => {
     const msaComponent = msaRef.current;
     if (!msaComponent) return;
 
     const features = [];
 
-    // Active row highlight
-    if (activeRow && activeRow.msaKey === trackId) {
+    if (activeSeq && activeSeq.seqId === sequence.id) {
       features.push({
-        id: 'active-row-highlight',
-        sequences: { from: activeRow.rowIndex, to: activeRow.rowIndex },
+        id: 'active-seq-highlight',
+        sequences: { from: 0, to: 0 },
         residues: { from: 1, to: maxLength },
-        fillColor: isMaster ? "rgba(59, 130, 246, 0.2)" : "rgba(34, 197, 94, 0.2)",
+        fillColor: isMaster ? "rgba(59, 130, 246, 0.15)" : "rgba(34, 197, 94, 0.15)",
         borderColor: isMaster ? "#3B82F6" : "#22C55E",
       });
     }
 
-    // Hover cell highlight
-    if (hoveredCell && hoveredCell.msaKey === trackId) {
+    if (hoveredCell && hoveredCell.seqId === sequence.id) {
       features.push({
         id: 'hover-cell-highlight',
-        sequences: { from: hoveredCell.rowIndex, to: hoveredCell.rowIndex },
+        sequences: { from: 0, to: 0 },
         residues: { from: hoveredCell.position + 1, to: hoveredCell.position + 1 },
         fillColor: '#00FF0066',
         borderColor: '#00FF00',
@@ -418,48 +396,42 @@ function MsaTrack({
     }
 
     msaComponent.features = features;
-  }, [msaRef, activeRow, hoveredCell, trackId, maxLength, isMaster]);
-
-  const height = Math.min(200, sequences.length * 16 + 30);
+  }, [msaRef, activeSeq, hoveredCell, sequence.id, maxLength, isMaster]);
 
   return (
-    // In MsaTrack component - replace the main container and label div
-    <div style={{ display: 'flex', alignItems: 'stretch', width: '100%' }}>
-      {/* Label */}
+    <div style={{ display: 'flex', width: '100%', height: `${rowHeight}px` }}>
       <div
+        onClick={() => onLabelClick(sequence.name, sequence.id)}
         style={{
           width: `${labelWidthPx}px`,
-          padding: '8px', // Increased padding
+          minWidth: `${labelWidthPx}px`,
+          height: `${rowHeight}px`,
+          padding: '2px 6px',
           display: 'flex',
-          alignItems: 'center', // Center vertically
-          fontSize: '11px',
+          alignItems: 'center',
+          fontSize: '10px',
           fontWeight: '500',
           color: isMaster ? '#1E40AF' : '#059669',
-          userSelect: 'none',
-          flexShrink: 0,
-          backgroundColor: '#f9fafb', // Light background to distinguish
+          backgroundColor: isMaster ? '#EFF6FF' : '#ECFDF5',
+          cursor: 'pointer',
+          boxSizing: 'border-box',
+          borderLeft: `3px solid ${isMaster ? '#3B82F6' : '#10B981'}`,
         }}
       >
-        <div
-          style={{
-            width: '3px',
-            height: '12px',
-            backgroundColor: isMaster ? '#3B82F6' : '#10B981',
-            marginRight: '6px',
-            flexShrink: 0,
-            borderRadius: '1px'
-          }}
-        />
-        <span style={{ whiteSpace: 'nowrap' }}>
-          {title}
-        </span>
+        <div style={{ 
+          // overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          width: '100%'
+        }}>
+          {sequence.name}
+        </div>
       </div>
 
-      {/* MSA Track */}
-      <div style={{ flex: 1, lineHeight: 0 }}>
+      <div style={{ flex: 1, height: `${rowHeight}px`, lineHeight: 0 }}>
         <nightingale-msa
           ref={msaRef}
-          height={height}
+          height={rowHeight}
           length={maxLength}
           display-start="1"
           display-end={maxLength}

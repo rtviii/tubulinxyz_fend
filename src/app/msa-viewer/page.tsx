@@ -11,21 +11,21 @@ import { useSequenceStructureRegistry } from './hooks/useSequenceStructureSync';
 import { createTubulinClassificationMap } from '@/services/gql_parser';
 import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 import { ControlPanel } from './ControlPanel';
-import { AnnotationsLibrary } from './components/AnnotationsLibrary'; // New component
+import { AnnotationsLibrary } from './components/AnnotationsLibrary';
 
 export default function MSAViewerPage() {
-  const molstarNodeRef = useRef<HTMLDivElement>(null);
+  const mainMolstarNodeRef = useRef<HTMLDivElement>(null);
+  const auxiliaryMolstarNodeRef = useRef<HTMLDivElement>(null);
 
   const mainStructureLoaded = useRef(false);
   const masterSequencesInitialized = useRef(false);
 
-  // State lifted from MSAPanel
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [lastEventLog, setLastEventLog] = useState<string | null>(null);
-  // New state for annotations
   const [activeAnnotations, setActiveAnnotations] = useState<Set<string>>(new Set());
 
-  const { service: mainService, isInitialized: mainInitialized } = useMolstarService(molstarNodeRef, 'main');
+  const { service: mainService, isInitialized: mainInitialized } = useMolstarService(mainMolstarNodeRef, 'main');
+  const { service: auxiliaryService, isInitialized: auxiliaryInitialized } = useMolstarService(auxiliaryMolstarNodeRef, 'auxiliary');
 
   const { alignmentData, maxLength, isLoading: loadingAlignment } = useAlignmentData();
   const { areLoaded: componentsLoaded } = useNightingaleComponents();
@@ -45,19 +45,19 @@ export default function MSAViewerPage() {
         const classification = createTubulinClassificationMap(gqlData);
         await mainService.controller.loadStructure(RCSB_ID, classification)
         const chains = mainService.controller.getAllChains(RCSB_ID);
-        
-        await mainService.viewer.representations.stylized_lighting()  
+
+        await mainService.viewer.representations.stylized_lighting()
 
         if (chains.length > 0) {
-          registry.registerStructure(RCSB_ID, chains);
-          mainStructureLoaded.current =  true;
+          registry.registerStructure(RCSB_ID, chains, 'main');
+          mainStructureLoaded.current = true;
         }
       } catch (error) {
-        console.error('Failed to load 5CJO:', error);
+        console.error('Failed to load 5JCO:', error);
         mainStructureLoaded.current = false;
       }
     };
-    
+
     loadDefault();
   }, [mainInitialized, mainService, registry]);
 
@@ -69,55 +69,55 @@ export default function MSAViewerPage() {
     alignmentData.forEach((seq) => {
       registry.addSequence(seq.name, seq.name, seq.sequence, { type: 'master' });
     });
-    
+
     masterSequencesInitialized.current = true;
   }, [alignmentData, registry]);
 
   return (
     <div className="h-screen flex flex-col p-3 bg-gray-50">
-      
-      {/* New top section with annotations library and MSA */}
+
       <div className="flex flex-row gap-3 mb-3" style={{ height: '40vh' }}>
-        {/* Annotations Library - Left side */}
         <div className="w-1/4">
-          <AnnotationsLibrary 
+          <AnnotationsLibrary
             activeAnnotations={activeAnnotations}
             setActiveAnnotations={setActiveAnnotations}
           />
         </div>
-        
-        {/* MSA Panel - Right side (reduced width) */}
+
         <div className="w-3/4">
           <MSAPanel
             maxLength={maxLength}
             areComponentsLoaded={componentsLoaded}
-            molstarService={mainService}
+            mainService={mainService}
+            auxiliaryService={auxiliaryService}
             registry={registry}
             setActiveLabel={setActiveLabel}
             setLastEventLog={setLastEventLog}
-            activeAnnotations={activeAnnotations} // Pass active annotations
+            activeAnnotations={activeAnnotations}
           />
         </div>
       </div>
-      
-      {/* Bottom section with controls and structure viewer */}
+
       <div className="flex-1 flex flex-row gap-3 min-h-0">
-        {/* Left Control Panel (1/3) */}
         <div className="w-1/3 flex flex-col gap-3">
+
           <ControlPanel
             molstarService={mainService}
+            auxiliaryService={auxiliaryService}
             registry={registry}
             activeLabel={activeLabel}
             lastEventLog={lastEventLog}
           />
         </div>
 
-        {/* Right Structure Viewer (2/3) */}
         <div className="w-2/3 h-full min-h-0">
           <StructureViewerPanel
-            molstarNodeRef={molstarNodeRef}
+            mainNodeRef={mainMolstarNodeRef}
+            auxiliaryNodeRef={auxiliaryMolstarNodeRef}
             mainInitialized={mainInitialized}
+            auxiliaryInitialized={auxiliaryInitialized}
             mainService={mainService}
+            auxiliaryService={auxiliaryService}
             registry={registry}
           />
         </div>

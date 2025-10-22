@@ -22,9 +22,9 @@ export interface SequenceEntry {
 interface StructureInfo {
   pdbId: string;
   chainIds: string[];
+  viewerId: 'main' | 'auxiliary'; // NEW: track which viewer this structure uses
 }
 
-// Interface for grouped sequences
 export interface AddedSequenceGroup {
   title: string;
   sequences: SequenceEntry[];
@@ -34,10 +34,10 @@ export function useSequenceStructureRegistry() {
   const [sequences, setSequences] = useState<Map<string, SequenceEntry>>(new Map());
   const [structures, setStructures] = useState<Map<string, StructureInfo>>(new Map());
 
-  const registerStructure = useCallback((pdbId: string, chainIds: string[]) => {
+  const registerStructure = useCallback((pdbId: string, chainIds: string[], viewerId: 'main' | 'auxiliary' = 'main') => {
     setStructures(prev => {
       const next = new Map(prev);
-      next.set(pdbId, { pdbId, chainIds });
+      next.set(pdbId, { pdbId, chainIds, viewerId });
       return next;
     });
   }, []);
@@ -46,12 +46,9 @@ export function useSequenceStructureRegistry() {
     (id: string, name: string, sequence: string, origin: SequenceOrigin) => {
       setSequences(prev => {
         const next = new Map(prev);
-        // Re-calculate row index based on current size to ensure it's appended
         const rowIndex = next.size;
-        // Check for duplicates
         if (next.has(id)) {
           console.warn(`Sequence with id ${id} already exists. Overwriting.`);
-          // Find old row index to maintain it, if possible
           const oldEntry = next.get(id);
           const oldRowIndex = oldEntry ? oldEntry.rowIndex : rowIndex;
           next.set(id, { id, name, sequence, rowIndex: oldRowIndex, origin });
@@ -69,10 +66,8 @@ export function useSequenceStructureRegistry() {
       const next = new Map(prev);
       next.delete(id);
       
-      // Reindex remaining sequences
       let index = 0;
       const reindexed = new Map<string, SequenceEntry>();
-      // Sort by original row index before re-indexing to maintain order
       Array.from(next.values())
         .sort((a, b) => a.rowIndex - b.rowIndex)
         .forEach((seq) => {
@@ -103,7 +98,6 @@ export function useSequenceStructureRegistry() {
     return getOrderedSequences().filter(seq => seq.origin.type === 'custom');
   }, [getOrderedSequences]);
 
-  // This is the function that was added
   const getAddedSequenceGroups = useCallback((): AddedSequenceGroup[] => {
     const added = getAddedSequences();
     const pdbGroups: Record<string, SequenceEntry[]> = {};
@@ -123,7 +117,6 @@ export function useSequenceStructureRegistry() {
   
     const groups: AddedSequenceGroup[] = [];
   
-    // Add PDB groups, sorted by PDB ID
     Object.keys(pdbGroups).sort().forEach(pdbId => {
       groups.push({
         title: `Structure: ${pdbId}`,
@@ -131,7 +124,6 @@ export function useSequenceStructureRegistry() {
       });
     });
   
-    // Add Custom group
     if (customSequences.length > 0) {
       groups.push({
         title: 'Custom Sequences',
@@ -227,7 +219,7 @@ export function useSequenceStructureRegistry() {
     getAddedSequences,
     getPDBSequences,
     getCustomSequences,
-    getAddedSequenceGroups, // <-- Make sure this is in the return object
+    getAddedSequenceGroups,
     getSequenceByRow,
     getSequenceById,
     getSequenceByChain,

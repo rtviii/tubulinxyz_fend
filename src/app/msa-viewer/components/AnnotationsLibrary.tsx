@@ -85,11 +85,11 @@ export function AnnotationsLibrary({ activeAnnotations, setActiveAnnotations }: 
 
   return (
     <div className="h-full border rounded-lg bg-white flex flex-col">
-      {/* Compact Header */}
+      {/* Compact Header
       <div className="p-2 border-b bg-gray-50">
         <h2 className="text-sm font-semibold text-gray-800">Annotations</h2>
         <p className="text-xs text-gray-600">Toggle tracks</p>
-      </div>
+      </div> */}
 
       {/* Compact Annotations List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">

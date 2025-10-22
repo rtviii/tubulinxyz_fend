@@ -792,4 +792,87 @@ export class MolstarController {
     dispose() {
         this.viewer.dispose();
     }
+    async isolateChain(pdbId: string, chainId: string): Promise<void> {
+        if (!this.viewer.ctx) return;
+
+        const state = this.getState();
+        const pdbIdUpper = pdbId.toUpperCase();
+        const components = state.molstarRefs.components;
+
+        // Get all polymer components for this structure
+        const polymerComponents = Object.entries(components)
+            .filter(([, component]) =>
+                component.type === 'polymer' &&
+                component.pdbId === pdbIdUpper
+            )
+            .map(([key, component]) => ({
+                key,
+                component: component as PolymerComponent
+            }));
+
+        // Get all non-polymer components for this structure
+        const nonPolymerComponents = Object.entries(components)
+            .filter(([, component]) =>
+                component.type === 'ligand' &&
+                component.pdbId === pdbIdUpper
+            )
+            .map(([key, component]) => ({
+                key,
+                component: component as LigandComponent
+            }));
+
+        console.log(`Isolating chain ${chainId} in ${pdbIdUpper}:`);
+        console.log(`- Found ${polymerComponents.length} polymer chains`);
+        console.log(`- Found ${nonPolymerComponents.length} non-polymer components`);
+
+        // Hide all polymer chains except the selected one
+        for (const { component } of polymerComponents) {
+            if (component.chainId !== chainId) {
+                await this.setChainVisibility(pdbIdUpper, component.chainId, false);
+                console.log(`- Hid polymer chain: ${component.chainId}`);
+            }
+        }
+
+        // Hide ALL non-polymer components
+        for (const { component } of nonPolymerComponents) {
+            await this.setNonPolymerVisibility(pdbIdUpper, component.uniqueKey, false);
+            console.log(`- Hid non-polymer: ${component.uniqueKey}`);
+        }
+
+        // Show the selected chain
+        await this.setChainVisibility(pdbIdUpper, chainId, true);
+        console.log(`- Showing polymer chain: ${chainId}`);
+
+        console.log(`Successfully isolated chain ${chainId} in structure ${pdbIdUpper}`);
+    }
+    // In molstar_controller.tsx - add this method as well
+
+    /**
+     * Show all polymer chains in a structure
+     */
+    async showAllChains(pdbId: string): Promise<void> {
+        if (!this.viewer.ctx) return;
+
+        const state = this.getState();
+        const pdbIdUpper = pdbId.toUpperCase();
+        const components = state.molstarRefs.components;
+
+        // Get all polymer components for this structure
+        const polymerComponents = Object.entries(components)
+            .filter(([, component]) =>
+                component.type === 'polymer' &&
+                component.pdbId === pdbIdUpper
+            )
+            .map(([key, component]) => ({
+                key,
+                component: component as PolymerComponent
+            }));
+
+        // Show all chains
+        for (const { key, component } of polymerComponents) {
+            await this.setChainVisibility(pdbIdUpper, component.chainId, true);
+        }
+
+        console.log(`Showing all chains in structure ${pdbIdUpper}`);
+    }
 }

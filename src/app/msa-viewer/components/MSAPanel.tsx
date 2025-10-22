@@ -6,7 +6,8 @@ import { MolstarService } from '@/components/molstar/molstar_service';
 interface MSAPanelProps {
   maxLength: number;
   areComponentsLoaded: boolean;
-  molstarService: MolstarService | null;
+  mainService: MolstarService | null;
+  auxiliaryService: MolstarService | null;
   registry: ReturnType<typeof useSequenceStructureRegistry>;
   setActiveLabel: (label: string | null) => void;
   setLastEventLog: (log: string | null) => void;
@@ -16,7 +17,8 @@ interface MSAPanelProps {
 export function MSAPanel({ 
   maxLength, 
   areComponentsLoaded, 
-  molstarService, 
+  mainService,
+  auxiliaryService,
   registry,
   setActiveLabel,
   setLastEventLog,
@@ -46,7 +48,8 @@ export function MSAPanel({
     
     let logMsg = `Label clicked: "${label}"`;
     if (seq?.origin.type === 'pdb') {
-      logMsg += ` | ${seq.origin.pdbId} Chain ${seq.origin.chainId}`;
+      const structureInfo = registry.getStructureInfo(seq.origin.pdbId);
+      logMsg += ` | ${seq.origin.pdbId} Chain ${seq.origin.chainId} [${structureInfo?.viewerId || 'main'}]`;
     } else if (seq?.origin.type === 'custom') {
       logMsg += ` | Custom sequence`;
     }
@@ -58,65 +61,93 @@ export function MSAPanel({
     if (!seq) return;
     
     setActiveLabel(seq.name);
-    let logMsg = `Residue clicked: "${seq.name}" | MSA Pos ${position}`;
     
-    if (seq?.origin.type === 'pdb' && seq.origin.pdbId && seq.origin.chainId) {
-      const { pdbId, chainId, positionMapping } = seq.origin;
-      const originalResidue = positionMapping?.[position];
+    // Broadcast click to ALL structures based on MSA column position
+    const allPdbSequences = registry.getPDBSequences();
+    const focusTasks = [];
+    const logParts = [`Residue clicked: "${seq.name}" | MSA Pos ${position}`];
+    
+    for (const pdbSeq of allPdbSequences) {
+      if (pdbSeq.origin.type !== 'pdb') continue;
       
-      if (originalResidue !== undefined && molstarService?.controller) {
-        logMsg += ` -> ${pdbId}:${chainId}:${originalResidue}`;
+      const { pdbId, chainId, positionMapping } = pdbSeq.origin;
+      const structureInfo = registry.getStructureInfo(pdbId);
+      
+      if (!positionMapping || !structureInfo) continue;
+      
+      const originalResidue = positionMapping[position];
+      
+      if (originalResidue !== undefined) {
+        const molstarService = structureInfo.viewerId === 'auxiliary' ? auxiliaryService : mainService;
         
-        try {
-          await molstarService.controller.focusOnResidues(pdbId, chainId, originalResidue, originalResidue);
-        } catch (error) {
-          console.error('Failed to focus in Molstar:', error);
+        if (molstarService?.controller) {
+          logParts.push(`${pdbId}:${chainId}:${originalResidue}[${structureInfo.viewerId}]`);
+          focusTasks.push(
+            molstarService.controller.focusOnResidues(pdbId, chainId, originalResidue, originalResidue)
+              .catch(error => console.error(`Failed to focus ${pdbId}:${chainId}:${originalResidue}:`, error))
+          );
         }
-      } else {
-        logMsg += ` -> ${pdbId}:${chainId} (gap)`;
       }
     }
-    setLastEventLog(logMsg);
+    
+    await Promise.all(focusTasks);
+    setLastEventLog(logParts.join(' | '));
   };
 
   const handleResidueHover = async (sequenceId: string, position: number) => {
-    const seq = registry.getSequenceById(sequenceId);
-    if (!seq) return;
+    // Broadcast hover to ALL structures based on MSA column position
+    const allPdbSequences = registry.getPDBSequences();
+    const highlightTasks = [];
     
-    let logMsg = `Residue hover: "${seq.name}" | MSA Pos ${position}`;
-    
-    if (seq?.origin.type === 'pdb' && seq.origin.pdbId && seq.origin.chainId) {
-      const { pdbId, chainId, positionMapping } = seq.origin;
-      const originalResidue = positionMapping?.[position];
+    for (const seq of allPdbSequences) {
+      if (seq.origin.type !== 'pdb') continue;
       
-      if (originalResidue !== undefined && molstarService?.controller) {
-        logMsg += ` -> ${pdbId}:${chainId}:${originalResidue}`;
+      const { pdbId, chainId, positionMapping } = seq.origin;
+      const structureInfo = registry.getStructureInfo(pdbId);
+      
+      if (!positionMapping || !structureInfo) continue;
+      
+      const originalResidue = positionMapping[position];
+      
+      if (originalResidue !== undefined) {
+        const molstarService = structureInfo.viewerId === 'auxiliary' ? auxiliaryService : mainService;
         
-        try {
-          await molstarService.controller.hoverResidue(pdbId, chainId, originalResidue, true);
-        } catch (error) {
-          console.error('Failed to highlight in Molstar:', error);
+        if (molstarService?.controller) {
+          highlightTasks.push(
+            molstarService.controller.hoverResidue(pdbId, chainId, originalResidue, true)
+              .catch(error => console.error(`Failed to highlight ${pdbId}:${chainId}:${originalResidue}:`, error))
+          );
         }
-      } else {
-        logMsg += ` -> ${pdbId}:${chainId} (gap)`;
       }
     }
+    
+    await Promise.all(highlightTasks);
   };
 
   const handleResidueLeave = async () => {
-    if (molstarService?.controller) {
-      try {
-        await molstarService.controller.hoverResidue('', '', 0, false);
-      } catch (error) {
-        console.error('Failed to clear Molstar highlight:', error);
-      }
+    // Clear highlights from all services
+    const clearTasks = [];
+    
+    if (mainService?.controller) {
+      clearTasks.push(
+        mainService.controller.hoverResidue('', '', 0, false)
+          .catch(error => console.error('Failed to clear main highlight:', error))
+      );
     }
+    
+    if (auxiliaryService?.controller) {
+      clearTasks.push(
+        auxiliaryService.controller.hoverResidue('', '', 0, false)
+          .catch(error => console.error('Failed to clear auxiliary highlight:', error))
+      );
+    }
+    
+    await Promise.all(clearTasks);
   };
 
   return (
     <div className="w-full h-full border rounded-lg p-3 bg-white flex flex-col">
-      {/* Simple header without annotation status */}
-      <h2 className="text-lg font-semibold mb-2">Multiple Sequence Alignment</h2>
+      {/* <h2 className="text-lg font-semibold mb-2">Multiple Sequence Alignment</h2> */}
       
       <div className="flex-1 overflow-x-auto">
         {areComponentsLoaded && (masterSequences.length > 0 || totalAddedSequences > 0) && maxLength > 0 ? (

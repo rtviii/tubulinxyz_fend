@@ -1,5 +1,4 @@
-// components/InputTabs.tsx
-// New file
+// InputTabs.tsx
 import { useState } from 'react';
 import { MolstarService } from '@/components/molstar/molstar_service';
 import { useSequenceStructureRegistry } from './hooks/useSequenceStructureSync';
@@ -7,11 +6,12 @@ import { PDBSequenceExtractor } from './components/PDBSequenceExtractor';
 import { CustomSequenceInput } from './components/CustomSequenceInput';
 
 interface InputTabsProps {
-  molstarService: MolstarService | null;
+  mainService: MolstarService | null;
+  auxiliaryService: MolstarService | null;
   registry: ReturnType<typeof useSequenceStructureRegistry>;
 }
 
-export function InputTabs({ molstarService, registry }: InputTabsProps) {
+export function InputTabs({ mainService, auxiliaryService, registry }: InputTabsProps) {
   const [activeTab, setActiveTab] = useState<'pdb' | 'custom'>('pdb');
 
   const getButtonClass = (tabName: 'pdb' | 'custom') => {
@@ -25,7 +25,6 @@ export function InputTabs({ molstarService, registry }: InputTabsProps) {
 
   return (
     <div className="flex flex-col h-full border rounded-lg bg-white">
-      {/* Tab Buttons */}
       <div className="flex border-b border-gray-300">
         <button
           onClick={() => setActiveTab('pdb')}
@@ -41,10 +40,13 @@ export function InputTabs({ molstarService, registry }: InputTabsProps) {
         </button>
       </div>
 
-      {/* Tab Content */}
       <div className="flex-1 p-2 min-h-0 overflow-y-auto">
         {activeTab === 'pdb' && (
-          <PDBSequenceExtractor molstarService={molstarService} registry={registry} />
+          <PDBSequenceExtractor 
+            mainService={mainService}
+            auxiliaryService={auxiliaryService}
+            registry={registry} 
+          />
         )}
         {activeTab === 'custom' && (
           <CustomSequenceInput registry={registry} />

@@ -139,8 +139,7 @@ export default function TubulinViewerPage() {
   const { isInitialized, service } = useMolstarService(molstarRef, 'main');
   
   // ✨ USE THE NEW HOOK - Clean and simple!
-  const structureLoader = useMolstarStructureLoader(service?.controller || null);
-  
+  const structureLoader = useMolstarStructureLoader(service?.controller)
   const selectedStructure = useAppSelector(selectSelectedStructure);
   useMolstarSync();
 
@@ -168,9 +167,8 @@ export default function TubulinViewerPage() {
     });
   }, [isInitialized, params.rcsb_id, structureLoader]);
 
-  // ✨ CLEAN HANDLERS - Just call the loader!
   const handleStructureSelect = useCallback(async (pdbId: string) => {
-    loadedFromUrl.current = null; // Reset URL tracking
+    loadedFromUrl.current = null; 
     const result = await structureLoader.loadFromRCSB(pdbId);
     
     if (result.success) {
