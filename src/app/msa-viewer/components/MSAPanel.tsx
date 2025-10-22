@@ -83,13 +83,14 @@ export function MSAPanel({
         if (molstarService?.controller) {
           logParts.push(`${pdbId}:${chainId}:${originalResidue}[${structureInfo.viewerId}]`);
           focusTasks.push(
-            molstarService.controller.focusOnResidues(pdbId, chainId, originalResidue, originalResidue)
+            // molstarService.controller.focusOnResidues(pdbId, chainId, originalResidue, originalResidue)
+            //   .catch(error => console.error(`Failed to focus ${pdbId}:${chainId}:${originalResidue}:`, error))
+            molstarService.controller.focusChain (pdbId,chainId)
               .catch(error => console.error(`Failed to focus ${pdbId}:${chainId}:${originalResidue}:`, error))
           );
         }
       }
     }
-    
     await Promise.all(focusTasks);
     setLastEventLog(logParts.join(' | '));
   };
@@ -125,9 +126,7 @@ export function MSAPanel({
   };
 
   const handleResidueLeave = async () => {
-    // Clear highlights from all services
     const clearTasks = [];
-    
     if (mainService?.controller) {
       clearTasks.push(
         mainService.controller.hoverResidue('', '', 0, false)
