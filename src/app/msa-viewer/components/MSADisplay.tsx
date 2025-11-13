@@ -13,13 +13,11 @@ interface AddedSequenceGroup {
   sequences: SequenceData[];
 }
 
-// Event handler types
 type LabelClickHandler = (label: string, seqId: string) => void;
 type ResidueClickHandler = (seqId: string, position: number) => void;
 type ResidueHoverHandler = (seqId: string, position: number) => void;
 type ResidueLeaveHandler = () => void;
 
-// Prop types for the main component
 interface MSADisplayProps {
   masterSequences: SequenceData[];
   addedSequenceGroups: AddedSequenceGroup[];
@@ -468,15 +466,15 @@ function SingleSequenceTrack({
 
     const features = [];
 
-    if (activeSeq && activeSeq.seqId === sequence.id) {
-      features.push({
-        id: 'active-seq-highlight',
-        sequences: { from: 0, to: 0 },
-        residues: { from: 1, to: maxLength },
-        fillColor: isMaster ? "rgba(59, 130, 246, 0.15)" : "rgba(34, 197, 94, 0.15)",
-        borderColor: isMaster ? "#3B82F6" : "#22C55E",
-      });
-    }
+    // if (activeSeq && activeSeq.seqId === sequence.id) {
+    //   features.push({
+    //     id: 'active-seq-highlight',
+    //     sequences: { from: 0, to: 0 },
+    //     residues: { from: 1, to: maxLength },
+    //     fillColor: isMaster ? "rgba(59, 130, 246, 0.15)" : "rgba(34, 197, 94, 0.15)",
+    //     borderColor: isMaster ? "#3B82F6" : "#22C55E",
+    //   });
+    // }
 
     if (hoveredCell && hoveredCell.seqId === sequence.id) {
       features.push({
@@ -599,7 +597,7 @@ function SingleSequenceTrack({
           }}
         >
           <div style={{ padding: '6px' }}>
-            <div style={{ 
+            {/* <div style={{ 
               fontSize: '9px', 
               fontWeight: '600', 
               color: '#6B7280',
@@ -607,7 +605,7 @@ function SingleSequenceTrack({
               paddingLeft: '2px'
             }}>
               Functional Regions
-            </div>
+            </div> */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
               {Object.entries(mockRegionData).map(([regionId, regionInfo]) => (
                 <label
@@ -617,11 +615,11 @@ function SingleSequenceTrack({
                     alignItems: 'center',
                     gap: '6px',
                     padding: '3px 4px',
-                    backgroundColor: enabledRegions.has(regionId) ? '#E0F2FE' : 'white',
-                    borderRadius: '3px',
+                    // backgroundColor: enabledRegions.has(regionId) ? '#E0F2FE' : 'white',
+                    // borderRadius: '3px',
                     cursor: 'pointer',
                     fontSize: '9px',
-                    border: `1px solid ${enabledRegions.has(regionId) ? '#BAE6FD' : '#E5E7EB'}`,
+                    // border: `1px solid ${enabledRegions.has(regionId) ? '#BAE6FD' : '#E5E7EB'}`,
                     transition: 'all 0.15s'
                   }}
                 >
@@ -696,7 +694,7 @@ function SingleSequenceTrack({
                   <div style={{ 
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
-                    overflow: 'hidden'
+                    // overflow: 'hidden'
                   }}>
                     {regionInfo.name}
                   </div>

@@ -256,7 +256,7 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
       </h3>
 
       <div className="mb-2">
-        <label className="block text-xs font-medium text-gray-600 mb-1">Target Viewer</label>
+        {/* <label className="block text-xs font-medium text-gray-600 mb-1">Target Viewer</label> */}
         <select
           value={selectedViewer}
           onChange={(e) => setSelectedViewer(e.target.value as 'main' | 'auxiliary')}
