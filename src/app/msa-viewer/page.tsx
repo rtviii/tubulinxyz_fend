@@ -16,7 +16,6 @@ import { AnnotationsLibrary } from './components/AnnotationsLibrary';
 export default function MSAViewerPage() {
   const mainMolstarNodeRef = useRef<HTMLDivElement>(null);
   const auxiliaryMolstarNodeRef = useRef<HTMLDivElement>(null);
-
   const mainStructureLoaded = useRef(false);
   const masterSequencesInitialized = useRef(false);
 
