@@ -10,6 +10,7 @@ import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/sta
 import { StateSelection } from 'molstar/lib/mol-state';
 import { Structure } from 'molstar/lib/mol-model/structure';
 import { EnhancedTubulinSplitPreset } from './molstar_preset_computed_residues';
+import { applyStylizedLighting } from './colors/stylized-lighting';
 
 
 export class MolstarViewer {
@@ -74,53 +75,9 @@ export class MolstarViewer {
     };
 
     representations = {
-        stylized_lighting: async () => {
-            this.ctx.managers.structure.component.setOptions({
-                ...this.ctx.managers.structure.component.state.options,
-                ignoreLight: true
-            });
-
-            if (this.ctx.canvas3d) {
-                const pp = this.ctx.canvas3d.props.postprocessing;
-                this.ctx.canvas3d.setProps({
-                    postprocessing: {
-                        outline: {
-                            name: 'on',
-                            params:
-                                pp.outline.name === 'on'
-                                    ? pp.outline.params
-                                    : {
-                                        scale: 1,
-                                        color: Color(0x000000),
-                                        threshold: 0.33,
-                                        // @ts-ignore
-                                        includeTransparent: true
-                                    }
-                        },
-                        occlusion: {
-                            name: 'on',
-                            params:
-                                pp.occlusion.name === 'on'
-                                    ? pp.occlusion.params
-                                    : {
-                                        // @ts-ignore
-                                        multiScale: {
-                                            name: 'off',
-                                            params: {}
-                                        },
-                                        radius: 5,
-                                        bias: 0.8,
-                                        blurKernelSize: 15,
-                                        blurDepthBias: 0.5,
-                                        samples: 32,
-                                        resolutionScale: 1,
-                                        color: Color(0x000000)
-                                    }
-                        },
-                        shadow: { name: 'off', params: {} }
-                    }
-                });
-            }
+         stylized_lighting: async () => {
+            if (!this.ctx) return;
+            await applyStylizedLighting(this.ctx);
         }
     }
 

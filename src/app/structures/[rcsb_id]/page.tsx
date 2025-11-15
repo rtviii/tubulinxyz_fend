@@ -3,12 +3,9 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import { useMolstarService } from '@/components/molstar/molstar_service';
 import { MolstarNode } from '@/components/molstar/molstar_spec';
 import { useAppDispatch, useAppSelector } from '@/store/store';
-
 import { selectStructure, selectSelectedStructure, selectIsLoading, selectError, setLoading, setError } from '@/store/slices/tubulin_structures';
-
 import React from 'react';
 import { EntitiesPanel } from '@/components/entities_panel';
-
 import { useParams } from 'next/navigation';
 import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 import { createTubulinClassificationMap } from '@/services/gql_parser';
@@ -29,10 +26,11 @@ function SettingsPanel({
   onStructureSelect: (pdbId: string) => void;
   onBackendStructureSelect: (filename: string) => void;
 }) {
-  const selectedStructure = useAppSelector(selectSelectedStructure);
-  const isLoading = useAppSelector(selectIsLoading);
-  const error = useAppSelector(selectError);
-  const [customPdbId, setCustomPdbId] = useState('');
+  const selectedStructure                   = useAppSelector(selectSelectedStructure);
+  const isLoading                           = useAppSelector(selectIsLoading);
+  const error                               = useAppSelector(selectError);
+
+  const [customPdbId, setCustomPdbId]       = useState('');
   const [suggestedPdbId, setSuggestedPdbId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -141,11 +139,11 @@ function SettingsPanel({
 }
 
 export default function TubulinViewerPage() {
-  const molstarRef = useRef<HTMLDivElement>(null);
-  const loadedPdbFromUrl = useRef<string | null>(null);
+  const molstarRef                 = useRef<HTMLDivElement>(null);
+  const loadedPdbFromUrl           = useRef<string | null>(null);
   const { isInitialized, service } = useMolstarService(molstarRef, 'main');
-  const dispatch = useAppDispatch();
-  const selectedStructure = useAppSelector(selectSelectedStructure);
+  const dispatch                   = useAppDispatch();
+  const selectedStructure          = useAppSelector(selectSelectedStructure);
   useMolstarSync();
 
   const params = useParams();

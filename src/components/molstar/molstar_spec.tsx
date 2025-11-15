@@ -13,17 +13,8 @@ import { PluginBehaviors } from 'molstar/lib/mol-plugin/behavior'
 import React, { forwardRef } from "react";
 import { PluginSpec } from "molstar/lib/mol-plugin/spec";
 import { StateTransforms } from "molstar/lib/mol-plugin-state/transforms";
-import { BoxifyVolumeStreaming, CreateVolumeStreamingBehavior, InitVolumeStreaming } from "molstar/lib/mol-plugin/behavior/dynamic/volume-streaming/transformers";
 import { StateActions } from 'molstar/lib/mol-plugin-state/actions'
-import { BuiltInTrajectoryFormat } from "molstar/lib/mol-plugin-state/formats/trajectory";
-import { StructureProperties } from "molstar/lib/mol-model/structure/structure/properties";
-import { Queries, QueryContext, StructureQuery, StructureSelection } from "molstar/lib/mol-model/structure/query";
 import { ModelExportUI } from 'molstar/lib/extensions/model-export/ui';
-import { Expression } from 'molstar/lib/mol-script/language/expression';
-import { PluginUIContext } from "molstar/lib/mol-plugin-ui/context";
-import { Asset } from 'molstar/lib/mol-util/assets';
-import { compile } from "molstar/lib/mol-script/runtime/query/compiler";
-
 
 export class CustomStructureTools extends PluginUIComponent {
   render() {
@@ -150,4 +141,4 @@ export const MolstarNode = React.forwardRef<HTMLDivElement>((props, ref) => {
 });
 MolstarNode.displayName = 'MolstarNode';
 
-export const MolstarNode_secondary = forwardRef<HTMLDivElement, {}>( function MolstarNode(_, ref) { return <div ref={ref} id='molstar-wrapper-secondary'/> })
+export const MolstarNode_secondary = forwardRef<HTMLDivElement, {}>(function MolstarNode(_, ref) { return <div ref={ref} id='molstar-wrapper-secondary' /> })
