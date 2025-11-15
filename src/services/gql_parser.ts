@@ -43,7 +43,7 @@ export function createTubulinClassificationMap(gqlData: any): TubulinClassificat
         return {};
     }
     
-    console.log(`📊 Analyzing ${entry.polymer_entities.length} polymer entities for ${entry.rcsb_id || 'unknown'}...`);
+    console.log(`Analyzing ${entry.polymer_entities.length} polymer entities for ${entry.rcsb_id || 'unknown'}...`);
     
     // Iterate over each polymer entity
     entry.polymer_entities.forEach((entity, index) => {
@@ -91,10 +91,10 @@ export function createTubulinClassificationMap(gqlData: any): TubulinClassificat
         // Combine all text and convert to lowercase for matching
         const combinedText = textSources.join(' ').toLowerCase();
         
-        console.log(`🔍 Entity ${index} (chains: ${chainIds.join(', ')}):`);
-        console.log(`   Main description: "${mainDescription || 'N/A'}"`);
-        console.log(`   Total text sources: ${textSources.length}`);
-        console.log(`   Combined text: "${combinedText.substring(0, 100)}${combinedText.length > 100 ? '...' : ''}"`);
+        // console.log(`🔍 Entity ${index} (chains: ${chainIds.join(', ')}):`);
+        // console.log(`   Main description: "${mainDescription || 'N/A'}"`);
+        // console.log(`   Total text sources: ${textSources.length}`);
+        // console.log(`   Combined text: "${combinedText.substring(0, 100)}${combinedText.length > 100 ? '...' : ''}"`);
         
         // Determine tubulin type with multiple keyword checks
         let tubulinType: TubulinClass | null = null;
@@ -120,27 +120,21 @@ export function createTubulinClassificationMap(gqlData: any): TubulinClassificat
         
         if (hasAlpha) {
             tubulinType = TubulinClass.Alpha;
-            console.log(`   ✅ Classified as ALPHA tubulin`);
         } else if (hasBeta) {
             tubulinType = TubulinClass.Beta;
-            console.log(`   ✅ Classified as BETA tubulin`);
         } else if (combinedText.includes('tubulin')) {
-            console.log(`   ⚠️ Found "tubulin" but couldn't determine alpha/beta`);
-            console.log(`   🔍 Full text for manual inspection:`, combinedText);
         } else {
-            console.log(`   ❌ Not identified as tubulin`);
         }
         
         // Map all chains to the identified type
         if (tubulinType) {
             chainIds.forEach(chainId => {
                 classificationMap[chainId] = tubulinType;
-                console.log(`   🎨 Mapped chain ${chainId} → ${tubulinType}`);
             });
         }
     });
     
-    console.log(`\n🎨 Final Classification Map:`, classificationMap);
+    console.log(`\n Final Classification Map:`, classificationMap);
     
     if (Object.keys(classificationMap).length === 0) {
         console.warn(`\n⚠️ WARNING: No tubulin classification found!`);
@@ -178,26 +172,10 @@ export async function debugGraphQLResponse(pdbId: string, fetchFunction: (id: st
     try {
         const data = await fetchFunction(pdbId);
         
-        console.log('📦 Full Response:', data);
-        
         const entry = data?.entries?.[0];
         if (!entry) {
-            console.error('❌ No entry found');
             return;
         }
-        
-        console.log(`\n✅ Entry ID: ${entry.rcsb_id}`);
-        console.log(`✅ Polymer Entities: ${entry.polymer_entities?.length || 0}`);
-        
-        entry.polymer_entities?.forEach((entity: any, idx: number) => {
-            console.log(`\n━━━ Entity ${idx + 1} ━━━`);
-            console.log('Chains:', entity.rcsb_polymer_entity_container_identifiers?.auth_asym_ids);
-            console.log('Description:', entity.rcsb_polymer_entity?.pdbx_description);
-            console.log('Pfams:', entity.pfams?.map((p: any) => p.rcsb_pfam_description));
-            console.log('Annotations:', entity.rcsb_polymer_entity_annotation?.map((a: any) => a.description));
-        });
-        
-        console.log('\n🎨 Testing Classification...');
         const classification = createTubulinClassificationMap(data);
         console.log('Result:', classification);
         

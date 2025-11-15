@@ -54,12 +54,12 @@ export function useStructureLoading(service: any) {
       // Fetch classification unless skipped
       if (!skipClassification) {
         try {
-          console.log(`🔍 Fetching classification for ${pdbId}...`);
+          console.log(` Fetching classification for ${pdbId}...`);
           const gqlData = await fetchRcsbGraphQlData(pdbId);
           classificationMap = createTubulinClassificationMap(gqlData);
-          console.log(`✅ Classification map:`, classificationMap);
+          console.log(` Classification map:`, classificationMap);
         } catch (classError) {
-          console.warn(`⚠️ Could not fetch classification for ${pdbId}:`, classError);
+          console.warn(`️ Could not fetch classification for ${pdbId}:`, classError);
           // Continue with empty classification
         }
       }
@@ -72,7 +72,7 @@ export function useStructureLoading(service: any) {
         await service.viewer.representations.stylized_lighting();
       }
 
-      console.log(`✅ Successfully loaded ${pdbId} from ${source}`);
+      console.log(` Successfully loaded ${pdbId} from ${source}`);
       return true;
 
     } catch (error) {

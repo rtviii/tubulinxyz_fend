@@ -48,3 +48,6 @@ q_*.md
 
 notes*
 **/notes/*
+
+output/** 
+*.png
