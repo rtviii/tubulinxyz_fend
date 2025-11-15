@@ -11,6 +11,7 @@ import * as path from 'path';
 import { applyStylizedLighting } from '@/components/molstar/colors/stylized-lighting';
 import { STYLIZED_POSTPROCESSING } from '@/components/molstar/rendering/postprocessing-config';
 import { PluginStateObject } from 'molstar/lib/mol-plugin-state/objects';
+import { changeCameraRotation, structureLayingTransform } from 'molstar/lib/mol-plugin-state/manager/focus-camera/orient-axes';
 
 async function renderStructure(
     plugin: HeadlessPluginContext,
@@ -82,17 +83,31 @@ async function renderStructure(
         // Ensure output directory exists
         fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
-        // Render and save image WITH postprocessing props
-        console.log(`  📸 Rendering image with stylized lighting...`);
-        await plugin.saveImage(
-            outputPath,
-            { width: 1920, height: 1080 },
-            STYLIZED_POSTPROCESSING  // 👈 Pass postprocessing here!
+
+        // Calculate optimal camera orientation  
+        const structCells = plugin.state.data.selectQ(q =>
+            q.ofType(PluginStateObject.Molecule.Structure)
         );
+        const structures = structCells
+            .filter(cell => cell.obj && !cell.obj.data.parent)
+            .map(cell => cell.obj!.data);
+
+        if (structures.length > 0 && plugin.canvas3d) {
+            // Get PCA-based rotation  
+            const { rotation } = structureLayingTransform(structures);
+
+            // Get current camera snapshot and apply rotation  
+            const currentSnapshot = plugin.canvas3d.camera.getSnapshot();
+            const newSnapshot = changeCameraRotation(currentSnapshot, rotation);
+
+            // Apply immediately (synchronous)  
+            plugin.canvas3d.camera.setState(newSnapshot);
+        }
+
+        // Now render  
+        await plugin.saveImage(outputPath, { width: 1920, height: 1080 }, STYLIZED_POSTPROCESSING);
 
         console.log(`  ✅ Saved ${pdbId} to ${outputPath}`);
-
-        // Clear for next structure
         await plugin.clear();
 
         return true;
