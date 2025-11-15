@@ -8,7 +8,7 @@ import { useAlignmentData } from './hooks/useAlignmentData';
 import { useNightingaleComponents } from './hooks/useNightingaleComponents';
 import { useMolstarService } from '@/components/molstar/molstar_service';
 import { useSequenceStructureRegistry } from './hooks/useSequenceStructureSync';
-import { createTubulinClassificationMap} from '@/services/gql_parser';
+import { createTubulinClassificationMap } from '@/services/gql_parser';
 import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 import { ControlPanel } from './ControlPanel';
 import { AnnotationsLibrary } from './components/AnnotationsLibrary';

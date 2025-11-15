@@ -1,7 +1,7 @@
 // ControlPanel.tsx
 import { MolstarService } from "@/components/molstar/molstar_service";
 import { InputTabs } from "./InputTabs";
-import { StatsPanel } from "./StatsPanel";
+// import { StatsPanel } from "./StatsPanel";
 import { useSequenceStructureRegistry } from "./hooks/useSequenceStructureSync";
 
 interface ControlPanelProps {
@@ -21,17 +21,23 @@ export function ControlPanel({
 }: ControlPanelProps) {
   return (
     <>
-      <InputTabs 
+      <InputTabs
         mainService={molstarService}
         auxiliaryService={auxiliaryService}
-        registry={registry} 
+        registry={registry}
       />
 
-      <StatsPanel
+        {/* <span className="font-semibold text-gray-600">Last Event:</span> */}
+      <div>
+        <pre className="text-gray-800 bg-gray-50 p-1 rounded mt-1 overflow-x-auto border text-xs">
+          {lastEventLog || "No events"}
+        </pre>
+      </div>
+      {/* <StatsPanel
         registry={registry}
         activeLabel={activeLabel}
         lastEventLog={lastEventLog}
-      />
+      /> */}
     </>
   );
 }
