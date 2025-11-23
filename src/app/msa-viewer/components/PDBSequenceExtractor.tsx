@@ -32,115 +32,115 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
   const mainLoader = useMolstarStructureLoader(mainService?.controller || null);
   const auxiliaryLoader = useMolstarStructureLoader(auxiliaryService?.controller || null);
 
-  const handleLoadDemo1 = async () => {
-    const molstarService = selectedViewer === 'main' ? mainService : auxiliaryService;
-    const loader = selectedViewer === 'main' ? mainLoader : auxiliaryLoader;
+  // const handleLoadDemo1 = async () => {
+  //   const molstarService = selectedViewer === 'main' ? mainService : auxiliaryService;
+  //   const loader = selectedViewer === 'main' ? mainLoader : auxiliaryLoader;
 
-    if (!molstarService) {
-      alert(`${selectedViewer === 'main' ? 'Main' : 'Auxiliary'} viewer not initialized`);
-      return;
-    }
+  //   if (!molstarService) {
+  //     alert(`${selectedViewer === 'main' ? 'Main' : 'Auxiliary'} viewer not initialized`);
+  //     return;
+  //   }
 
-    setLoadingDemo(true);
-    setChains([]);
-    setLoadedPdbId(null);
+  //   setLoadingDemo(true);
+  //   setChains([]);
+  //   setLoadedPdbId(null);
 
-    try {
-      const filename = '7sj7_with_metadata.cif';
-      const demoId = '7SJ7';
+  //   try {
+  //     const filename = '7sj7_with_metadata.cif';
+  //     const demoId = '7SJ7';
 
-      // Load from backend
-      const result = await loader.loadFromBackend(filename, {
-        applyStylizedLighting: true
-      });
+  //     // Load from backend
+  //     const result = await loader.loadFromBackend(filename, {
+  //       applyStylizedLighting: true
+  //     });
 
-      if (!result.success) {
-        alert(`Failed to load demo structure ${demoId}`);
-        return;
-      }
+  //     if (!result.success) {
+  //       alert(`Failed to load demo structure ${demoId}`);
+  //       return;
+  //     }
 
-      const allChains = molstarService.controller.getAllChains(demoId);
+  //     const allChains = molstarService.controller.getAllChains(demoId);
 
-      if (!allChains || allChains.length === 0) {
-        alert(`No chains found in ${demoId}`);
-        return;
-      }
+  //     if (!allChains || allChains.length === 0) {
+  //       alert(`No chains found in ${demoId}`);
+  //       return;
+  //     }
 
-      registry.registerStructure(demoId, allChains, selectedViewer);
+  //     registry.registerStructure(demoId, allChains, selectedViewer);
 
-      const chainInfos: ChainInfo[] = [];
-      for (const chainId of allChains) {
-        const sequence = molstarService.controller.getChainSequence(demoId, chainId);
-        if (sequence && sequence.length > 0) {
-          chainInfos.push({ chainId, sequence, length: sequence.length });
-        }
-      }
+  //     const chainInfos: ChainInfo[] = [];
+  //     for (const chainId of allChains) {
+  //       const sequence = molstarService.controller.getChainSequence(demoId, chainId);
+  //       if (sequence && sequence.length > 0) {
+  //         chainInfos.push({ chainId, sequence, length: sequence.length });
+  //       }
+  //     }
 
-      setChains(chainInfos);
-      setLoadedPdbId(demoId);
-      setPdbId(demoId);
+  //     setChains(chainInfos);
+  //     setLoadedPdbId(demoId);
+  //     setPdbId(demoId);
 
-    } catch (err: any) {
-      console.error("Failed to load demo structure:", err);
-      alert(`Failed to load demo: ${err.message}`);
-    } finally {
-      setLoadingDemo(false);
-    }
-  };
-  const handleLoadDemo2 = async () => {
-    const molstarService = selectedViewer === 'main' ? mainService : auxiliaryService;
-    const loader = selectedViewer === 'main' ? mainLoader : auxiliaryLoader;
+  //   } catch (err: any) {
+  //     console.error("Failed to load demo structure:", err);
+  //     alert(`Failed to load demo: ${err.message}`);
+  //   } finally {
+  //     setLoadingDemo(false);
+  //   }
+  // };
+  // const handleLoadDemo2 = async () => {
+  //   const molstarService = selectedViewer === 'main' ? mainService : auxiliaryService;
+  //   const loader = selectedViewer === 'main' ? mainLoader : auxiliaryLoader;
 
-    if (!molstarService) {
-      alert(`${selectedViewer === 'main' ? 'Main' : 'Auxiliary'} viewer not initialized`);
-      return;
-    }
+  //   if (!molstarService) {
+  //     alert(`${selectedViewer === 'main' ? 'Main' : 'Auxiliary'} viewer not initialized`);
+  //     return;
+  //   }
 
-    setLoadingDemo(true);
-    setChains([]);
-    setLoadedPdbId(null);
+  //   setLoadingDemo(true);
+  //   setChains([]);
+  //   setLoadedPdbId(null);
 
-    try {
-      const filename = 'fold_htuba1a_model_0.cif';
-      const demoId = 'FOLD'; // Match what loadFromBackend extracts from filename
+  //   try {
+  //     const filename = 'fold_htuba1a_model_0.cif';
+  //     const demoId = 'FOLD'; // Match what loadFromBackend extracts from filename
 
-      const result = await loader.loadFromBackend(filename, {
-        applyStylizedLighting: true
-      });
+  //     const result = await loader.loadFromBackend(filename, {
+  //       applyStylizedLighting: true
+  //     });
 
-      if (!result.success) {
-        alert(`Failed to load demo structure ${demoId}`);
-        return;
-      }
+  //     if (!result.success) {
+  //       alert(`Failed to load demo structure ${demoId}`);
+  //       return;
+  //     }
 
-      const allChains = molstarService.controller.getAllChains(demoId);
+  //     const allChains = molstarService.controller.getAllChains(demoId);
 
-      if (!allChains || allChains.length === 0) {
-        alert(`No chains found in ${demoId}`);
-        return;
-      }
+  //     if (!allChains || allChains.length === 0) {
+  //       alert(`No chains found in ${demoId}`);
+  //       return;
+  //     }
 
-      registry.registerStructure(demoId, allChains, selectedViewer);
+  //     registry.registerStructure(demoId, allChains, selectedViewer);
 
-      const chainInfos: ChainInfo[] = [];
-      for (const chainId of allChains) {
-        const sequence = molstarService.controller.getChainSequence(demoId, chainId);
-        if (sequence && sequence.length > 0) {
-          chainInfos.push({ chainId, sequence, length: sequence.length });
-        }
-      }
+  //     const chainInfos: ChainInfo[] = [];
+  //     for (const chainId of allChains) {
+  //       const sequence = molstarService.controller.getChainSequence(demoId, chainId);
+  //       if (sequence && sequence.length > 0) {
+  //         chainInfos.push({ chainId, sequence, length: sequence.length });
+  //       }
+  //     }
 
-      setChains(chainInfos);
-      setLoadedPdbId(demoId);
-      setPdbId(demoId);
+  //     setChains(chainInfos);
+  //     setLoadedPdbId(demoId);
+  //     setPdbId(demoId);
 
-    } catch (err: any) {
-      console.error("Failed to load demo structure:", err);
-      alert(`Failed to load demo: ${err.message}`);
-    } finally {
-      setLoadingDemo(false);
-    }
-  }
+  //   } catch (err: any) {
+  //     console.error("Failed to load demo structure:", err);
+  //     alert(`Failed to load demo: ${err.message}`);
+  //   } finally {
+  //     setLoadingDemo(false);
+  //   }
+  // }
 
   const handleLoadStructure = async () => {
     if (!pdbId.trim()) return;
@@ -174,9 +174,16 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
 
       const chainInfos: ChainInfo[] = [];
       for (const chainId of allChains) {
-        const sequence = molstarService.controller.getChainSequence(pdbIdUpper, chainId);
-        if (sequence && sequence.length > 0) {
-          chainInfos.push({ chainId, sequence, length: sequence.length });
+        // ✨ FIX: This now returns an object { sequence, authSeqIds }
+        const observedData = molstarService.controller.getObservedSequenceAndMapping(pdbIdUpper, chainId);
+
+        // ✨ FIX: Check observedData.sequence
+        if (observedData && observedData.sequence.length > 0) {
+          chainInfos.push({
+            chainId,
+            sequence: observedData.sequence, // Extract the string part
+            length: observedData.sequence.length
+          });
         }
       }
 
@@ -188,7 +195,9 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
     } finally {
       setIsLoading(false);
     }
-  };
+  };;
+
+  // components/PDBSequenceExtractor.tsx
 
   const handleAlignChain = async (chainInfo: ChainInfo) => {
     if (!loadedPdbId) return;
@@ -199,28 +208,57 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
     setAligningChain(chainInfo.chainId);
 
     try {
+      // 1. Extract Atomic Data
+      const observedData = molstarService.controller.getObservedSequenceAndMapping(
+        loadedPdbId,
+        chainInfo.chainId
+      );
+
+      if (!observedData) throw new Error("Could not extract observed sequence");
+
+      console.log(`[Frontend] Extracted ${chainInfo.chainId}:`, {
+        seq: observedData.sequence.substring(0, 10),
+        ids: observedData.authSeqIds.slice(0, 10)
+      });
+
+      // 2. Send to Backend
       const response = await fetch(`${API_BASE_URL}/msaprofile/sequence`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sequence: chainInfo.sequence,
+          sequence: observedData.sequence,
           sequence_id: `${loadedPdbId}_${chainInfo.chainId}`,
           annotations: [],
+          residue_numbers: observedData.authSeqIds // Sending [2, 3, 4...]
         }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Alignment failed: ${response.status}`);
-      }
-
+      if (!response.ok) throw new Error(`Alignment failed: ${response.status}`);
       const result = await response.json();
 
       const positionMapping: Record<number, number> = {};
-      result.mapping.forEach((originalResidue: number, alignedPos: number) => {
-        if (originalResidue !== -1) {
-          positionMapping[alignedPos] = originalResidue;
+
+      result.mapping.forEach((backendValue: number, msaIndexZeroBased: number) => {
+        // The backend returns -1 for gaps
+        if (backendValue !== -1) {
+
+          // ❌ OLD WAY (Delete this):
+          // This treats the backend value as an index to look up in the array
+          // const realAuthId = observedData.authSeqIds[backendValue]; 
+
+          // ✅ NEW WAY (Do this):
+          // The backend value IS the PDB ID now. Trust it.
+          const realAuthId = backendValue;
+
+          // Nightingale is 1-based, so we add 1 to the index
+          positionMapping[msaIndexZeroBased] = realAuthId;
         }
       });
+      // Log a few check points
+      console.log("[Mapping Check]");
+      console.log("MSA Pos 1 maps to PDB:", positionMapping[1]);
+      console.log("MSA Pos 2 maps to PDB:", positionMapping[2]);
+      console.log("MSA Pos 3 maps to PDB:", positionMapping[3]);
 
       registry.addSequence(
         `${loadedPdbId}_${chainInfo.chainId}`,
@@ -242,7 +280,7 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
     } finally {
       setAligningChain(null);
     }
-  };
+  };;;
 
   const alignedChains = loadedPdbId ? registry.getSequencesByStructure(loadedPdbId) : [];
   const alignedChainIds = new Set(alignedChains.map(seq =>
@@ -268,7 +306,7 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
       </div>
 
       {/* Demo Button */}
-      <div className="mb-3 flex gap-2">
+      {/* <div className="mb-3 flex gap-2">
         <button
           onClick={handleLoadDemo1}
           disabled={loadingDemo}
@@ -283,7 +321,7 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
         >
           AlphaFold
         </button>
-      </div>
+      </div> */}
 
       <div className="border-t pt-3 mb-2">
         <p className="text-xs text-gray-500 mb-2">Or load from RCSB:</p>

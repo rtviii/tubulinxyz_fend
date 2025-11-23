@@ -22,7 +22,7 @@ export interface SequenceEntry {
 interface StructureInfo {
   pdbId: string;
   chainIds: string[];
-  viewerId: 'main' | 'auxiliary'; // NEW: track which viewer this structure uses
+  viewerId: 'main' | 'auxiliary'; 
 }
 
 export interface AddedSequenceGroup {

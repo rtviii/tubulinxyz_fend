@@ -35,6 +35,10 @@ interface ComputedResidueAnnotation {
     confidence: number;
 }
 
+export interface ObservedSequenceData {
+    sequence: string;
+    authSeqIds: number[];
+}
 /**
  * Refactored MolstarController with modular helper methods
  */
@@ -688,60 +692,6 @@ export class MolstarController {
         return [...new Set(chainIds)].sort();
     }
 
-    /**
-     * Extract sequence from structure
-     */
-    private extractSequenceFromStructure(pdbId: string, chainId: string): string | null {
-        if (!this.viewer.ctx) return null;
-
-        const structure = this.getCurrentStructure();
-        if (!structure) return null;
-
-        const residues = new Map<number, string>();
-
-        for (const unit of structure.units) {
-            const unitChainId = StructureProperties.chain.auth_asym_id({
-                unit,
-                element: unit.elements[0]
-            });
-
-            if (unitChainId === chainId) {
-                for (let i = 0; i < unit.elements.length; i++) {
-                    const location = StructureElement.Location.create(structure, unit, unit.elements[i]);
-                    const seqId = StructureProperties.residue.auth_seq_id(location);
-                    const compId = StructureProperties.atom.label_comp_id(location);
-                    const singleLetter = AMINO_ACIDS_3_TO_1_CODE[compId] || 'X';
-                    residues.set(seqId, singleLetter);
-                }
-
-                const sortedResidues = Array.from(residues.entries()).sort((a, b) => a[0] - b[0]);
-                return sortedResidues.map(([, code]) => code).join('');
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Get chain sequence
-     */
-    getChainSequence(pdbId: string, chainId: string): string | null {
-        const state = this.getState();
-        const component = state.molstarRefs.components[`${pdbId}_${chainId}`];
-
-        if (!component || component.type !== 'polymer') {
-            console.warn(`No polymer component found for ${pdbId} chain ${chainId}`);
-            return null;
-        }
-
-        // Check if sequence is stored in component
-        if ('sequence' in component && Array.isArray(component.sequence)) {
-            return component.sequence.map((residue: any) => residue.code || 'X').join('');
-        }
-
-        // Fallback: extract from structure
-        return this.extractSequenceFromStructure(pdbId, chainId);
-    }
 
     /**
      * Get sequence data formatted for viewer
@@ -874,5 +824,77 @@ export class MolstarController {
         }
 
         console.log(`Showing all chains in structure ${pdbIdUpper}`);
+    }
+
+    getObservedSequenceAndMapping(pdbId: string, chainId: string): ObservedSequenceData | null {
+        if (!this.viewer.ctx) return null;
+
+        const structure = this.getCurrentStructure();
+        if (!structure) return null;
+
+        // 1. Find the Unit (Chain)
+        // In Molstar, a Structure is made of Units. We find the one matching our auth_asym_id.
+        let targetUnit: any = null;
+
+        for (const unit of structure.units) {
+            const unitChainId = StructureProperties.chain.auth_asym_id({
+                unit,
+                element: unit.elements[0] // Check first element to ID the chain
+            });
+
+            // Also ensure it is a Polymer (protein/nucleotide), not a ligand/water chain
+            const entityType = StructureProperties.entity.type({
+                unit,
+                element: unit.elements[0]
+            });
+
+            if (unitChainId === chainId && entityType === 'polymer') {
+                targetUnit = unit;
+                break;
+            }
+        }
+
+        if (!targetUnit) {
+            console.warn(`Chain ${chainId} not found or is not a polymer.`);
+            return null;
+        }
+
+        // 2. Iterate Residues safely
+        // We use the Location iterator to access properties safely
+        const location = StructureElement.Location.create(structure, targetUnit, targetUnit.elements[0]);
+        const residueCodeMap = new Map<number, string>(); // Map<auth_seq_id, 1-letter-code>
+
+        // StructureElement.Loci.getResidueIndices returns indices grouped by residue
+        // This handles Alt-Locs automatically (they are grouped into the same residue index)
+        const elementIndices = targetUnit.elements;
+
+        // Iterate over all atoms (elements) in the unit
+        for (let i = 0; i < elementIndices.length; i++) {
+            location.element = elementIndices[i];
+
+            // Get auth_seq_id (equivalent to Biopython residue.id[1])
+            const authSeqId = StructureProperties.residue.auth_seq_id(location);
+
+            // If we have already processed this residue ID, skip atoms (optimization)
+            if (residueCodeMap.has(authSeqId)) continue;
+
+            // Get component ID (e.g., "ALA")
+            const compId = StructureProperties.atom.label_comp_id(location);
+
+            // Convert to 1-letter code
+            const oneLetter = AMINO_ACIDS_3_TO_1_CODE[compId] || 'X';
+
+            residueCodeMap.set(authSeqId, oneLetter);
+        }
+
+        // 3. Sort and Format
+        // Biopython iterates in file order, but usually that implies sorted auth_seq_id.
+        // To be safe and match the backend which usually results in sorted IDs:
+        const sortedEntries = Array.from(residueCodeMap.entries()).sort((a, b) => a[0] - b[0]);
+
+        return {
+            sequence: sortedEntries.map(e => e[1]).join(''),
+            authSeqIds: sortedEntries.map(e => e[0])
+        };
     }
 }

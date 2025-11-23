@@ -14,9 +14,9 @@ interface MSAPanelProps {
   activeAnnotations: Set<string>;
 }
 
-export function MSAPanel({ 
-  maxLength, 
-  areComponentsLoaded, 
+export function MSAPanel({
+  maxLength,
+  areComponentsLoaded,
   mainService,
   auxiliaryService,
   registry,
@@ -30,7 +30,7 @@ export function MSAPanel({
     name: seq.name,
     sequence: seq.sequence
   }));
-  
+
   const addedSequenceGroups = registry.getAddedSequenceGroups().map(group => ({
     title: group.title,
     sequences: group.sequences.map(seq => ({
@@ -39,13 +39,13 @@ export function MSAPanel({
       sequence: seq.sequence
     }))
   }));
-  
+
   const totalAddedSequences = addedSequenceGroups.reduce((acc, group) => acc + group.sequences.length, 0);
 
   const handleLabelClick = (label: string, sequenceId: string) => {
     setActiveLabel(label);
     const seq = registry.getSequenceById(sequenceId);
-    
+
     let logMsg = `Label clicked: "${label}"`;
     if (seq?.origin.type === 'pdb') {
       const structureInfo = registry.getStructureInfo(seq.origin.pdbId);
@@ -59,33 +59,26 @@ export function MSAPanel({
   const handleResidueClick = async (sequenceId: string, position: number) => {
     const seq = registry.getSequenceById(sequenceId);
     if (!seq) return;
-    
+
     setActiveLabel(seq.name);
-    
+
     // Broadcast click to ALL structures based on MSA column position
     const allPdbSequences = registry.getPDBSequences();
     const focusTasks = [];
     const logParts = [`Residue clicked: "${seq.name}" | MSA Pos ${position}`];
-    
     for (const pdbSeq of allPdbSequences) {
       if (pdbSeq.origin.type !== 'pdb') continue;
-      
       const { pdbId, chainId, positionMapping } = pdbSeq.origin;
       const structureInfo = registry.getStructureInfo(pdbId);
-      
       if (!positionMapping || !structureInfo) continue;
-      
       const originalResidue = positionMapping[position];
-      
       if (originalResidue !== undefined) {
         const molstarService = structureInfo.viewerId === 'auxiliary' ? auxiliaryService : mainService;
-        
+
         if (molstarService?.controller) {
           logParts.push(`${pdbId}:${chainId}:${originalResidue}[${structureInfo.viewerId}]`);
           focusTasks.push(
-            // molstarService.controller.focusOnResidues(pdbId, chainId, originalResidue, originalResidue)
-            //   .catch(error => console.error(`Failed to focus ${pdbId}:${chainId}:${originalResidue}:`, error))
-            molstarService.controller.focusChain (pdbId,chainId)
+            molstarService.controller.focusChain(pdbId, chainId)
               .catch(error => console.error(`Failed to focus ${pdbId}:${chainId}:${originalResidue}:`, error))
           );
         }
@@ -95,35 +88,46 @@ export function MSAPanel({
     setLastEventLog(logParts.join(' | '));
   };
 
+  // components/MSAPanel.tsx
+
   const handleResidueHover = async (sequenceId: string, position: number) => {
-    // Broadcast hover to ALL structures based on MSA column position
+    // 1. Log the incoming Nightingale event
+    // Note: position is 1-based coming from Nightingale
+
     const allPdbSequences = registry.getPDBSequences();
     const highlightTasks = [];
-    
+
     for (const seq of allPdbSequences) {
       if (seq.origin.type !== 'pdb') continue;
-      
+
       const { pdbId, chainId, positionMapping } = seq.origin;
       const structureInfo = registry.getStructureInfo(pdbId);
-      
+
       if (!positionMapping || !structureInfo) continue;
-      
+
+      // 2. Look up the PDB ID
       const originalResidue = positionMapping[position];
-      
+
       if (originalResidue !== undefined) {
+
+        // ✨ LOGGING: This proves what we are sending to Molstar
+        if (seq.id === sequenceId) { // Only log for the row we are hovering
+          console.log(`[Hover] MSA Pos: ${position} -> PDB ID: ${originalResidue} (${pdbId})`);
+        }
+
         const molstarService = structureInfo.viewerId === 'auxiliary' ? auxiliaryService : mainService;
-        
+
         if (molstarService?.controller) {
           highlightTasks.push(
             molstarService.controller.hoverResidue(pdbId, chainId, originalResidue, true)
-              .catch(error => console.error(`Failed to highlight ${pdbId}:${chainId}:${originalResidue}:`, error))
+              .catch(error => console.error(`Failed to highlight:`, error))
           );
         }
       }
     }
-    
+
     await Promise.all(highlightTasks);
-  };
+  };;
 
   const handleResidueLeave = async () => {
     const clearTasks = [];
@@ -133,21 +137,19 @@ export function MSAPanel({
           .catch(error => console.error('Failed to clear main highlight:', error))
       );
     }
-    
+
     if (auxiliaryService?.controller) {
       clearTasks.push(
         auxiliaryService.controller.hoverResidue('', '', 0, false)
           .catch(error => console.error('Failed to clear auxiliary highlight:', error))
       );
     }
-    
+
     await Promise.all(clearTasks);
   };
 
   return (
     <div className="w-full h-full border rounded-lg p-3 bg-white flex flex-col">
-      {/* <h2 className="text-lg font-semibold mb-2">Multiple Sequence Alignment</h2> */}
-      
       <div className="flex-1 overflow-x-auto">
         {areComponentsLoaded && (masterSequences.length > 0 || totalAddedSequences > 0) && maxLength > 0 ? (
           <MSADisplay
