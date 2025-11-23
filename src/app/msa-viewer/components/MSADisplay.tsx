@@ -20,14 +20,14 @@ type ResidueLeaveHandler = () => void;
 
 interface MSADisplayProps {
 
-  masterSequences    : SequenceData[];
+  masterSequences: SequenceData[];
   addedSequenceGroups: AddedSequenceGroup[];
-  maxLength          : number;
-  onLabelClick       : LabelClickHandler;
-  onResidueClick     : ResidueClickHandler;
-  onResidueHover     : ResidueHoverHandler;
-  onResidueLeave     : ResidueLeaveHandler;
-  activeAnnotations  : Set<string>;
+  maxLength: number;
+  onLabelClick: LabelClickHandler;
+  onResidueClick: ResidueClickHandler;
+  onResidueHover: ResidueHoverHandler;
+  onResidueLeave: ResidueLeaveHandler;
+  activeAnnotations: Set<string>;
 
 }
 
@@ -468,15 +468,6 @@ function SingleSequenceTrack({
 
     const features = [];
 
-    // if (activeSeq && activeSeq.seqId === sequence.id) {
-    //   features.push({
-    //     id: 'active-seq-highlight',
-    //     sequences: { from: 0, to: 0 },
-    //     residues: { from: 1, to: maxLength },
-    //     fillColor: isMaster ? "rgba(59, 130, 246, 0.15)" : "rgba(34, 197, 94, 0.15)",
-    //     borderColor: isMaster ? "#3B82F6" : "#22C55E",
-    //   });
-    // }
 
     if (hoveredCell && hoveredCell.seqId === sequence.id) {
       features.push({
@@ -599,15 +590,6 @@ function SingleSequenceTrack({
           }}
         >
           <div style={{ padding: '6px' }}>
-            {/* <div style={{ 
-              fontSize: '9px', 
-              fontWeight: '600', 
-              color: '#6B7280',
-              marginBottom: '4px',
-              paddingLeft: '2px'
-            }}>
-              Functional Regions
-            </div> */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
               {Object.entries(mockRegionData).map(([regionId, regionInfo]) => (
                 <label
@@ -617,11 +599,8 @@ function SingleSequenceTrack({
                     alignItems: 'center',
                     gap: '6px',
                     padding: '3px 4px',
-                    // backgroundColor: enabledRegions.has(regionId) ? '#E0F2FE' : 'white',
-                    // borderRadius: '3px',
                     cursor: 'pointer',
                     fontSize: '9px',
-                    // border: `1px solid ${enabledRegions.has(regionId) ? '#BAE6FD' : '#E5E7EB'}`,
                     transition: 'all 0.15s'
                   }}
                 >

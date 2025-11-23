@@ -27,10 +27,8 @@ export function CustomSequenceInput({ registry }: CustomSequenceInputProps) {
       setError("Invalid sequence - please use standard amino acid letters only");
       return;
     }
-
     setError(null);
     setIsAdding(true);
-    
     try {
       const customId = `custom_${Date.now()}`;
       const displayName = sequenceName.trim() || customId;

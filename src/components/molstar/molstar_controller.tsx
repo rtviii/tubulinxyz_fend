@@ -37,7 +37,7 @@ interface ComputedResidueAnnotation {
 
 export interface ObservedSequenceData {
     sequence: string;
-    authSeqIds: number[];
+    authSeqIds: number[]; // We use this name in frontend
 }
 /**
  * Refactored MolstarController with modular helper methods

@@ -197,61 +197,61 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
     }
   };;
 
-  // components/PDBSequenceExtractor.tsx
 
   const handleAlignChain = async (chainInfo: ChainInfo) => {
     if (!loadedPdbId) return;
-
     const molstarService = selectedViewer === 'main' ? mainService : auxiliaryService;
     if (!molstarService) return;
 
     setAligningChain(chainInfo.chainId);
 
     try {
-      // 1. Extract Atomic Data
+      // 1. ATOMIC EXTRACTION (Source of Truth)
       const observedData = molstarService.controller.getObservedSequenceAndMapping(
         loadedPdbId,
         chainInfo.chainId
       );
 
-      if (!observedData) throw new Error("Could not extract observed sequence");
+      if (!observedData) throw new Error("Molstar extraction failed");
+      
+      // Validation Check
+      if (observedData.sequence.length !== observedData.authSeqIds.length) {
+        throw new Error(`CRITICAL: Molstar sequence length (${observedData.sequence.length}) does not match IDs length (${observedData.authSeqIds.length})`);
+      }
 
-      console.log(`[Frontend] Extracted ${chainInfo.chainId}:`, {
-        seq: observedData.sequence.substring(0, 10),
-        ids: observedData.authSeqIds.slice(0, 10)
-      });
+      // 2. SEND TO BACKEND
+      const payload = {
+        sequence: observedData.sequence,
+        sequence_id: `${loadedPdbId}_${chainInfo.chainId}`,
+        annotations: [],
+        auth_seq_ids: observedData.authSeqIds // <--- RENAMED FIELD matches Backend Schema
+      };
 
-      // 2. Send to Backend
       const response = await fetch(`${API_BASE_URL}/msaprofile/sequence`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sequence: observedData.sequence,
-          sequence_id: `${loadedPdbId}_${chainInfo.chainId}`,
-          annotations: [],
-          residue_numbers: observedData.authSeqIds // Sending [2, 3, 4...]
-        }),
+        body: JSON.stringify(payload),
       });
 
-      if (!response.ok) throw new Error(`Alignment failed: ${response.status}`);
-      const result = await response.json();
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Backend Error: ${errText}`);
+      }
+
+  const result = await response.json();
 
       const positionMapping: Record<number, number> = {};
 
       result.mapping.forEach((backendValue: number, msaIndexZeroBased: number) => {
-        // The backend returns -1 for gaps
         if (backendValue !== -1) {
           const realAuthId = backendValue;
 
-          positionMapping[msaIndexZeroBased] = realAuthId;
+          // 0-BASED LOGIC
+          // We map Index 0 -> AuthID X
+          positionMapping[msaIndexZeroBased] = realAuthId; 
         }
       });
-      // Log a few check points
-      console.log("[Mapping Check]");
-      console.log("MSA Pos 1 maps to PDB:", positionMapping[1]);
-      console.log("MSA Pos 2 maps to PDB:", positionMapping[2]);
-      console.log("MSA Pos 3 maps to PDB:", positionMapping[3]);
-
+      // 4. Register
       registry.addSequence(
         `${loadedPdbId}_${chainInfo.chainId}`,
         `${loadedPdbId}_${chainInfo.chainId}`,
@@ -267,12 +267,12 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
       await molstarService.controller.isolateChain(loadedPdbId, chainInfo.chainId);
 
     } catch (err: any) {
-      console.error("Failed to align chain:", err);
-      alert(`Failed to align: ${err.message}`);
+      console.error("Alignment Error:", err);
+      alert(`Alignment failed: ${err.message}`);
     } finally {
       setAligningChain(null);
     }
-  };;;
+  };;;;
 
   const alignedChains = loadedPdbId ? registry.getSequencesByStructure(loadedPdbId) : [];
   const alignedChainIds = new Set(alignedChains.map(seq =>
