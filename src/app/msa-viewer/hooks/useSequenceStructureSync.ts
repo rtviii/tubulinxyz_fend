@@ -186,27 +186,6 @@ export function useSequenceStructureRegistry() {
     [structures]
   );
 
-  const logState = useCallback(() => {
-    console.group('🔬 Registry State');
-    console.log('Total sequences:', sequences.size);
-    console.log('Master sequences:', getMasterSequences().length);
-    console.log('Added sequences:', getAddedSequences().length);
-    console.log('  - PDB chains:', getPDBSequences().length);
-    console.log('  - Custom:', getCustomSequences().length);
-    console.log('Loaded structures:', structures.size);
-    console.table(
-      getOrderedSequences().map(seq => ({
-        row: seq.rowIndex,
-        id: seq.id,
-        name: seq.name,
-        type: seq.origin.type,
-        pdbInfo: seq.origin.type === 'pdb' 
-          ? `${seq.origin.pdbId}:${seq.origin.chainId}` 
-          : '-'
-      }))
-    );
-    console.groupEnd();
-  }, [sequences, structures, getOrderedSequences, getMasterSequences, getAddedSequences, getPDBSequences, getCustomSequences]);
 
   return {
     sequences,
@@ -226,6 +205,5 @@ export function useSequenceStructureRegistry() {
     getSequencesByStructure,
     hasStructure,
     getStructureInfo,
-    logState,
   };
 }

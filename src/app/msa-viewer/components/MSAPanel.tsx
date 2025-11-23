@@ -1,4 +1,4 @@
-// components/MSAPanel.tsx
+// src/app/msa-viewer/components/MSAPanel.tsx
 import { MSADisplay } from './MSADisplay';
 import { useSequenceStructureRegistry } from '../hooks/useSequenceStructureSync';
 import { MolstarService } from '@/components/molstar/molstar_service';
@@ -56,7 +56,11 @@ export function MSAPanel({
     setLastEventLog(logMsg);
   };
 
-  const handleResidueClick = async (sequenceId: string, position: number) => {
+  /**
+   * Handle Residue Click
+   * Expects 0-BASED MSA position
+   */
+  const handleResidueClick = async (sequenceId: string, position0: number) => {
     const seq = registry.getSequenceById(sequenceId);
     if (!seq) return;
 
@@ -65,13 +69,18 @@ export function MSAPanel({
     // Broadcast click to ALL structures based on MSA column position
     const allPdbSequences = registry.getPDBSequences();
     const focusTasks = [];
-    const logParts = [`Residue clicked: "${seq.name}" | MSA Pos ${position}`];
+    const logParts = [`Residue clicked: "${seq.name}" | MSA Pos ${position0}`];
+    
     for (const pdbSeq of allPdbSequences) {
       if (pdbSeq.origin.type !== 'pdb') continue;
       const { pdbId, chainId, positionMapping } = pdbSeq.origin;
       const structureInfo = registry.getStructureInfo(pdbId);
+      
       if (!positionMapping || !structureInfo) continue;
-      const originalResidue = positionMapping[position];
+      
+      // Lookup 0-based mapping
+      const originalResidue = positionMapping[position0];
+      
       if (originalResidue !== undefined) {
         const molstarService = structureInfo.viewerId === 'auxiliary' ? auxiliaryService : mainService;
 
@@ -88,12 +97,7 @@ export function MSAPanel({
     setLastEventLog(logParts.join(' | '));
   };
 
-  // components/MSAPanel.tsx
-
-  const handleResidueHover = async (sequenceId: string, position: number) => {
-    // 1. Log the incoming Nightingale event
-    // Note: position is 1-based coming from Nightingale
-
+  const handleResidueHover = async (sequenceId: string, position0: number) => {
     const allPdbSequences = registry.getPDBSequences();
     const highlightTasks = [];
 
@@ -104,15 +108,10 @@ export function MSAPanel({
       const structureInfo = registry.getStructureInfo(pdbId);
 
       if (!positionMapping || !structureInfo) continue;
-
-      // 2. Look up the PDB ID
-      const originalResidue = positionMapping[position];
+      const originalResidue = positionMapping[position0];
 
       if (originalResidue !== undefined) {
-
-        // ✨ LOGGING: This proves what we are sending to Molstar
-        if (seq.id === sequenceId) { // Only log for the row we are hovering
-          console.log(`[Hover] MSA Pos: ${position} -> PDB ID: ${originalResidue} (${pdbId})`);
+        if (seq.id === sequenceId) { 
         }
 
         const molstarService = structureInfo.viewerId === 'auxiliary' ? auxiliaryService : mainService;
@@ -127,7 +126,7 @@ export function MSAPanel({
     }
 
     await Promise.all(highlightTasks);
-  };;
+  };
 
   const handleResidueLeave = async () => {
     const clearTasks = [];
@@ -164,8 +163,14 @@ export function MSAPanel({
           />
         ) : (
           <div className="p-8 text-center text-gray-500">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-            <p>Loading alignment...</p>
+            {masterSequences.length === 0 ? (
+               <>
+                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                 <p>Loading alignment...</p>
+               </>
+            ) : (
+              <p>Load sequences to begin.</p>
+            )}
           </div>
         )}
       </div>
