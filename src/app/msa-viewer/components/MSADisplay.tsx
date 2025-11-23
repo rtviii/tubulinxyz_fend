@@ -19,14 +19,16 @@ type ResidueHoverHandler = (seqId: string, position: number) => void;
 type ResidueLeaveHandler = () => void;
 
 interface MSADisplayProps {
-  masterSequences: SequenceData[];
+
+  masterSequences    : SequenceData[];
   addedSequenceGroups: AddedSequenceGroup[];
-  maxLength: number;
-  onLabelClick: LabelClickHandler;
-  onResidueClick: ResidueClickHandler;
-  onResidueHover: ResidueHoverHandler;
-  onResidueLeave: ResidueLeaveHandler;
-  activeAnnotations: Set<string>;
+  maxLength          : number;
+  onLabelClick       : LabelClickHandler;
+  onResidueClick     : ResidueClickHandler;
+  onResidueHover     : ResidueHoverHandler;
+  onResidueLeave     : ResidueLeaveHandler;
+  activeAnnotations  : Set<string>;
+
 }
 
 // State types for highlighting
@@ -141,10 +143,10 @@ export function MSADisplay({
 
   const [activeSeq, setActiveSeq] = useState<MsaHighlight | null>(null);
   const [hoveredCell, setHoveredCell] = useState<MsaHover | null>(null);
-  
+
   // Track which sequences have regions panel expanded
   const [expandedRegions, setExpandedRegions] = useState<Set<string>>(new Set());
-  
+
   // Track which regions are enabled for each sequence
   const [enabledRegions, setEnabledRegions] = useState<Map<string, Set<string>>>(new Map());
 
@@ -187,13 +189,13 @@ export function MSADisplay({
       const next = new Map(prev);
       const seqRegions = next.get(seqId) || new Set();
       const newSeqRegions = new Set(seqRegions);
-      
+
       if (newSeqRegions.has(regionId)) {
         newSeqRegions.delete(regionId);
       } else {
         newSeqRegions.add(regionId);
       }
-      
+
       next.set(seqId, newSeqRegions);
       return next;
     });
@@ -272,15 +274,15 @@ export function MSADisplay({
                 onResidueLeave={handleResidueLeave}
                 isMaster={true}
                 isRegionsExpanded={false}
-                onToggleRegions={() => {}}
+                onToggleRegions={() => { }}
                 enabledRegions={new Set()}
-                onToggleRegion={() => {}}
+                onToggleRegion={() => { }}
               />
             </div>
           ))}
 
           {/* Added Sequences with Region Support */}
-          {addedSequenceGroups.flatMap(group => 
+          {addedSequenceGroups.flatMap(group =>
             group.sequences.map(seq => (
               <div key={seq.id} style={{ marginBottom: '1px' }}>
                 <SingleSequenceTrack
@@ -357,7 +359,7 @@ function AnnotationTrack({
             flexShrink: 0
           }}
         />
-        <div style={{ 
+        <div style={{
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
         }}>
@@ -555,9 +557,9 @@ function SingleSequenceTrack({
               {isRegionsExpanded ? '−' : '+'}
             </button>
           )}
-          <div 
+          <div
             onClick={() => onLabelClick(sequence.name, sequence.id)}
-            style={{ 
+            style={{
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
               flex: 1,
@@ -691,7 +693,7 @@ function SingleSequenceTrack({
                       flexShrink: 0
                     }}
                   />
-                  <div style={{ 
+                  <div style={{
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                     // overflow: 'hidden'

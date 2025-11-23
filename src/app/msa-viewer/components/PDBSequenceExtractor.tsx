@@ -241,16 +241,8 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
       result.mapping.forEach((backendValue: number, msaIndexZeroBased: number) => {
         // The backend returns -1 for gaps
         if (backendValue !== -1) {
-
-          // ❌ OLD WAY (Delete this):
-          // This treats the backend value as an index to look up in the array
-          // const realAuthId = observedData.authSeqIds[backendValue]; 
-
-          // ✅ NEW WAY (Do this):
-          // The backend value IS the PDB ID now. Trust it.
           const realAuthId = backendValue;
 
-          // Nightingale is 1-based, so we add 1 to the index
           positionMapping[msaIndexZeroBased] = realAuthId;
         }
       });
