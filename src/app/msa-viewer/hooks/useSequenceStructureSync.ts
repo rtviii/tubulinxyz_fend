@@ -9,8 +9,11 @@ export type SequenceOrigin =
       pdbId: string;
       chainId: string;
       positionMapping?: Record<number, number>;
+      mutations?: any[];  // ADD THIS
+      modifications?: any[];  // ADD THIS
     };
 
+// ... rest stays the same ...
 export interface SequenceEntry {
   id: string;
   name: string;

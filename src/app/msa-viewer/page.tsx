@@ -79,7 +79,7 @@ export default function MSAViewerPage() {
       <div className="flex flex-row gap-3 mb-3" style={{ height: '40vh' }}>
         <div className="w-1/4 border rounded-lg bg-white">
           <div className="p-2 border-b bg-gray-50">
-            <h2 className="text-sm font-semibold text-gray-800">Position Annotations</h2>
+            <h2 className="text-sm font-semibold text-gray-800">Literature Annotations</h2>
           </div>
           <PositionAnnotationViewer hoveredPosition={hoveredPosition} />
         </div>

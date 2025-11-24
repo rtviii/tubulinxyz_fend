@@ -52,9 +52,6 @@ export function SingleSequenceTrack({
       onLabelClick(sequence.name, sequence.id);
     };
 
-    // --- CRITICAL: EVENT LISTENING ---
-    // Pass raw event values up. Parent handles 0-based checks.
-    
     const handleResidueClick = (event: any) => {
       const { position } = event.detail;
       onResidueClick(sequence.id, position);
@@ -84,7 +81,6 @@ export function SingleSequenceTrack({
     };
   }, [sequence, onLabelClick, onResidueClick, onResidueHover, onResidueLeave]);
 
-  // --- CRITICAL: PAINTING LOGIC ---
   useEffect(() => {
     const msaComponent = msaRef.current;
     if (!msaComponent) return;
@@ -92,11 +88,7 @@ export function SingleSequenceTrack({
     const features = [];
 
     if (hoveredCell && hoveredCell.seqId === sequence.id) {
-      // 1. We have the 0-BASED index in hoveredCell.position0
-      // 2. We assume Nightingale needs 1-BASED for 'residues' prop.
-      // 3. We Add +1 here.
       const nglPos = hoveredCell.position0 + 1;
-      
       features.push({
         id: 'hover-cell-highlight',
         sequences: { from: 0, to: 0 },
@@ -109,8 +101,8 @@ export function SingleSequenceTrack({
     msaComponent.features = features;
   }, [msaRef, activeSeq, hoveredCell, sequence.id, maxLength, isMaster]);
 
-  // Update region tracks when enabled regions change
   useEffect(() => {
+    // Handle mock regions
     Object.entries(mockRegionData).forEach(([regionId, regionInfo]) => {
       const track = regionTrackRefs.current[`${sequence.id}-${regionId}`];
       if (track) {
@@ -121,7 +113,29 @@ export function SingleSequenceTrack({
         }
       }
     });
-  }, [enabledRegions, sequence.id]);
+
+    // Handle mutations from database
+    const mutationsRegionId = `${sequence.id}-mutations`;
+    const mutationsTrack = regionTrackRefs.current[mutationsRegionId];
+    
+    if (mutationsTrack && enabledRegions.has('mutations')) {
+      // @ts-ignore
+      const mutations = sequence.origin?.type === 'pdb' ? sequence.origin.mutations || [] : [];
+      
+      const mutationFeatures = mutations.map((mut: any, idx: number) => ({
+        accession: `mut_${idx}`,
+        start: mut.master_index,
+        end: mut.master_index,
+        color: '#EF4444',
+        shape: 'circle',
+        tooltipContent: `${mut.from_residue}${mut.master_index}${mut.to_residue} (PDB: ${mut.pdb_auth_id})`
+      }));
+      
+      mutationsTrack.data = mutationFeatures;
+    } else if (mutationsTrack) {
+      mutationsTrack.data = [];
+    }
+  }, [enabledRegions, sequence]);
 
   const hasEnabledRegions = enabledRegions.size > 0;
 
@@ -217,6 +231,51 @@ export function SingleSequenceTrack({
         >
           <div style={{ padding: '6px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              {/* Mutations from database */}
+              {/* @ts-ignore */}
+              {sequence.origin?.type === 'pdb' && sequence.origin.mutations && sequence.origin.mutations.length > 0 && (
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '3px 4px',
+                    cursor: 'pointer',
+                    fontSize: '9px',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={enabledRegions.has('mutations')}
+                    onChange={() => onToggleRegion('mutations')}
+                    style={{
+                      width: '12px',
+                      height: '12px',
+                      cursor: 'pointer',
+                      flexShrink: 0
+                    }}
+                  />
+                  <div
+                    style={{
+                      width: '8px',
+                      height: '8px',
+                      backgroundColor: '#EF4444',
+                      borderRadius: '50%',
+                      flexShrink: 0
+                    }}
+                  />
+                  <span style={{ color: '#374151', fontWeight: '500' }}>
+                    Mutations
+                  </span>
+                  <span style={{ color: '#9CA3AF', fontSize: '8px', marginLeft: 'auto' }}>
+                    {/* @ts-ignore */}
+                    ({sequence.origin.mutations.length})
+                  </span>
+                </label>
+              )}
+
+              {/* Mock regions */}
               {Object.entries(mockRegionData).map(([regionId, regionInfo]) => (
                 <label
                   key={regionId}
@@ -266,7 +325,61 @@ export function SingleSequenceTrack({
       {/* Enabled region tracks */}
       {!isMaster && hasEnabledRegions && (
         <div style={{ width: '100%' }}>
-          {Array.from(enabledRegions).map(regionId => {
+          {/* Mutations track */}
+          {/* @ts-ignore */}
+          {enabledRegions.has('mutations') && sequence.origin?.type === 'pdb' && sequence.origin.mutations && (
+            <div style={{ display: 'flex', width: '100%', height: `${regionTrackHeight}px`, marginBottom: '1px' }}>
+              <div
+                style={{
+                  width: `${labelWidthPx}px`,
+                  minWidth: `${labelWidthPx}px`,
+                  height: `${regionTrackHeight}px`,
+                  padding: '2px 6px 2px 24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  fontSize: '8px',
+                  fontWeight: '500',
+                  color: '#6B7280',
+                  backgroundColor: '#F9FAFB',
+                  boxSizing: 'border-box',
+                  borderLeft: '3px solid #10B981',
+                  gap: '3px'
+                }}
+              >
+                <div
+                  style={{
+                    width: '5px',
+                    height: '5px',
+                    backgroundColor: '#EF4444',
+                    borderRadius: '50%',
+                    flexShrink: 0
+                  }}
+                />
+                <div style={{
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  Mutations
+                </div>
+              </div>
+
+              <div style={{ flex: 1, height: `${regionTrackHeight}px`, lineHeight: 0 }}>
+                <nightingale-track
+                  ref={el => regionTrackRefs.current[`${sequence.id}-mutations`] = el}
+                  height={regionTrackHeight}
+                  length={maxLength}
+                  display-start="1"
+                  display-end={maxLength}
+                  layout="non-overlapping"
+                  highlight-event="onmouseover"
+                  style={{ width: '100%' }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Mock region tracks */}
+          {Array.from(enabledRegions).filter(r => r !== 'mutations').map(regionId => {
             const regionInfo = mockRegionData[regionId as keyof typeof mockRegionData];
             if (!regionInfo) return null;
 
@@ -324,5 +437,5 @@ export function SingleSequenceTrack({
         </div>
       )}
     </div>
-  );
+    );
 }

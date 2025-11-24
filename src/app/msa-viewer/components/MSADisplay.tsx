@@ -25,7 +25,6 @@ interface MSADisplayProps {
   activeAnnotations  : Set<string>;
 }
 
-// Main Display Component
 export function MSADisplay({
   masterSequences,
   addedSequenceGroups,
@@ -40,10 +39,7 @@ export function MSADisplay({
   const [activeSeq, setActiveSeq] = useState<MsaHighlight | null>(null);
   const [hoveredCell, setHoveredCell] = useState<MsaHover | null>(null);
 
-  // Track which sequences have regions panel expanded
   const [expandedRegions, setExpandedRegions] = useState<Set<string>>(new Set());
-
-  // Track which regions are enabled for each sequence
   const [enabledRegions, setEnabledRegions] = useState<Map<string, Set<string>>>(new Map());
 
   const trackRefs = useRef<{ [key: string]: any }>({});
@@ -55,9 +51,6 @@ export function MSADisplay({
     setActiveSeq({ seqId });
   };
 
-  // --- FIREWALL: TRANSLATION LOGIC START ---
-  // FIX: Nightingale emits 0-based indices. We pass them through.
-  
   const handleInternalResidueClick = (seqId: string, rawPosition: number) => {
     if (typeof rawPosition === 'number') {
       onResidueClick(seqId, rawPosition);
@@ -77,7 +70,6 @@ export function MSADisplay({
     onResidueLeave();
     setHoveredCell(null);
   };
-  // --- FIREWALL: TRANSLATION LOGIC END ---
 
   const toggleRegionsExpanded = (seqId: string) => {
     setExpandedRegions(prev => {

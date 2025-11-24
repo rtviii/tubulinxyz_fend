@@ -74,14 +74,26 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
     }
   };
 
-  const handleAlignClick = async (chainId: string) => {
-    if (!activeService || !loadedPdbId) return;
-    try {
-      await alignAndRegisterChain(loadedPdbId, chainId, activeService);
-    } catch (err: any) {
-      alert(`Alignment failed: ${err.message}`);
-    }
-  };
+
+const handleAlignClick = async (chainId: string) => {
+  if (!activeService || !loadedPdbId) return;
+  try {
+    // Get cached annotations for this chain
+    const annotations = getAnnotations(loadedPdbId, chainId);
+    
+    // Pass mutations to the aligner
+    await alignAndRegisterChain(
+      loadedPdbId, 
+      chainId, 
+      activeService,
+      annotations?.mutations || [],
+      annotations?.modifications || []
+    );
+  } catch (err: any) {
+    alert(`Alignment failed: ${err.message}`);
+  }
+};
+
 
   const handleAnnotationsLoaded = useCallback((chainId: string, data: any) => {
     if (loadedPdbId) {
