@@ -3,19 +3,34 @@ import { useState } from 'react';
 import { MolstarService } from '@/components/molstar/molstar_service';
 import { useSequenceStructureRegistry } from './useSequenceStructureSync';
 import { MsaToStructureMapping } from '../types';
-import { AlignmentService } from '../alignment_service';
+import { AlignmentRequest, AlignmentResponse } from "@/app/msa-viewer/types";
+
+const API_BASE_URL = "http://localhost:8000";
+
+export const AlignmentService = {
+  /**
+   * Sends an observed sequence to the backend to be aligned against the Master.
+   */
+  async alignSequence(payload: AlignmentRequest): Promise<AlignmentResponse> {
+    const response = await fetch(`${API_BASE_URL}/msaprofile/sequence`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Backend Error (${response.status}): ${errText}`);
+    }
+
+    return await response.json();
+  }
+};
 
 export function useSequenceAligner(registry: ReturnType<typeof useSequenceStructureRegistry>) {
     const [isAligning, setIsAligning] = useState(false);
     const [currentChain, setCurrentChain] = useState<string | null>(null);
 
-    /**
-     * Orchestrates the alignment process:
-     * 1. Extract observed sequence & IDs from Molstar (Source of Truth)
-     * 2. Send to Backend for alignment
-     * 3. Process mapping (0-based MSA index -> AuthSeqId)
-     * 4. Update Registry
-     */
     const alignAndRegisterChain = async (
         pdbId: string,
         chainId: string,
