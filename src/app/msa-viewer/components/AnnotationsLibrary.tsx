@@ -1,5 +1,6 @@
 // components/AnnotationsLibrary.tsx
 import { useState } from 'react';
+import { PositionAnnotationViewer } from '../PositionAnnotationViewer';
 
 interface AnnotationsLibraryProps {
   activeAnnotations: Set<string>;
@@ -85,6 +86,7 @@ export function AnnotationsLibrary({ activeAnnotations, setActiveAnnotations }: 
 
   return (
     <div className="h-full border rounded-lg bg-white flex flex-col">
+   <PositionAnnotationViewer />
       <div className="p-2 border-b bg-gray-50">
         <h2 className="text-sm font-semibold text-gray-800">Annotations</h2>
         {/* <p className="text-xs text-gray-600">Toggle tracks</p> */}

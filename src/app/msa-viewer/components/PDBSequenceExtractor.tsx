@@ -1,10 +1,12 @@
 // src/app/msa-viewer/components/PDBSequenceExtractor.tsx
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useSequenceStructureRegistry } from '../hooks/useSequenceStructureSync';
 import { MolstarService } from '@/components/molstar/molstar_service';
 import { createTubulinClassificationMap } from '@/services/gql_parser';
 import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 import { useSequenceAligner } from '../hooks/useSequenceAligner';
+import { ChainAnnotationSummary } from './ChainAnnotationSummary';
+import { useChainAnnotations } from '../hooks/useChainAnnotations';
 
 interface PDBSequenceExtractorProps {
   mainService: MolstarService | null;
@@ -25,8 +27,8 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
   const [loadedPdbId, setLoadedPdbId] = useState<string | null>(null);
   const [selectedViewer, setSelectedViewer] = useState<'main' | 'auxiliary'>('main');
 
-  // Use the logic hook
   const { alignAndRegisterChain, isAligning, currentChain } = useSequenceAligner(registry);
+  const { cacheAnnotations, getAnnotations } = useChainAnnotations();
 
   const activeService = selectedViewer === 'main' ? mainService : auxiliaryService;
 
@@ -81,13 +83,19 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
     }
   };
 
+  const handleAnnotationsLoaded = useCallback((chainId: string, data: any) => {
+    if (loadedPdbId) {
+      cacheAnnotations(loadedPdbId, chainId, data);
+    }
+  }, [loadedPdbId, cacheAnnotations]); // Add dependencies
+
+
   const isChainAligned = (chainId: string) => {
     return loadedPdbId && registry.getSequenceByChain(loadedPdbId, chainId) !== null;
   };
 
   return (
     <div className="flex flex-col gap-4 h-full">
-      {/* Search / Load Section */}
       <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
         <h3 className="text-sm font-semibold text-gray-700 mb-3">1. Load Structure</h3>
         <div className="flex gap-2">
@@ -119,7 +127,6 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
         </div>
       </div>
 
-      {/* Chain List Section */}
       {loadedPdbId && availableChains.length > 0 && (
         <div className="flex-1 min-h-0 flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm">
           <div className="p-3 border-b border-gray-100 flex justify-between items-center">
@@ -137,37 +144,40 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
               return (
                 <div
                   key={chain.id}
-                  className={`p-2.5 rounded-md border flex justify-between items-center transition-all
+                  className={`p-2 rounded-md border transition-all
                      ${aligned
                       ? 'bg-green-50 border-green-200'
                       : 'bg-white border-gray-200 hover:border-blue-300'
                     }`}
                 >
-                  <div className="min-w-0 flex-1 mr-3">
+                  <div className="flex justify-between items-start mb-2">
                     <div className="flex items-baseline gap-2">
-                      <span className={`font-mono font-bold text-lg ${aligned ? 'text-green-700' : 'text-gray-700'}`}>
-                        {chain.id}
+                      <span className={`font-mono font-bold text-base ${aligned ? 'text-green-700' : 'text-gray-700'}`}>
+                        Chain {chain.id}
                       </span>
                       <span className="text-xs text-gray-500">{chain.len} residues</span>
                     </div>
-                    <div className="text-xs font-mono text-gray-400 truncate">
-                      {chain.seq}
-                    </div>
+
+                    <button
+                      onClick={() => handleAlignClick(chain.id)}
+                      disabled={aligned || isAligning}
+                      className={`text-xs px-3 py-1 rounded-md font-medium transition-all shadow-sm
+                         ${aligned
+                          ? 'bg-white text-green-700 border border-green-200 cursor-default'
+                          : processing
+                            ? 'bg-blue-100 text-blue-700 cursor-wait'
+                            : 'bg-gray-800 text-white hover:bg-black'
+                        }`}
+                    >
+                      {aligned ? "Aligned" : processing ? "..." : "Align"}
+                    </button>
                   </div>
 
-                  <button
-                    onClick={() => handleAlignClick(chain.id)}
-                    disabled={aligned || isAligning}
-                    className={`text-xs px-3 py-1.5 rounded-md font-medium transition-all shadow-sm
-                       ${aligned
-                        ? 'bg-white text-green-700 border border-green-200 cursor-default'
-                        : processing
-                          ? 'bg-blue-100 text-blue-700 cursor-wait'
-                          : 'bg-gray-800 text-white hover:bg-black'
-                      }`}
-                  >
-                    {aligned ? "Aligned" : processing ? "..." : "Align"}
-                  </button>
+                  <ChainAnnotationSummary 
+                    rcsb_id={loadedPdbId}
+                    auth_asym_id={chain.id}
+                    onAnnotationsLoaded={(data) => handleAnnotationsLoaded(chain.id, data)}
+                  />
                 </div>
               );
             })}

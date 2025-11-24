@@ -1,4 +1,5 @@
 // src/app/msa-viewer/components/MSAPanel.tsx
+import { useState } from 'react';
 import { MSADisplay } from './MSADisplay';
 import { useSequenceStructureRegistry } from '../hooks/useSequenceStructureSync';
 import { MolstarService } from '@/components/molstar/molstar_service';
@@ -11,7 +12,7 @@ interface MSAPanelProps {
   registry: ReturnType<typeof useSequenceStructureRegistry>;
   setActiveLabel: (label: string | null) => void;
   setLastEventLog: (log: string | null) => void;
-  activeAnnotations: Set<string>;
+  onHoveredPositionChange: (position: number | null) => void; // NEW
 }
 
 export function MSAPanel({
@@ -22,8 +23,10 @@ export function MSAPanel({
   registry,
   setActiveLabel,
   setLastEventLog,
-  activeAnnotations
+  onHoveredPositionChange
 }: MSAPanelProps) {
+
+  const [globalAnnotations, setGlobalAnnotations] = useState<Set<string>>(new Set());
 
   const masterSequences = registry.getMasterSequences().map(seq => ({
     id: seq.id,
@@ -56,17 +59,12 @@ export function MSAPanel({
     setLastEventLog(logMsg);
   };
 
-  /**
-   * Handle Residue Click
-   * Expects 0-BASED MSA position
-   */
   const handleResidueClick = async (sequenceId: string, position0: number) => {
     const seq = registry.getSequenceById(sequenceId);
     if (!seq) return;
 
     setActiveLabel(seq.name);
 
-    // Broadcast click to ALL structures based on MSA column position
     const allPdbSequences = registry.getPDBSequences();
     const focusTasks = [];
     const logParts = [`Residue clicked: "${seq.name}" | MSA Pos ${position0}`];
@@ -78,7 +76,6 @@ export function MSAPanel({
       
       if (!positionMapping || !structureInfo) continue;
       
-      // Lookup 0-based mapping
       const originalResidue = positionMapping[position0];
       
       if (originalResidue !== undefined) {
@@ -98,6 +95,9 @@ export function MSAPanel({
   };
 
   const handleResidueHover = async (sequenceId: string, position0: number) => {
+    // Notify parent about position change for annotation viewer
+    onHoveredPositionChange(position0 + 1); // Convert to 1-based for MA position
+
     const allPdbSequences = registry.getPDBSequences();
     const highlightTasks = [];
 
@@ -111,9 +111,6 @@ export function MSAPanel({
       const originalResidue = positionMapping[position0];
 
       if (originalResidue !== undefined) {
-        if (seq.id === sequenceId) { 
-        }
-
         const molstarService = structureInfo.viewerId === 'auxiliary' ? auxiliaryService : mainService;
 
         if (molstarService?.controller) {
@@ -129,6 +126,9 @@ export function MSAPanel({
   };
 
   const handleResidueLeave = async () => {
+    // Clear hovered position
+    onHoveredPositionChange(null);
+
     const clearTasks = [];
     if (mainService?.controller) {
       clearTasks.push(
@@ -159,7 +159,7 @@ export function MSAPanel({
             onResidueClick={handleResidueClick}
             onResidueHover={handleResidueHover}
             onResidueLeave={handleResidueLeave}
-            activeAnnotations={activeAnnotations}
+            activeAnnotations={globalAnnotations}
           />
         ) : (
           <div className="p-8 text-center text-gray-500">

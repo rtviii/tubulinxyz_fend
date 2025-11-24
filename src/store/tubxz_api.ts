@@ -1,11 +1,89 @@
 import { emptySplitApi as api } from "./emptyApi";
-export const addTagTypes = ["Structures", "Polymers", "Ligands"] as const;
+export const addTagTypes = [
+  "Annotations",
+  "Structures",
+  "Polymers",
+  "Ligands",
+] as const;
 const injectedRtkApi = api
   .enhanceEndpoints({
     addTagTypes,
   })
   .injectEndpoints({
     endpoints: (build) => ({
+      getMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGet:
+        build.query<
+          GetMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGetApiResponse,
+          GetMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGetApiArg
+        >({
+          query: (queryArg) => ({
+            url: `/annotations/mutations/${queryArg.family}/${queryArg.version}/${queryArg.position}`,
+          }),
+          providesTags: ["Annotations"],
+        }),
+      getModificationsAtPositionAnnotationsModificationsFamilyVersionPositionGet:
+        build.query<
+          GetModificationsAtPositionAnnotationsModificationsFamilyVersionPositionGetApiResponse,
+          GetModificationsAtPositionAnnotationsModificationsFamilyVersionPositionGetApiArg
+        >({
+          query: (queryArg) => ({
+            url: `/annotations/modifications/${queryArg.family}/${queryArg.version}/${queryArg.position}`,
+          }),
+          providesTags: ["Annotations"],
+        }),
+      getAllAnnotationsAtPositionAnnotationsAllFamilyVersionPositionGet:
+        build.query<
+          GetAllAnnotationsAtPositionAnnotationsAllFamilyVersionPositionGetApiResponse,
+          GetAllAnnotationsAtPositionAnnotationsAllFamilyVersionPositionGetApiArg
+        >({
+          query: (queryArg) => ({
+            url: `/annotations/all/${queryArg.family}/${queryArg.version}/${queryArg.position}`,
+          }),
+          providesTags: ["Annotations"],
+        }),
+      getAnnotationsInRangeAnnotationsRangeFamilyVersionGet: build.query<
+        GetAnnotationsInRangeAnnotationsRangeFamilyVersionGetApiResponse,
+        GetAnnotationsInRangeAnnotationsRangeFamilyVersionGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/annotations/range/${queryArg.family}/${queryArg.version}`,
+          params: {
+            start: queryArg.start,
+            end: queryArg.end,
+          },
+        }),
+        providesTags: ["Annotations"],
+      }),
+      getPolymerMutationsAnnotationsPolymerRcsbIdAuthAsymIdMutationsGet:
+        build.query<
+          GetPolymerMutationsAnnotationsPolymerRcsbIdAuthAsymIdMutationsGetApiResponse,
+          GetPolymerMutationsAnnotationsPolymerRcsbIdAuthAsymIdMutationsGetApiArg
+        >({
+          query: (queryArg) => ({
+            url: `/annotations/polymer/${queryArg.rcsbId}/${queryArg.authAsymId}/mutations`,
+          }),
+          providesTags: ["Annotations"],
+        }),
+      getPolymerModificationsAnnotationsPolymerRcsbIdAuthAsymIdModificationsGet:
+        build.query<
+          GetPolymerModificationsAnnotationsPolymerRcsbIdAuthAsymIdModificationsGetApiResponse,
+          GetPolymerModificationsAnnotationsPolymerRcsbIdAuthAsymIdModificationsGetApiArg
+        >({
+          query: (queryArg) => ({
+            url: `/annotations/polymer/${queryArg.rcsbId}/${queryArg.authAsymId}/modifications`,
+          }),
+          providesTags: ["Annotations"],
+        }),
+      getPolymerAllAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdAllGet:
+        build.query<
+          GetPolymerAllAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdAllGetApiResponse,
+          GetPolymerAllAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdAllGetApiArg
+        >({
+          query: (queryArg) => ({
+            url: `/annotations/polymer/${queryArg.rcsbId}/${queryArg.authAsymId}/all`,
+          }),
+          providesTags: ["Annotations"],
+        }),
       allStructureIdsStructuresAllIdsGet: build.query<
         AllStructureIdsStructuresAllIdsGetApiResponse,
         AllStructureIdsStructuresAllIdsGetApiArg
@@ -101,13 +179,79 @@ const injectedRtkApi = api
       >({
         query: (queryArg) => ({ url: `/grid/${queryArg.pdbId}` }),
       }),
-      rootGet: build.query<RootGetApiResponse, RootGetApiArg>({
-        query: () => ({ url: `/` }),
-      }),
     }),
     overrideExisting: false,
   });
 export { injectedRtkApi as tubxz_api };
+export type GetMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGetApiArg =
+  {
+    family: string;
+    version: string;
+    position: number;
+  };
+export type GetModificationsAtPositionAnnotationsModificationsFamilyVersionPositionGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetModificationsAtPositionAnnotationsModificationsFamilyVersionPositionGetApiArg =
+  {
+    family: string;
+    version: string;
+    position: number;
+  };
+export type GetAllAnnotationsAtPositionAnnotationsAllFamilyVersionPositionGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetAllAnnotationsAtPositionAnnotationsAllFamilyVersionPositionGetApiArg =
+  {
+    family: string;
+    version: string;
+    position: number;
+  };
+export type GetAnnotationsInRangeAnnotationsRangeFamilyVersionGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetAnnotationsInRangeAnnotationsRangeFamilyVersionGetApiArg = {
+  family: string;
+  version: string;
+  /** Start position (inclusive) */
+  start: number;
+  /** End position (inclusive) */
+  end: number;
+};
+export type GetPolymerMutationsAnnotationsPolymerRcsbIdAuthAsymIdMutationsGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetPolymerMutationsAnnotationsPolymerRcsbIdAuthAsymIdMutationsGetApiArg =
+  {
+    rcsbId: string;
+    authAsymId: string;
+  };
+export type GetPolymerModificationsAnnotationsPolymerRcsbIdAuthAsymIdModificationsGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetPolymerModificationsAnnotationsPolymerRcsbIdAuthAsymIdModificationsGetApiArg =
+  {
+    rcsbId: string;
+    authAsymId: string;
+  };
+export type GetPolymerAllAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdAllGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetPolymerAllAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdAllGetApiArg =
+  {
+    rcsbId: string;
+    authAsymId: string;
+  };
 export type AllStructureIdsStructuresAllIdsGetApiResponse =
   /** status 200 Successful Response */ string[];
 export type AllStructureIdsStructuresAllIdsGetApiArg = void;
@@ -156,8 +300,6 @@ export type GetGridGridPdbIdGetApiResponse =
 export type GetGridGridPdbIdGetApiArg = {
   pdbId: string;
 };
-export type RootGetApiResponse = /** status 200 Successful Response */ any;
-export type RootGetApiArg = void;
 export type ValidationError = {
   loc: (string | number)[];
   msg: string;
@@ -177,16 +319,16 @@ export type StructureFilterParams = {
   polymerization_state?: string[] | null;
 };
 export type PolymersFilterParams = {
-  cursor     ?: [string | null, string | null] | (string | null)[] | string | null;
-  limit      ?: number;
-  year       ?: [number | null, number | null] | null;
-  search     ?: string | null;
-  resolution ?: [number | null, number | null] | null;
+  cursor?: [string | null, string | null] | (string | null)[] | string | null;
+  limit?: number;
+  year?: [number | null, number | null] | null;
+  search?: string | null;
+  resolution?: [number | null, number | null] | null;
   source_taxa?: number[] | null;
-  host_taxa  ?: number[] | null;
-  family     ?: string[] | null;
-  uniprot_id ?: string | null;
-  has_motif  ?: string | null;
+  host_taxa?: number[] | null;
+  family?: string[] | null;
+  uniprot_id?: string | null;
+  has_motif?: string | null;
 };
 export type Annotation = {
   start: number;
@@ -234,6 +376,13 @@ export type GridData = {
   };
 };
 export const {
+  useGetMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGetQuery,
+  useGetModificationsAtPositionAnnotationsModificationsFamilyVersionPositionGetQuery,
+  useGetAllAnnotationsAtPositionAnnotationsAllFamilyVersionPositionGetQuery,
+  useGetAnnotationsInRangeAnnotationsRangeFamilyVersionGetQuery,
+  useGetPolymerMutationsAnnotationsPolymerRcsbIdAuthAsymIdMutationsGetQuery,
+  useGetPolymerModificationsAnnotationsPolymerRcsbIdAuthAsymIdModificationsGetQuery,
+  useGetPolymerAllAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdAllGetQuery,
   useAllStructureIdsStructuresAllIdsGetQuery,
   useRandomStructureStructuresRandomGetQuery,
   useGetStructureStructuresRcsbIdGetQuery,
@@ -246,5 +395,4 @@ export const {
   useAlignSequenceMsaprofileSequencePostMutation,
   useGetMasterProfileMsaprofileMasterGetQuery,
   useGetGridGridPdbIdGetQuery,
-  useRootGetQuery,
 } = injectedRtkApi;

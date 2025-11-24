@@ -13,6 +13,27 @@ export enum TubulinClass {
 }
 export type TubulinClassification = Record<string, TubulinClass>;
 
+
+// Add this after the TubulinColors definition
+const LigandColors = {
+    'GTP': Color(0xFFFFFF),  // White
+    'GDP': Color(0xFFF9E6),  // Pale yellow
+    'ATP': Color(0xFF00FF),  // Magenta
+    'ADP': Color(0x00FFFF),  // Cyan
+    'NAD': Color(0xFF6B6B),  // Red
+    'FAD': Color(0xFFD93D),  // Orange
+    'HEM': Color(0xFF1493),  // Deep pink
+    'MG': Color(0x00FF00),   // Green
+    'CA': Color(0x4169E1),   // Royal blue
+    'FE': Color(0xE67E22),   // Orange-brown
+    'ZN': Color(0x95A5A6),   // Gray-blue
+    Default: Color(0x20B2AA)  // Light sea green for interesting unknowns
+};
+
+function getLigandColor(compId: string): number {
+    return LigandColors[compId] || LigandColors.Default;
+}
+
 // Computed residue annotation interface
 export interface ComputedResidueAnnotation {
     auth_asym_id: string;
@@ -164,21 +185,47 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
             }
         }
 
+
         const ligandInstances = getLigandInstances(structure);
+
         for (const instance of ligandInstances) {
             const ligandSelection = MS.struct.generator.atomGroups({
                 'residue-test': MS.core.logic.and([
                     MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), instance.compId]),
                     MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), instance.auth_asym_id]),
-                    MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_seq_id(), instance.auth_seq_id])
+              /*  */      MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_seq_id(), instance.auth_seq_id])
                 ])
             });
 
-            const component = await plugin.builders.structure.tryCreateComponentFromExpression(ref, ligandSelection, `${params.pdbId}_${instance.uniqueKey}`, { label: `Ligand ${instance.uniqueKey}` });
+            const component = await plugin.builders.structure.tryCreateComponentFromExpression(
+                ref,
+                ligandSelection,
+                `${params.pdbId}_${instance.uniqueKey}`,
+                {
+                    label: `Ligand ${instance.uniqueKey}`,
+                    tags: [`ligand-${instance.compId}`]
+                }
+            );
 
             if (component) {
-                await plugin.builders.structure.representation.addRepresentation(component, { type: 'ball-and-stick', color: 'element-symbol' });
-                objects_ligand[instance.uniqueKey] = { ref: component.ref };
+                const ligandColor = getLigandColor(instance.compId);
+
+                await plugin.builders.structure.representation.addRepresentation(component, {
+                    type: 'ball-and-stick',
+                    color: 'uniform',
+                    colorParams: {
+                        value: ligandColor
+                    },
+                    typeParams: {
+                        emissive: 0.6,
+                        sizeFactor: 0.2,
+                        sizeAspectRatio: 0.5
+                    }
+                });
+
+                objects_ligand[instance.uniqueKey] = {
+                    ref: component.ref
+                };
             }
         }
 
