@@ -23,7 +23,7 @@ export default function MSAViewerPage() {
   const [lastEventLog, setLastEventLog] = useState<string | null>(null);
   const [activeAnnotations, setActiveAnnotations] = useState<Set<string>>(new Set());
 
-  const { service: mainService, isInitialized: mainInitialized } = useMolstarService(mainMolstarNodeRef, 'main');
+  const { service: mainService, isInitialized: mainInitialized }           = useMolstarService(mainMolstarNodeRef, 'main');
   const { service: auxiliaryService, isInitialized: auxiliaryInitialized } = useMolstarService(auxiliaryMolstarNodeRef, 'auxiliary');
 
   const { alignmentData, maxLength, isLoading: loadingAlignment } = useAlignmentData();
