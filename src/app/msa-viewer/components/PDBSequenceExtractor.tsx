@@ -10,30 +10,25 @@ import { useChainAnnotations } from '../hooks/useChainAnnotations';
 
 interface PDBSequenceExtractorProps {
   mainService: MolstarService | null;
-  auxiliaryService: MolstarService | null;
   registry: ReturnType<typeof useSequenceStructureRegistry>;
+  onMutationClick?: (pdbId: string, chainId: string, masterIndex: number) => void;
 }
 
-interface AvailableChain {
-  id: string;
-  len: number;
-  seq: string;
-}
-
-export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }: PDBSequenceExtractorProps) {
+export function PDBSequenceExtractor({
+  mainService,
+  registry,
+  onMutationClick
+}: PDBSequenceExtractorProps) {
   const [pdbId, setPdbId] = useState("");
   const [isLoadingStructure, setIsLoadingStructure] = useState(false);
   const [availableChains, setAvailableChains] = useState<AvailableChain[]>([]);
   const [loadedPdbId, setLoadedPdbId] = useState<string | null>(null);
-  const [selectedViewer, setSelectedViewer] = useState<'main' | 'auxiliary'>('main');
 
   const { alignAndRegisterChain, isAligning, currentChain } = useSequenceAligner(registry);
   const { cacheAnnotations, getAnnotations } = useChainAnnotations();
 
-  const activeService = selectedViewer === 'main' ? mainService : auxiliaryService;
-
   const handleLoadStructure = async () => {
-    if (!activeService || !pdbId.trim()) return;
+    if (!mainService || !pdbId.trim()) return;
 
     setIsLoadingStructure(true);
     setAvailableChains([]);
@@ -45,14 +40,14 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
       const gqlData = await fetchRcsbGraphQlData(cleanId);
       const classification = createTubulinClassificationMap(gqlData);
 
-      await activeService.controller.loadStructure(cleanId, classification);
-      await activeService.viewer.representations.stylized_lighting();
+      await mainService.controller.loadStructure(cleanId, classification);
+      await mainService.viewer.representations.stylized_lighting();
 
-      const chainIds = activeService.controller.getAllChains(cleanId);
+      const chainIds = mainService.controller.getAllChains(cleanId);
 
       const chainsData: AvailableChain[] = [];
       for (const ch of chainIds) {
-        const obs = activeService.controller.getObservedSequenceAndMapping(cleanId, ch);
+        const obs = mainService.controller.getObservedSequenceAndMapping(cleanId, ch);
         if (obs && obs.sequence.length > 0) {
           chainsData.push({
             id: ch,
@@ -62,7 +57,7 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
         }
       }
 
-      registry.registerStructure(cleanId, chainIds, selectedViewer);
+      registry.registerStructure(cleanId, chainIds, 'main');
       setAvailableChains(chainsData);
       setLoadedPdbId(cleanId);
 
@@ -74,33 +69,43 @@ export function PDBSequenceExtractor({ mainService, auxiliaryService, registry }
     }
   };
 
+  const handleAlignClick = async (chainId: string) => {
+    if (!mainService || !loadedPdbId) return;
 
-const handleAlignClick = async (chainId: string) => {
-  if (!activeService || !loadedPdbId) return;
-  try {
-    // Get cached annotations for this chain
-    const annotations = getAnnotations(loadedPdbId, chainId);
-    
-    // Pass mutations to the aligner
-    await alignAndRegisterChain(
-      loadedPdbId, 
-      chainId, 
-      activeService,
-      annotations?.mutations || [],
-      annotations?.modifications || []
-    );
-  } catch (err: any) {
-    alert(`Alignment failed: ${err.message}`);
-  }
-};
+    try {
+      const annotations = getAnnotations(loadedPdbId, chainId);
 
+      await alignAndRegisterChain(
+        loadedPdbId,
+        chainId,
+        mainService,
+        annotations?.mutations || [],
+        annotations?.modifications || []
+      );
+
+      await mainService.controller.isolateChain(loadedPdbId, chainId);
+
+      console.log(`Isolated chain ${chainId} in structure ${loadedPdbId}`);
+    } catch (err: any) {
+      alert(`Alignment failed: ${err.message}`);
+    }
+  };
 
   const handleAnnotationsLoaded = useCallback((chainId: string, data: any) => {
     if (loadedPdbId) {
       cacheAnnotations(loadedPdbId, chainId, data);
     }
-  }, [loadedPdbId, cacheAnnotations]); // Add dependencies
+  }, [loadedPdbId, cacheAnnotations]);
 
+  const handleMutationClick = useCallback((chainId: string, masterIndex: number) => {
+    console.log('🟡 handleMutationClick in PDBSequenceExtractor', { loadedPdbId, chainId, masterIndex });
+    if (loadedPdbId && onMutationClick) {
+      console.log('🟢 Calling parent onMutationClick');
+      onMutationClick(loadedPdbId, chainId, masterIndex);
+    } else {
+      console.log('🔴 Missing:', { loadedPdbId, hasCallback: !!onMutationClick });
+    }
+  }, [loadedPdbId, onMutationClick]);
 
   const isChainAligned = (chainId: string) => {
     return loadedPdbId && registry.getSequenceByChain(loadedPdbId, chainId) !== null;
@@ -109,17 +114,8 @@ const handleAlignClick = async (chainId: string) => {
   return (
     <div className="flex flex-col gap-4 h-full">
       <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">1. Load Structure</h3>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Load Structure</h3>
         <div className="flex gap-2">
-          <select
-            className="text-sm border border-gray-300 rounded-md p-2 bg-white outline-none"
-            value={selectedViewer}
-            onChange={e => setSelectedViewer(e.target.value as any)}
-          >
-            <option value="main">Main Viewer</option>
-            <option value="auxiliary">Aux Viewer</option>
-          </select>
-
           <input
             value={pdbId}
             onChange={e => setPdbId(e.target.value)}
@@ -131,7 +127,7 @@ const handleAlignClick = async (chainId: string) => {
 
           <button
             onClick={handleLoadStructure}
-            disabled={isLoadingStructure || !activeService || !pdbId.trim()}
+            disabled={isLoadingStructure || !mainService || !pdbId.trim()}
             className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             {isLoadingStructure ? "..." : "Load"}
@@ -142,7 +138,7 @@ const handleAlignClick = async (chainId: string) => {
       {loadedPdbId && availableChains.length > 0 && (
         <div className="flex-1 min-h-0 flex flex-col bg-white rounded-lg border border-gray-200 shadow-sm">
           <div className="p-3 border-b border-gray-100 flex justify-between items-center">
-            <h3 className="text-sm font-semibold text-gray-700">2. Align Chains</h3>
+            <h3 className="text-sm font-semibold text-gray-700">Align Chains</h3>
             <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
               {availableChains.length} chains
             </span>
@@ -185,10 +181,11 @@ const handleAlignClick = async (chainId: string) => {
                     </button>
                   </div>
 
-                  <ChainAnnotationSummary 
+                  <ChainAnnotationSummary
                     rcsb_id={loadedPdbId}
                     auth_asym_id={chain.id}
                     onAnnotationsLoaded={(data) => handleAnnotationsLoaded(chain.id, data)}
+                    onMutationClick={(masterIndex) => handleMutationClick(chain.id, masterIndex)}
                   />
                 </div>
               );
@@ -198,4 +195,10 @@ const handleAlignClick = async (chainId: string) => {
       )}
     </div>
   );
+}
+
+interface AvailableChain {
+  id: string;
+  len: number;
+  seq: string;
 }

@@ -17,7 +17,10 @@ interface SingleSequenceTrackProps {
   isRegionsExpanded: boolean;
   onToggleRegions: () => void;
   enabledRegions: Set<string>;
+
   onToggleRegion: (regionId: string) => void;
+  width?: number;
+  msaTrackRefs: React.MutableRefObject<{ [key: string]: any }>;
 }
 
 export function SingleSequenceTrack({
@@ -34,7 +37,8 @@ export function SingleSequenceTrack({
   isRegionsExpanded,
   onToggleRegions,
   enabledRegions,
-  onToggleRegion
+  onToggleRegion,
+  width
 }: SingleSequenceTrackProps) {
 
   const msaRef = useRef<any>(null);
@@ -214,6 +218,7 @@ export function SingleSequenceTrack({
             highlight-event="onmouseover"
             highlight-color="#00FF0044"
             overlay-conservation={false}
+            width={width}
           />
         </div>
       </div>
@@ -372,7 +377,7 @@ export function SingleSequenceTrack({
                   display-end={maxLength}
                   layout="non-overlapping"
                   highlight-event="onmouseover"
-                  style={{ width: '100%' }}
+                  width={width}
                 />
               </div>
             </div>
@@ -428,7 +433,7 @@ export function SingleSequenceTrack({
                     display-end={maxLength}
                     layout="non-overlapping"
                     highlight-event="onmouseover"
-                    style={{ width: '100%' }}
+                    width={width}
                   />
                 </div>
               </div>
@@ -437,5 +442,5 @@ export function SingleSequenceTrack({
         </div>
       )}
     </div>
-    );
+  );
 }

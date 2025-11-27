@@ -1,5 +1,5 @@
 // src/app/msa-viewer/components/MSAPanel.tsx
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { MSADisplay } from './MSADisplay';
 import { useSequenceStructureRegistry } from '../hooks/useSequenceStructureSync';
 import { MolstarService } from '@/components/molstar/molstar_service';
@@ -8,22 +8,22 @@ interface MSAPanelProps {
   maxLength: number;
   areComponentsLoaded: boolean;
   mainService: MolstarService | null;
-  auxiliaryService: MolstarService | null;
   registry: ReturnType<typeof useSequenceStructureRegistry>;
   setActiveLabel: (label: string | null) => void;
   setLastEventLog: (log: string | null) => void;
-  onHoveredPositionChange: (position: number | null) => void; // NEW
+  onHoveredPositionChange: (position: number | null) => void;
+  onZoomToPosition?: (position: number) => void;
 }
 
 export function MSAPanel({
   maxLength,
   areComponentsLoaded,
   mainService,
-  auxiliaryService,
   registry,
   setActiveLabel,
   setLastEventLog,
-  onHoveredPositionChange
+  onHoveredPositionChange,
+  onZoomToPosition
 }: MSAPanelProps) {
 
   const [globalAnnotations, setGlobalAnnotations] = useState<Set<string>>(new Set());
@@ -51,8 +51,7 @@ export function MSAPanel({
 
     let logMsg = `Label clicked: "${label}"`;
     if (seq?.origin.type === 'pdb') {
-      const structureInfo = registry.getStructureInfo(seq.origin.pdbId);
-      logMsg += ` | ${seq.origin.pdbId} Chain ${seq.origin.chainId} [${structureInfo?.viewerId || 'main'}]`;
+      logMsg += ` | ${seq.origin.pdbId} Chain ${seq.origin.chainId}`;
     } else if (seq?.origin.type === 'custom') {
       logMsg += ` | Custom sequence`;
     }
@@ -72,22 +71,17 @@ export function MSAPanel({
     for (const pdbSeq of allPdbSequences) {
       if (pdbSeq.origin.type !== 'pdb') continue;
       const { pdbId, chainId, positionMapping } = pdbSeq.origin;
-      const structureInfo = registry.getStructureInfo(pdbId);
       
-      if (!positionMapping || !structureInfo) continue;
+      if (!positionMapping) continue;
       
       const originalResidue = positionMapping[position0];
       
-      if (originalResidue !== undefined) {
-        const molstarService = structureInfo.viewerId === 'auxiliary' ? auxiliaryService : mainService;
-
-        if (molstarService?.controller) {
-          logParts.push(`${pdbId}:${chainId}:${originalResidue}[${structureInfo.viewerId}]`);
-          focusTasks.push(
-            molstarService.controller.focusChain(pdbId, chainId)
-              .catch(error => console.error(`Failed to focus ${pdbId}:${chainId}:${originalResidue}:`, error))
-          );
-        }
+      if (originalResidue !== undefined && mainService?.controller) {
+        logParts.push(`${pdbId}:${chainId}:${originalResidue}`);
+        focusTasks.push(
+          mainService.controller.focusChain(pdbId, chainId)
+            .catch(error => console.error(`Failed to focus ${pdbId}:${chainId}:${originalResidue}:`, error))
+        );
       }
     }
     await Promise.all(focusTasks);
@@ -95,8 +89,7 @@ export function MSAPanel({
   };
 
   const handleResidueHover = async (sequenceId: string, position0: number) => {
-    // Notify parent about position change for annotation viewer
-    onHoveredPositionChange(position0 + 1); // Convert to 1-based for MA position
+    onHoveredPositionChange(position0 + 1);
 
     const allPdbSequences = registry.getPDBSequences();
     const highlightTasks = [];
@@ -105,20 +98,15 @@ export function MSAPanel({
       if (seq.origin.type !== 'pdb') continue;
 
       const { pdbId, chainId, positionMapping } = seq.origin;
-      const structureInfo = registry.getStructureInfo(pdbId);
 
-      if (!positionMapping || !structureInfo) continue;
+      if (!positionMapping) continue;
       const originalResidue = positionMapping[position0];
 
-      if (originalResidue !== undefined) {
-        const molstarService = structureInfo.viewerId === 'auxiliary' ? auxiliaryService : mainService;
-
-        if (molstarService?.controller) {
-          highlightTasks.push(
-            molstarService.controller.hoverResidue(pdbId, chainId, originalResidue, true)
-              .catch(error => console.error(`Failed to highlight:`, error))
-          );
-        }
+      if (originalResidue !== undefined && mainService?.controller) {
+        highlightTasks.push(
+          mainService.controller.hoverResidue(pdbId, chainId, originalResidue, true)
+            .catch(error => console.error(`Failed to highlight:`, error))
+        );
       }
     }
 
@@ -126,25 +114,12 @@ export function MSAPanel({
   };
 
   const handleResidueLeave = async () => {
-    // Clear hovered position
     onHoveredPositionChange(null);
 
-    const clearTasks = [];
     if (mainService?.controller) {
-      clearTasks.push(
-        mainService.controller.hoverResidue('', '', 0, false)
-          .catch(error => console.error('Failed to clear main highlight:', error))
-      );
+      await mainService.controller.hoverResidue('', '', 0, false)
+        .catch(error => console.error('Failed to clear highlight:', error));
     }
-
-    if (auxiliaryService?.controller) {
-      clearTasks.push(
-        auxiliaryService.controller.hoverResidue('', '', 0, false)
-          .catch(error => console.error('Failed to clear auxiliary highlight:', error))
-      );
-    }
-
-    await Promise.all(clearTasks);
   };
 
   return (
@@ -160,6 +135,7 @@ export function MSAPanel({
             onResidueHover={handleResidueHover}
             onResidueLeave={handleResidueLeave}
             activeAnnotations={globalAnnotations}
+            onZoomToPosition={onZoomToPosition}
           />
         ) : (
           <div className="p-8 text-center text-gray-500">

@@ -1,65 +1,30 @@
 // src/app/msa-viewer/page.tsx
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { MSAPanel } from './components/MSAPanel';
 import { StructureViewerPanel } from './components/StructureViewerPanel';
 import { useAlignmentData } from './hooks/useAlignmentData';
 import { useNightingaleComponents } from './hooks/useNightingaleComponents';
 import { useMolstarService } from '@/components/molstar/molstar_service';
 import { useSequenceStructureRegistry } from './hooks/useSequenceStructureSync';
-import { createTubulinClassificationMap } from '@/services/gql_parser';
-import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 import { ControlPanel } from './ControlPanel';
 import { PositionAnnotationViewer } from './PositionAnnotationViewer';
 
 export default function MSAViewerPage() {
-
-  const mainMolstarNodeRef         = useRef<HTMLDivElement>(null);
-  const auxiliaryMolstarNodeRef    = useRef<HTMLDivElement>(null);
-  const mainStructureLoaded        = useRef(false);
+  const mainMolstarNodeRef = useRef<HTMLDivElement>(null);
   const masterSequencesInitialized = useRef(false);
 
-  const [activeLabel, setActiveLabel]       = useState<string | null>(null);
-  const [lastEventLog, setLastEventLog]     = useState<string | null>(null);
+  const [activeLabel, setActiveLabel] = useState<string | null>(null);
+  const [lastEventLog, setLastEventLog] = useState<string | null>(null);
   const [hoveredPosition, setHoveredPosition] = useState<number | null>(null);
 
-  const { service: mainService, isInitialized: mainInitialized }           = useMolstarService(mainMolstarNodeRef, 'main');
-  const { service: auxiliaryService, isInitialized: auxiliaryInitialized } = useMolstarService(auxiliaryMolstarNodeRef, 'auxiliary');
+  const { service: mainService, isInitialized: mainInitialized } = useMolstarService(mainMolstarNodeRef, 'main');
 
-  const { alignmentData, maxLength, isLoading: loadingAlignment }          = useAlignmentData();
-  const { areLoaded: componentsLoaded }                                    = useNightingaleComponents();
+  const { alignmentData, maxLength, isLoading: loadingAlignment } = useAlignmentData();
+  const { areLoaded: componentsLoaded } = useNightingaleComponents();
 
-  const registry                                                           = useSequenceStructureRegistry();
-
-  useEffect(() => {
-    if (!mainInitialized || !mainService?.controller || mainStructureLoaded.current) {
-      return;
-    }
-
-    const loadDefault = async () => {
-      try {
-        const RCSB_ID = "5JCO"
-        const normalizedPdbId = RCSB_ID.toUpperCase();
-        const gqlData = await fetchRcsbGraphQlData(normalizedPdbId);
-        const classification = createTubulinClassificationMap(gqlData);
-        await mainService.controller.loadStructure(RCSB_ID, classification)
-        const chains = mainService.controller.getAllChains(RCSB_ID);
-
-        await mainService.viewer.representations.stylized_lighting()
-
-        if (chains.length > 0) {
-          registry.registerStructure(RCSB_ID, chains, 'main');
-          mainStructureLoaded.current = true;
-        }
-      } catch (error) {
-        console.error('Failed to load 5JCO:', error);
-        mainStructureLoaded.current = false;
-      }
-    };
-
-    loadDefault();
-  }, [mainInitialized, mainService, registry]);
+  const registry = useSequenceStructureRegistry();
 
   useEffect(() => {
     if (alignmentData.length === 0 || masterSequencesInitialized.current || !registry) {
@@ -73,9 +38,39 @@ export default function MSAViewerPage() {
     masterSequencesInitialized.current = true;
   }, [alignmentData, registry]);
 
+  const handleMutationClick = useCallback(async (pdbId: string, chainId: string, masterIndex: number) => {
+    console.log(`🎯 Mutation clicked: ${pdbId} ${chainId} @ position ${masterIndex}`);
+    
+    // 1. Zoom MSA to position (20 residue window)
+    if ((window as any).__msaZoomToPosition) {
+      (window as any).__msaZoomToPosition(masterIndex);
+    }
+
+    // 2. Get the sequence for this chain
+    const seq = registry.getSequenceByChain(pdbId, chainId);
+    if (!seq || seq.origin.type !== 'pdb') return;
+
+    const { positionMapping } = seq.origin;
+    if (!positionMapping) return;
+
+    // 3. Convert master position to PDB residue number (0-indexed to actual)
+    const pdbResidue = positionMapping[masterIndex - 1];
+    
+    if (pdbResidue !== undefined && mainService?.controller) {
+      // 4. Focus on the residue in Molstar
+      await mainService.controller.hoverResidue(pdbId, chainId, pdbResidue, true);
+      await mainService.controller.focusChain(pdbId, chainId);
+      
+      setLastEventLog(`Focused on ${pdbId}:${chainId}:${pdbResidue} (MA pos ${masterIndex})`);
+    }
+  }, [mainService, registry]);
+
+  const handleZoomToPosition = useCallback((position: number) => {
+    console.log(`📍 Zooming to position: ${position}`);
+  }, []);
+
   return (
     <div className="h-screen flex flex-col p-3 bg-gray-50">
-
       <div className="flex flex-row gap-3 mb-3" style={{ height: '40vh' }}>
         <div className="w-1/4 border rounded-lg bg-white">
           <div className="p-2 border-b bg-gray-50">
@@ -89,11 +84,11 @@ export default function MSAViewerPage() {
             maxLength={maxLength}
             areComponentsLoaded={componentsLoaded}
             mainService={mainService}
-            auxiliaryService={auxiliaryService}
             registry={registry}
             setActiveLabel={setActiveLabel}
             setLastEventLog={setLastEventLog}
             onHoveredPositionChange={setHoveredPosition}
+            onZoomToPosition={handleZoomToPosition}
           />
         </div>
       </div>
@@ -102,21 +97,18 @@ export default function MSAViewerPage() {
         <div className="w-1/3 flex flex-col gap-3">
           <ControlPanel
             molstarService={mainService}
-            auxiliaryService={auxiliaryService}
             registry={registry}
             activeLabel={activeLabel}
             lastEventLog={lastEventLog}
+            onMutationClick={handleMutationClick}
           />
         </div>
 
         <div className="w-2/3 h-full min-h-0">
           <StructureViewerPanel
             mainNodeRef={mainMolstarNodeRef}
-            auxiliaryNodeRef={auxiliaryMolstarNodeRef}
             mainInitialized={mainInitialized}
-            auxiliaryInitialized={auxiliaryInitialized}
             mainService={mainService}
-            auxiliaryService={auxiliaryService}
             registry={registry}
           />
         </div>

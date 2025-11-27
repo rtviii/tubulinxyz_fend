@@ -2,14 +2,15 @@
 import React from 'react';
 
 interface AnnotationTrackProps {
-  trackId     : string;
-  title       : string;
-  color       : string;
-  shape       : string;
-  features    : any[];
-  maxLength   : number;
+  trackId: string;
+  title: string;
+  color: string;
+  shape: string;
+  features: any[];
+  maxLength: number;
   labelWidthPx: number;
-  trackRefs   : React.MutableRefObject<{ [key: string]: any }>;
+  trackRefs: React.MutableRefObject<{ [key: string]: any }>;
+  width?: number;
 }
 
 export function AnnotationTrack({
@@ -20,23 +21,24 @@ export function AnnotationTrack({
   features,
   maxLength,
   labelWidthPx,
-  trackRefs
+  trackRefs,
+  width
 }: AnnotationTrackProps) {
   return (
     <div style={{ display: 'flex', width: '100%', height: '20px' }}>
       <div
         style={{
-          width          : `${labelWidthPx}px`,
-          minWidth       : `${labelWidthPx}px`,
-          height         : '20px',
-          padding        : '2px 6px',
-          display        : 'flex',
-          alignItems     : 'center',
-          fontSize       : '10px',
-          fontWeight     : '500',
-          color          : '#374151',
+          width: `${labelWidthPx}px`,
+          minWidth: `${labelWidthPx}px`,
+          height: '20px',
+          padding: '2px 6px',
+          display: 'flex',
+          alignItems: 'center',
+          fontSize: '10px',
+          fontWeight: '500',
+          color: '#374151',
           backgroundColor: '#f9fafb',
-          boxSizing      : 'border-box',
+          boxSizing: 'border-box',
         }}
       >
         <div
@@ -56,7 +58,6 @@ export function AnnotationTrack({
           {title}
         </div>
       </div>
-
       <div style={{ flex: 1, height: '20px', lineHeight: 0 }}>
         <nightingale-track
           ref={el => trackRefs.current[trackId] = el}
@@ -65,8 +66,8 @@ export function AnnotationTrack({
           display-start="1"
           display-end={maxLength}
           layout="non-overlapping"
-          style={{ width: '100%' }}
           data={features}
+          width={width}
         />
       </div>
     </div>

@@ -5,25 +5,25 @@ import { useSequenceStructureRegistry } from "./hooks/useSequenceStructureSync";
 
 interface ControlPanelProps {
   molstarService: MolstarService | null;
-  auxiliaryService: MolstarService | null;
   registry: ReturnType<typeof useSequenceStructureRegistry>;
   activeLabel: string | null;
   lastEventLog: string | null;
+  onMutationClick?: (pdbId: string, chainId: string, masterIndex: number) => void;
 }
 
 export function ControlPanel({
   molstarService,
-  auxiliaryService,
   registry,
   activeLabel,
-  lastEventLog
+  lastEventLog,
+  onMutationClick  // ← ADD THIS
 }: ControlPanelProps) {
   return (
     <>
       <InputTabs
         mainService={molstarService}
-        auxiliaryService={auxiliaryService}
         registry={registry}
+        onMutationClick={onMutationClick}  // ← ADD THIS
       />
       <div>
         <pre className="text-gray-800 bg-gray-50 p-1 rounded mt-1 overflow-x-auto border text-xs">
