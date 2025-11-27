@@ -180,7 +180,7 @@ export default function HomePage() {
                 {/* Hero Section */}
                 <div className="relative pt-20 pb-16 flex items-center justify-center text-center bg-gray-50">
                     <div className="relative z-10 px-6">
-                        <h1 className="text-3xl md:text-4xl font-mono font-light tracking-tight mb-3 text-gray-900">tubulin.xyz</h1>
+                        <h1 className="text-3xl md:text-4xl font-mono font-light tracking-tight mb-3 text-gray-900">tube.xyz</h1>
                         <p className="text-sm md:text-base text-gray-600 max-w-2xl mx-auto mb-6 font-light">
                             An interactive interface for the atomic structure of the tubulin dimer and the microtubule lattice.
                         </p>

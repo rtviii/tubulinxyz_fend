@@ -1,109 +1,75 @@
 // src/app/msa-viewer/hooks/useSequenceAligner.ts
-import { useState } from 'react';
-import { MolstarService } from '@/components/molstar/molstar_service';
-import { useSequenceStructureRegistry } from './useSequenceStructureSync';
-import { MsaToStructureMapping } from '../types';
-import { AlignmentRequest, AlignmentResponse } from "@/app/msa-viewer/types";
-
-const API_BASE_URL = "http://localhost:8000";
-
-export const AlignmentService = {
-  /**
-   * Sends an observed sequence to the backend to be aligned against the Master.
-   */
-  async alignSequence(payload: AlignmentRequest): Promise<AlignmentResponse> {
-    const response = await fetch(`${API_BASE_URL}/msaprofile/sequence`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Backend Error (${response.status}): ${errText}`);
-    }
-
-    return await response.json();
-  }
-};
+import { MolstarService } from "@/components/molstar/molstar_service";
+import { useCallback, useState } from "react";
+import { useSequenceStructureRegistry } from "./useSequenceStructureSync";
+import { useAlignSequenceMsaprofileSequencePostMutation } from "@/store/tubxz_api";
 
 export function useSequenceAligner(registry: ReturnType<typeof useSequenceStructureRegistry>) {
-    const [isAligning, setIsAligning] = useState(false);
-    const [currentChain, setCurrentChain] = useState<string | null>(null);
+  const [isAligning, setIsAligning] = useState(false);
+  const [currentChain, setCurrentChain] = useState<string | null>(null);
+  
+  const [alignSequence] = useAlignSequenceMsaprofileSequencePostMutation();
 
-    const alignAndRegisterChain = async (
-        pdbId: string,
-        chainId: string,
-        molstarService: MolstarService
+  const alignAndRegisterChain = useCallback(
+    async (
+      pdbId: string,
+      chainId: string,
+      service: MolstarService,
+      mutations: any[] = [],
+      modifications: any[] = []
     ) => {
-        setIsAligning(true);
-        setCurrentChain(chainId);
+      setIsAligning(true);
+      setCurrentChain(chainId);
 
-        try {
-            // 1. EXTRACT FROM MOLSTAR
-            // This ensures we are aligning exactly what the user sees
-            const observedData = molstarService.controller.getObservedSequenceAndMapping(pdbId, chainId);
+      console.log('🔍 Aligning with mutations:', mutations);
+      console.log('🔍 Aligning with modifications:', modifications);
 
-            if (!observedData) {
-                throw new Error(`Could not extract sequence data for ${pdbId} chain ${chainId}`);
-            }
+      try {
+        const observed = service.controller.getObservedSequenceAndMapping(pdbId, chainId);
+        if (!observed) throw new Error('Failed to get observed sequence');
 
-            // Safety Check: The sequence string and the ID array must match in length
-            if (observedData.sequence.length !== observedData.authSeqIds.length) {
-                throw new Error(`Data mismatch in Molstar extraction: Sequence length (${observedData.sequence.length}) != ID count (${observedData.authSeqIds.length})`);
-            }
+        const result = await alignSequence({
+          alignmentRequest: {
+            sequence: observed.sequence,
+            sequence_id: `${pdbId}_${chainId}`,
+            auth_seq_ids: observed.authSeqIds,
+            annotations: []
+          }
+        }).unwrap();
 
-            // 2. SEND TO BACKEND
-            const sequenceId = `${pdbId}_${chainId}`;
+        const mapping = result.mapping;
+        const positionMapping: Record<number, number> = {};
+        
+        mapping.forEach((msaPos: number, idx: number) => {
+          if (msaPos !== -1) {
+            positionMapping[msaPos] = observed.authSeqIds[idx];
+          }
+        });
 
-            const result = await AlignmentService.alignSequence({
-                sequence: observedData.sequence,
-                sequence_id: sequenceId,
-                auth_seq_ids: observedData.authSeqIds
-            });
+        console.log('✅ Registering sequence with mutations:', mutations.length);
 
-            // 3. TRANSFORM MAPPING
-            // Backend returns: Array where index = MSA Col (0-based), Value = AuthSeqId or -1
-            // Frontend App State: Map where Key = MSA Col (0-based), Value = AuthSeqId
-            const positionMapping: MsaToStructureMapping = {};
+        registry.addSequence(
+          `${pdbId}_${chainId}`,
+          `${pdbId}_${chainId}`,
+          result.aligned_sequence,
+          {
+            type: 'pdb',
+            pdbId,
+            chainId,
+            positionMapping,
+            mutations,
+            modifications
+          }
+        );
+      } catch (error: any) {
+        throw new Error(`Alignment failed: ${error.message || 'Unknown error'}`);
+      } finally {
+        setIsAligning(false);
+        setCurrentChain(null);
+      }
+    },
+    [registry, alignSequence]
+  );
 
-            result.mapping.forEach((authId, msaIndexZeroBased) => {
-                // Filter out gaps. Note: Backend might send -1 (number) or "-1" (string) depending on serialization
-                if (authId !== -1 && authId !== "-1") {
-                    // STRICT 0-BASED: We do NOT add 1 here.
-                    positionMapping[msaIndexZeroBased] = authId;
-                }
-            });
-
-            // 4. REGISTER RESULT
-            registry.addSequence(
-                sequenceId,
-                sequenceId,
-                result.aligned_sequence,
-                {
-                    type: 'pdb',
-                    pdbId: pdbId,
-                    chainId: chainId,
-                    positionMapping: positionMapping
-                }
-            );
-
-            // 5. UX: Focus the chain in the viewer
-            await molstarService.controller.isolateChain(pdbId, chainId);
-
-        } catch (error: any) {
-            console.error("Alignment logic failed:", error);
-            // Re-throw so the UI component can show an alert or toast
-            throw error;
-        } finally {
-            setIsAligning(false);
-            setCurrentChain(null);
-        }
-    };
-
-    return {
-        alignAndRegisterChain,
-        isAligning,
-        currentChain
-    };
+  return { alignAndRegisterChain, isAligning, currentChain };
 }

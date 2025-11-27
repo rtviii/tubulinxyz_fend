@@ -252,7 +252,7 @@ const HomePage = () => {
       <div className="relative pt-16 pb-12 bg-gradient-to-b from-gray-50 to-white border-b">
         <div className="max-w-4xl mx-auto px-6 text-center">
           <h1 className="text-4xl font-light tracking-tight mb-3 text-gray-900 font-mono">
-            tubulin.xyz
+            tube.xyz
           </h1>
           <p className="text-gray-600 max-w-2xl mx-auto mb-8 font-light">
             An interactive interface for the atomic structure of the tubulin dimer and the microtubule lattice.
