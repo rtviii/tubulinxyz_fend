@@ -174,42 +174,51 @@ const injectedRtkApi = api
         query: (queryArg) => ({ url: `/grid/${queryArg.pdbId}` }),
         providesTags: ["Grid"],
       }),
-      getMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGet:
+      getMutationsAtPositionEndpointAnnotationsMutationsFamilyPositionGet:
         build.query<
-          GetMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGetApiResponse,
-          GetMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGetApiArg
+          GetMutationsAtPositionEndpointAnnotationsMutationsFamilyPositionGetApiResponse,
+          GetMutationsAtPositionEndpointAnnotationsMutationsFamilyPositionGetApiArg
         >({
           query: (queryArg) => ({
-            url: `/annotations/mutations/${queryArg.family}/${queryArg.version}/${queryArg.position}`,
+            url: `/annotations/mutations/${queryArg.family}/${queryArg.position}`,
           }),
           providesTags: ["Annotations"],
         }),
-      getModificationsAtPositionAnnotationsModificationsFamilyVersionPositionGet:
+      getInteractionsAtPositionEndpointAnnotationsInteractionsFamilyPositionGet:
         build.query<
-          GetModificationsAtPositionAnnotationsModificationsFamilyVersionPositionGetApiResponse,
-          GetModificationsAtPositionAnnotationsModificationsFamilyVersionPositionGetApiArg
+          GetInteractionsAtPositionEndpointAnnotationsInteractionsFamilyPositionGetApiResponse,
+          GetInteractionsAtPositionEndpointAnnotationsInteractionsFamilyPositionGetApiArg
         >({
           query: (queryArg) => ({
-            url: `/annotations/modifications/${queryArg.family}/${queryArg.version}/${queryArg.position}`,
+            url: `/annotations/interactions/${queryArg.family}/${queryArg.position}`,
           }),
           providesTags: ["Annotations"],
         }),
-      getAllAnnotationsAtPositionAnnotationsAllFamilyVersionPositionGet:
+      getNeighborhoodsAtPositionEndpointAnnotationsNeighborhoodsFamilyPositionGet:
         build.query<
-          GetAllAnnotationsAtPositionAnnotationsAllFamilyVersionPositionGetApiResponse,
-          GetAllAnnotationsAtPositionAnnotationsAllFamilyVersionPositionGetApiArg
+          GetNeighborhoodsAtPositionEndpointAnnotationsNeighborhoodsFamilyPositionGetApiResponse,
+          GetNeighborhoodsAtPositionEndpointAnnotationsNeighborhoodsFamilyPositionGetApiArg
         >({
           query: (queryArg) => ({
-            url: `/annotations/all/${queryArg.family}/${queryArg.version}/${queryArg.position}`,
+            url: `/annotations/neighborhoods/${queryArg.family}/${queryArg.position}`,
           }),
           providesTags: ["Annotations"],
         }),
-      getAnnotationsInRangeAnnotationsRangeFamilyVersionGet: build.query<
-        GetAnnotationsInRangeAnnotationsRangeFamilyVersionGetApiResponse,
-        GetAnnotationsInRangeAnnotationsRangeFamilyVersionGetApiArg
+      getAllAnnotationsAtPositionAnnotationsAllFamilyPositionGet: build.query<
+        GetAllAnnotationsAtPositionAnnotationsAllFamilyPositionGetApiResponse,
+        GetAllAnnotationsAtPositionAnnotationsAllFamilyPositionGetApiArg
       >({
         query: (queryArg) => ({
-          url: `/annotations/range/${queryArg.family}/${queryArg.version}`,
+          url: `/annotations/all/${queryArg.family}/${queryArg.position}`,
+        }),
+        providesTags: ["Annotations"],
+      }),
+      getAnnotationsInRangeAnnotationsRangeFamilyGet: build.query<
+        GetAnnotationsInRangeAnnotationsRangeFamilyGetApiResponse,
+        GetAnnotationsInRangeAnnotationsRangeFamilyGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/annotations/range/${queryArg.family}`,
           params: {
             start: queryArg.start,
             end: queryArg.end,
@@ -227,13 +236,23 @@ const injectedRtkApi = api
           }),
           providesTags: ["Annotations"],
         }),
-      getPolymerModificationsAnnotationsPolymerRcsbIdAuthAsymIdModificationsGet:
+      getPolymerInteractionsAnnotationsPolymerRcsbIdAuthAsymIdInteractionsGet:
         build.query<
-          GetPolymerModificationsAnnotationsPolymerRcsbIdAuthAsymIdModificationsGetApiResponse,
-          GetPolymerModificationsAnnotationsPolymerRcsbIdAuthAsymIdModificationsGetApiArg
+          GetPolymerInteractionsAnnotationsPolymerRcsbIdAuthAsymIdInteractionsGetApiResponse,
+          GetPolymerInteractionsAnnotationsPolymerRcsbIdAuthAsymIdInteractionsGetApiArg
         >({
           query: (queryArg) => ({
-            url: `/annotations/polymer/${queryArg.rcsbId}/${queryArg.authAsymId}/modifications`,
+            url: `/annotations/polymer/${queryArg.rcsbId}/${queryArg.authAsymId}/interactions`,
+          }),
+          providesTags: ["Annotations"],
+        }),
+      getPolymerNeighborhoodsAnnotationsPolymerRcsbIdAuthAsymIdNeighborhoodsGet:
+        build.query<
+          GetPolymerNeighborhoodsAnnotationsPolymerRcsbIdAuthAsymIdNeighborhoodsGetApiResponse,
+          GetPolymerNeighborhoodsAnnotationsPolymerRcsbIdAuthAsymIdNeighborhoodsGetApiArg
+        >({
+          query: (queryArg) => ({
+            url: `/annotations/polymer/${queryArg.rcsbId}/${queryArg.authAsymId}/neighborhoods`,
           }),
           providesTags: ["Annotations"],
         }),
@@ -357,43 +376,47 @@ export type GetGridGridPdbIdGetApiResponse =
 export type GetGridGridPdbIdGetApiArg = {
   pdbId: string;
 };
-export type GetMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGetApiResponse =
+export type GetMutationsAtPositionEndpointAnnotationsMutationsFamilyPositionGetApiResponse =
   /** status 200 Successful Response */ {
     [key: string]: any;
   };
-export type GetMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGetApiArg =
+export type GetMutationsAtPositionEndpointAnnotationsMutationsFamilyPositionGetApiArg =
   {
     family: string;
-    version: string;
     position: number;
   };
-export type GetModificationsAtPositionAnnotationsModificationsFamilyVersionPositionGetApiResponse =
+export type GetInteractionsAtPositionEndpointAnnotationsInteractionsFamilyPositionGetApiResponse =
   /** status 200 Successful Response */ {
     [key: string]: any;
   };
-export type GetModificationsAtPositionAnnotationsModificationsFamilyVersionPositionGetApiArg =
+export type GetInteractionsAtPositionEndpointAnnotationsInteractionsFamilyPositionGetApiArg =
   {
     family: string;
-    version: string;
     position: number;
   };
-export type GetAllAnnotationsAtPositionAnnotationsAllFamilyVersionPositionGetApiResponse =
+export type GetNeighborhoodsAtPositionEndpointAnnotationsNeighborhoodsFamilyPositionGetApiResponse =
   /** status 200 Successful Response */ {
     [key: string]: any;
   };
-export type GetAllAnnotationsAtPositionAnnotationsAllFamilyVersionPositionGetApiArg =
+export type GetNeighborhoodsAtPositionEndpointAnnotationsNeighborhoodsFamilyPositionGetApiArg =
   {
     family: string;
-    version: string;
     position: number;
   };
-export type GetAnnotationsInRangeAnnotationsRangeFamilyVersionGetApiResponse =
+export type GetAllAnnotationsAtPositionAnnotationsAllFamilyPositionGetApiResponse =
   /** status 200 Successful Response */ {
     [key: string]: any;
   };
-export type GetAnnotationsInRangeAnnotationsRangeFamilyVersionGetApiArg = {
+export type GetAllAnnotationsAtPositionAnnotationsAllFamilyPositionGetApiArg = {
   family: string;
-  version: string;
+  position: number;
+};
+export type GetAnnotationsInRangeAnnotationsRangeFamilyGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetAnnotationsInRangeAnnotationsRangeFamilyGetApiArg = {
+  family: string;
   /** Start position (inclusive) */
   start: number;
   /** End position (inclusive) */
@@ -408,11 +431,20 @@ export type GetPolymerMutationsAnnotationsPolymerRcsbIdAuthAsymIdMutationsGetApi
     rcsbId: string;
     authAsymId: string;
   };
-export type GetPolymerModificationsAnnotationsPolymerRcsbIdAuthAsymIdModificationsGetApiResponse =
+export type GetPolymerInteractionsAnnotationsPolymerRcsbIdAuthAsymIdInteractionsGetApiResponse =
   /** status 200 Successful Response */ {
     [key: string]: any;
   };
-export type GetPolymerModificationsAnnotationsPolymerRcsbIdAuthAsymIdModificationsGetApiArg =
+export type GetPolymerInteractionsAnnotationsPolymerRcsbIdAuthAsymIdInteractionsGetApiArg =
+  {
+    rcsbId: string;
+    authAsymId: string;
+  };
+export type GetPolymerNeighborhoodsAnnotationsPolymerRcsbIdAuthAsymIdNeighborhoodsGetApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: any;
+  };
+export type GetPolymerNeighborhoodsAnnotationsPolymerRcsbIdAuthAsymIdNeighborhoodsGetApiArg =
   {
     rcsbId: string;
     authAsymId: string;
@@ -790,12 +822,14 @@ export const {
   useAlignSequenceMsaSequencePostMutation,
   useGetMasterProfileMsaMasterGetQuery,
   useGetGridGridPdbIdGetQuery,
-  useGetMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGetQuery,
-  useGetModificationsAtPositionAnnotationsModificationsFamilyVersionPositionGetQuery,
-  useGetAllAnnotationsAtPositionAnnotationsAllFamilyVersionPositionGetQuery,
-  useGetAnnotationsInRangeAnnotationsRangeFamilyVersionGetQuery,
+  useGetMutationsAtPositionEndpointAnnotationsMutationsFamilyPositionGetQuery,
+  useGetInteractionsAtPositionEndpointAnnotationsInteractionsFamilyPositionGetQuery,
+  useGetNeighborhoodsAtPositionEndpointAnnotationsNeighborhoodsFamilyPositionGetQuery,
+  useGetAllAnnotationsAtPositionAnnotationsAllFamilyPositionGetQuery,
+  useGetAnnotationsInRangeAnnotationsRangeFamilyGetQuery,
   useGetPolymerMutationsAnnotationsPolymerRcsbIdAuthAsymIdMutationsGetQuery,
-  useGetPolymerModificationsAnnotationsPolymerRcsbIdAuthAsymIdModificationsGetQuery,
+  useGetPolymerInteractionsAnnotationsPolymerRcsbIdAuthAsymIdInteractionsGetQuery,
+  useGetPolymerNeighborhoodsAnnotationsPolymerRcsbIdAuthAsymIdNeighborhoodsGetQuery,
   useGetPolymerAllAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdAllGetQuery,
   useHealthHealthGetQuery,
 } = injectedRtkApi;

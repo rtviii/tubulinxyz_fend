@@ -10,6 +10,7 @@ import { useMolstarService } from '@/components/molstar/molstar_service';
 import { useSequenceStructureRegistry } from './hooks/useSequenceStructureSync';
 import { ControlPanel } from './ControlPanel';
 import { PositionAnnotationViewer } from './PositionAnnotationViewer';
+import { PolymerLigandPanel } from './components/PolymerLigandPanel';
 
 export default function MSAViewerPage() {
   const mainMolstarNodeRef = useRef<HTMLDivElement>(null);
@@ -18,6 +19,9 @@ export default function MSAViewerPage() {
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const [lastEventLog, setLastEventLog] = useState<string | null>(null);
   const [hoveredPosition, setHoveredPosition] = useState<number | null>(null);
+  
+  // Track selected polymer for ligand panel
+  const [selectedPolymer, setSelectedPolymer] = useState<{ rcsb_id: string; auth_asym_id: string } | null>(null);
 
   const { service: mainService, isInitialized: mainInitialized } = useMolstarService(mainMolstarNodeRef, 'main');
 
@@ -39,25 +43,25 @@ export default function MSAViewerPage() {
   }, [alignmentData, registry]);
 
   const handleMutationClick = useCallback(async (pdbId: string, chainId: string, masterIndex: number) => {
-    console.log(`🎯 Mutation clicked: ${pdbId} ${chainId} @ position ${masterIndex}`);
+    console.log(`Mutation clicked: ${pdbId} ${chainId} @ position ${masterIndex}`);
     
-    // 1. Zoom MSA to position (20 residue window)
+    // Update selected polymer for ligand panel
+    setSelectedPolymer({ rcsb_id: pdbId, auth_asym_id: chainId });
+    
+    // Zoom MSA to position
     if ((window as any).__msaZoomToPosition) {
       (window as any).__msaZoomToPosition(masterIndex);
     }
 
-    // 2. Get the sequence for this chain
     const seq = registry.getSequenceByChain(pdbId, chainId);
     if (!seq || seq.origin.type !== 'pdb') return;
 
     const { positionMapping } = seq.origin;
     if (!positionMapping) return;
 
-    // 3. Convert master position to PDB residue number (0-indexed to actual)
     const pdbResidue = positionMapping[masterIndex - 1];
     
     if (pdbResidue !== undefined && mainService?.controller) {
-      // 4. Focus on the residue in Molstar
       await mainService.controller.hoverResidue(pdbId, chainId, pdbResidue, true);
       await mainService.controller.focusChain(pdbId, chainId);
       
@@ -65,21 +69,42 @@ export default function MSAViewerPage() {
     }
   }, [mainService, registry]);
 
+  // Handler for clicking interactions in the ligand panel
+  const handleInteractionClick = useCallback((masterIndex: number) => {
+    if ((window as any).__msaZoomToPosition) {
+      (window as any).__msaZoomToPosition(masterIndex);
+    }
+    setHoveredPosition(masterIndex); // Also update annotation viewer
+  }, []);
+
   const handleZoomToPosition = useCallback((position: number) => {
-    console.log(`📍 Zooming to position: ${position}`);
+    console.log(`Zooming to position: ${position}`);
+  }, []);
+
+  // Update selected polymer when a chain is aligned
+  const handleChainSelected = useCallback((pdbId: string, chainId: string) => {
+    setSelectedPolymer({ rcsb_id: pdbId, auth_asym_id: chainId });
   }, []);
 
   return (
     <div className="h-screen flex flex-col p-3 bg-gray-50">
+      {/* Top row: Annotations + MSA */}
       <div className="flex flex-row gap-3 mb-3" style={{ height: '40vh' }}>
-        <div className="w-1/4 border rounded-lg bg-white">
+        {/* Position Annotations Panel */}
+        <div className="w-1/5 border rounded-lg bg-white flex flex-col">
           <div className="p-2 border-b bg-gray-50">
-            <h2 className="text-sm font-semibold text-gray-800">Literature Annotations</h2>
+            <h2 className="text-sm font-semibold text-gray-800">Position Annotations</h2>
           </div>
-          <PositionAnnotationViewer hoveredPosition={hoveredPosition} />
+          <div className="flex-1 overflow-hidden">
+            <PositionAnnotationViewer 
+              hoveredPosition={hoveredPosition} 
+              family="tubulin_alpha"
+            />
+          </div>
         </div>
 
-        <div className="w-3/4">
+        {/* MSA Panel */}
+        <div className="flex-1">
           <MSAPanel
             maxLength={maxLength}
             areComponentsLoaded={componentsLoaded}
@@ -93,8 +118,10 @@ export default function MSAViewerPage() {
         </div>
       </div>
 
+      {/* Bottom row: Controls + Ligand Panel + Structure */}
       <div className="flex-1 flex flex-row gap-3 min-h-0">
-        <div className="w-1/3 flex flex-col gap-3">
+        {/* Control Panel */}
+        <div className="w-1/4 flex flex-col gap-3">
           <ControlPanel
             molstarService={mainService}
             registry={registry}
@@ -104,7 +131,17 @@ export default function MSAViewerPage() {
           />
         </div>
 
-        <div className="w-2/3 h-full min-h-0">
+        {/* Ligand Panel */}
+        <div className="w-1/4 border rounded-lg bg-white overflow-hidden">
+          <PolymerLigandPanel
+            rcsb_id={selectedPolymer?.rcsb_id || null}
+            auth_asym_id={selectedPolymer?.auth_asym_id || null}
+            onInteractionClick={handleInteractionClick}
+          />
+        </div>
+
+        {/* Structure Viewer */}
+        <div className="flex-1 h-full min-h-0">
           <StructureViewerPanel
             mainNodeRef={mainMolstarNodeRef}
             mainInitialized={mainInitialized}

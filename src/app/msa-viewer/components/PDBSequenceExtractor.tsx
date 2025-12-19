@@ -7,6 +7,7 @@ import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 import { useSequenceAligner } from '../hooks/useSequenceAligner';
 import { ChainAnnotationSummary } from './ChainAnnotationSummary';
 import { useChainAnnotations } from '../hooks/useChainAnnotations';
+import { createClassificationFromProfile } from '@/services/profile_service';
 
 interface PDBSequenceExtractorProps {
   mainService: MolstarService | null;
@@ -27,6 +28,7 @@ export function PDBSequenceExtractor({
   const { alignAndRegisterChain, isAligning, currentChain } = useSequenceAligner(registry);
   const { cacheAnnotations, getAnnotations } = useChainAnnotations();
 
+
   const handleLoadStructure = async () => {
     if (!mainService || !pdbId.trim()) return;
 
@@ -37,10 +39,15 @@ export function PDBSequenceExtractor({
     try {
       const cleanId = pdbId.trim().toUpperCase();
 
-      const gqlData = await fetchRcsbGraphQlData(cleanId);
-      // const classification = createTubulinClassificationMap(gqlData);
+      // Fetch profile from backend instead of GQL
+      const response = await fetch(`http://localhost:8000/structures/${cleanId}/profile`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch profile for ${cleanId}`);
+      }
+      const profileData = await response.json();
+      const classification = createClassificationFromProfile(profileData);
 
-      await mainService.controller.loadStructure(cleanId, {});
+      await mainService.controller.loadStructure(cleanId, classification);
       await mainService.viewer.representations.stylized_lighting();
 
       const chainIds = mainService.controller.getAllChains(cleanId);
@@ -69,6 +76,7 @@ export function PDBSequenceExtractor({
     }
   };
 
+
   const handleAlignClick = async (chainId: string) => {
     if (!mainService || !loadedPdbId) return;
 
@@ -84,6 +92,11 @@ export function PDBSequenceExtractor({
       );
 
       await mainService.controller.isolateChain(loadedPdbId, chainId);
+
+      // Trigger mutation click to select this polymer for the ligand panel
+      if (onMutationClick) {
+        onMutationClick(loadedPdbId, chainId, 1); // Position 1 just to trigger selection
+      }
 
       console.log(`Isolated chain ${chainId} in structure ${loadedPdbId}`);
     } catch (err: any) {

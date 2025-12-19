@@ -15,34 +15,34 @@ export type TubulinClassification = Record<string, TubulinFamily | MapFamily | s
 // ============================================================
 
 const TubulinFamilyColors: Record<string, Color> = {
-    "tubulin_alpha": Color(0x3784F0), // Strong Blue
-    "tubulin_beta": Color(0xEB6134), // Deep Red/Orange
-    "tubulin_gamma": Color(0x884EA0), // Royal Purple
-    "tubulin_delta": Color(0x1D8348), // Forest Green
-    "tubulin_epsilon": Color(0xD4AC0D), // Golden Yellow
-    "Default": Color(0xBDC3C7)
+    "tubulin_alpha"  : Color(0x3784F0),   // Strong Blue
+    "tubulin_beta"   : Color(0xEB6134),   // Deep Red/Orange
+    "tubulin_gamma"  : Color(0x884EA0),   // Royal Purple
+    "tubulin_delta"  : Color(0x1D8348),   // Forest Green
+    "tubulin_epsilon": Color(0xD4AC0D),   // Golden Yellow
+    "Default"        : Color(0xBDC3C7)
 };
 
 const MapFamilyColors: Record<string, Color> = {
     // End-binding/Stabilizers (Cool Cyans/Teals)
     "map_eb_family": Color(0x00CED1),
-    "map_camsap1": Color(0x20B2AA),
-    "map_camsap2": Color(0x48D1CC),
-    "map_camsap3": Color(0x40E0D0),
+    "map_camsap1"  : Color(0x20B2AA),
+    "map_camsap2"  : Color(0x48D1CC),
+    "map_camsap3"  : Color(0x40E0D0),
 
     // Motors & Severing (Vibrant Pinks/Magentas)
-    "map_kinesin13": Color(0xFF1493),
+    "map_kinesin13"  : Color(0xFF1493),
     "map_katanin_p60": Color(0xFF69B4),
-    "map_spastin": Color(0xDA70D6),
+    "map_spastin"    : Color(0xDA70D6),
 
     // Structural/Classical MAPs (Vivid Oranges)
-    "map_tau": Color(0xFF8C00),
-    "map_map2": Color(0xE67E22),
+    "map_tau"         : Color(0xFF8C00),
+    "map_map2"        : Color(0xE67E22),
     "map_doublecortin": Color(0xD35400),
 
     // Centrosomal/GCPs (Deep Blues)
     "map_gcp2_3": Color(0x1F618D),
-    "map_gcp4": Color(0x2874A6),
+    "map_gcp4"  : Color(0x2874A6),
     "map_gcp5_6": Color(0x2E86C1),
 
     // Enzymes (Vivid Greens)
