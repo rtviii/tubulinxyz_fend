@@ -7,7 +7,6 @@ import { QueryContext, Structure, StructureProperties, StructureSelection } from
 import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder';
 import { StateSelection } from 'molstar/lib/mol-state';
 import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state';
-import { PresetObjects, TubulinClassification } from './molstar_preset';
 import { initializeNonPolymer, setNonPolymerHovered, setNonPolymerVisibility } from '@/store/slices/nonpolymer_states';
 import { compile } from 'molstar/lib/mol-script/runtime/query/compiler';
 import { OrderedSet } from 'molstar/lib/mol-data/int';
@@ -21,6 +20,7 @@ import { AMINO_ACIDS_3_TO_1_CODE } from './preset-helpers';
 import { SequenceData } from '@/store/slices/sequence_viewer';
 import { setResidueHover, setResidueSelection } from '@/store/slices/sequence_structure_sync';
 import { StructureFocusRepresentation } from 'molstar/lib/mol-plugin/behavior/dynamic/selection/structure-focus-representation';
+import { PresetObjects, TubulinClassification } from './molstar_preset_computed_residues';
 
 export interface InteractionInfo {
     type: string;
@@ -526,7 +526,6 @@ export class MolstarController {
 
             const asset_url = `https://models.rcsb.org/${pdbId.toUpperCase()}.bcif`;
 
-            // Download and parse structure
             const data = await this.viewer.ctx.builders.data.download({
                 url: asset_url,
                 isBinary: true,
@@ -536,18 +535,19 @@ export class MolstarController {
             const model = await this.viewer.ctx.builders.structure.createModel(trajectory);
             const structure = await this.viewer.ctx.builders.structure.createStructure(model);
 
-            // Apply preset
+            // Explicitly pass empty array for computedResidues
             const { objects_polymer, objects_ligand } = await this.viewer.ctx.builders.structure.representation.applyPreset(
                 structure,
-                'tubulin-split-preset',
-                { pdbId: pdbId.toUpperCase(), tubulinClassification }
+                'tubulin-split-preset-computed-res',
+                {
+                    pdbId: pdbId.toUpperCase(),
+                    tubulinClassification: tubulinClassification || {},
+                    computedResidues: []
+                }
             ) as Partial<PresetObjects>;
 
-            // Register components
             this.registerComponents(pdbId.toUpperCase(), objects_polymer || {}, objects_ligand || {}, structure.ref);
-
-            // Configure visual representation
-            await this.configureFocusRepresentation(tubulinClassification);
+            await this.configureFocusRepresentation(tubulinClassification || {});
 
             return true;
         } catch (error) {

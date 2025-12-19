@@ -1,15 +1,13 @@
 // src/app/structures/structure_filters.tsx
 "use client";
 
-import { Input } from "@/components/ui/input";
+import React from "react";
+import { Input, Select, TreeSelect, Tag } from "antd";
 import {
     CollapsibleTrigger,
     CollapsibleContent,
-    Collapsible,
+    Collapsible
 } from "@/components/ui/collapsible";
-import Select from "react-select";
-import { TreeSelect } from "antd";
-import { Button } from "@/components/ui/button";
 import { ChevronDown, Layers, LayoutGrid } from "lucide-react";
 
 import {
@@ -24,339 +22,199 @@ import {
     update_grouped_by_deposition,
 } from "@/store/slices/slice_structures";
 import { set_polymers_filter as set_poly_filter_real } from "@/store/slices/slice_polymers";
+import { getHexColor } from "@/lib/tubulin-colors";
 
-const FilterSection = ({
-    label,
-    children,
-}: {
-    label: string;
-    children: React.ReactNode;
-}) => (
-    <div className="space-y-2">
-        <label className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+// --- Custom Tag Renderer (Strict & High Contrast) ---
+const tagRender = (props: any) => {
+    const { label, value, closable, onClose } = props;
+    const color = getHexColor(value);
+
+    return (
+        <Tag
+            closable={closable}
+            onClose={onClose}
+            style={{
+                marginRight: 4,
+                marginTop: 2,
+                marginBottom: 2,
+                borderRadius: '2px', // Sharp corners
+                backgroundColor: color,
+                border: `1px solid rgba(0,0,0,0.2)`, // Visible edge
+                fontWeight: 700,
+                color: '#fff',
+                fontSize: '10px',
+                textTransform: 'uppercase',
+                padding: '0px 6px',
+                display: 'inline-flex',
+                alignItems: 'center'
+            }}
+        >
+            {label}
+        </Tag>
+    );
+};
+
+const FilterSection = ({ label, children }: { label: string; children: React.ReactNode }) => (
+    <div className="space-y-1 mb-4">
+        <label className="text-[10px] font-bold uppercase tracking-tight text-gray-900">
             {label}
         </label>
         {children}
     </div>
 );
 
-const RangeInputs = ({
-    value,
-    onChange,
-    placeholders = ["Min", "Max"],
-    step,
-}: {
-    value: [number | null, number | null] | undefined;
-    onChange: (val: [number | null, number | null]) => void;
-    placeholders?: [string, string];
-    step?: number;
-}) => (
-    <div className="flex gap-2">
-        <Input
-            className="bg-white text-sm h-9 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            placeholder={placeholders[0]}
-            type="number"
-            step={step}
-            value={value?.[0] ?? ""}
-            onChange={(e) => {
-                const val = e.target.value ? Number(e.target.value) : null;
-                onChange([val, value?.[1] ?? null]);
-            }}
-        />
-        <Input
-            className="bg-white text-sm h-9 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            placeholder={placeholders[1]}
-            type="number"
-            step={step}
-            value={value?.[1] ?? ""}
-            onChange={(e) => {
-                const val = e.target.value ? Number(e.target.value) : null;
-                onChange([value?.[0] ?? null, val]);
-            }}
-        />
-    </div>
-);
-
-export const StructureFiltersComponent = ({
-    update_state,
-}: {
-    update_state: "structures" | "polymers";
-}) => {
-    const { data: sourceTaxaTree } =
-        useGetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetQuery({
-            taxType: "source",
-        });
-    const { data: familiesData } = useGetFamiliesStructuresFamiliesGetQuery();
-    const { data: facets } = useGetFacetsStructuresFacetsGetQuery(); // <-- Add this
-
+export const StructureFiltersComponent = ({ update_state }: { update_state: "structures" | "polymers" }) => {
     const dispatch = useAppDispatch();
+    const { data: sourceTaxaTree } = useGetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetQuery({ taxType: "source" });
+    const { data: familiesData } = useGetFamiliesStructuresFamiliesGetQuery();
+    const { data: facets } = useGetFacetsStructuresFacetsGetQuery();
 
-    const ligandOptions = (facets?.top_ligands ?? []).map((lig) => ({
-        value: lig.chemical_id,
-        label: `${lig.chemical_id} - ${lig.chemical_name || "Unknown"} (${lig.count})`,
-    }));
-    const total_count = useAppSelector((state) => {
-        if (update_state === "structures")
-            return state.structures_page?.total_count || 0;
-        return state.polymers_page?.total_count || 0;
-    });
-
-    const filters = useAppSelector((state) => {
-        if (update_state === "structures") return state.structures_page.filters;
-        return state.polymers_page.filters;
-    });
+    const filters = useAppSelector((state) => (update_state === "structures" ? state.structures_page.filters : state.polymers_page.filters));
+    const total_count = useAppSelector((state) => (update_state === "structures" ? state.structures_page?.total_count : state.polymers_page?.total_count) || 0);
+    const grouped_by_deposition = useAppSelector((state) => state.structures_page?.grouped_by_deposition ?? true);
 
     const dispatchFilterUpdate = (filterType: string, value: any) => {
-        if (update_state === "structures") {
-            dispatch(
-                set_structures_filter({ filter_type: filterType as any, value })
-            );
-        } else {
-            dispatch(set_poly_filter_real({ filter_type: filterType as any, value }));
-        }
+        const action = update_state === "structures" ? set_structures_filter : set_poly_filter_real;
+        dispatch(action({ filter_type: filterType as any, value }));
     };
-
-    const grouped_by_deposition = useAppSelector(
-        (state) => state.structures_page?.grouped_by_deposition ?? true
-    );
 
     const familyOptions = (familiesData ?? []).map((fam: any) => ({
         value: fam.family,
-        label: `${fam.family} (${fam.count})`,
+        label: fam.family.replace('tubulin_', '').replace('map_', '').toUpperCase(),
     }));
 
-    const selectStyles = {
-        control: (base: any) => ({ ...base, minHeight: 36, fontSize: 14 }),
-        valueContainer: (base: any) => ({ ...base, padding: "2px 8px" }),
-        multiValue: (base: any) => ({ ...base, fontSize: 12 }),
-    };
+    const ligandOptions = (facets?.top_ligands ?? []).map((lig) => ({
+        value: lig.chemical_id,
+        label: lig.chemical_id,
+    }));
 
     return (
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-visible">
+        <div className="bg-white rounded-sm border border-gray-300 shadow-none overflow-visible">
             <Collapsible defaultOpen={true}>
-                <CollapsibleTrigger className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors">
-                    <div className="flex items-center gap-3">
-                        <span className="font-semibold text-gray-900">Filters</span>
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                <CollapsibleTrigger className="w-full px-3 py-2 flex items-center justify-between border-b border-gray-200 bg-gray-50">
+                    <div className="flex items-center gap-2">
+                        <span className="font-bold text-gray-900 text-xs uppercase tracking-tighter">Filters</span>
+                        <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.1 rounded-sm font-bold">
                             {total_count}
                         </span>
                     </div>
-                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                    <ChevronDown className="h-3 w-3 text-gray-500" />
                 </CollapsibleTrigger>
 
                 <CollapsibleContent className="overflow-visible">
-                    <div className="px-4 pb-4 space-y-5 border-t border-gray-100 pt-4 overflow-visible">
-                        {/* Search */}
+                    <div className="p-3 space-y-1 overflow-visible">
                         <FilterSection label="Search">
                             <Input
                                 placeholder="ID, title, keywords..."
-                                className="bg-gray-50 border-gray-200 h-9"
+                                className="rounded-sm border-gray-300 text-sm focus:border-blue-500 hover:border-gray-400"
                                 value={filters.search || ""}
-                                onChange={(e) =>
-                                    dispatchFilterUpdate("search", e.target.value || null)
-                                }
+                                onChange={(e) => dispatchFilterUpdate("search", e.target.value || null)}
                             />
                         </FilterSection>
 
-                        {/* Year & Resolution side by side */}
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-2">
                             <FilterSection label="Year">
-                                <RangeInputs
-                                    value={filters.year}
-                                    onChange={(v) => dispatchFilterUpdate("year", v)}
-                                    placeholders={["From", "To"]}
-                                />
+                                <div className="flex gap-1">
+                                    <Input placeholder="From" className="rounded-sm border-gray-300 h-8 text-xs" value={filters.year?.[0] ?? ""} onChange={e => dispatchFilterUpdate("year", [e.target.value ? Number(e.target.value) : null, filters.year?.[1] ?? null])} />
+                                    <Input placeholder="To" className="rounded-sm border-gray-300 h-8 text-xs" value={filters.year?.[1] ?? ""} onChange={e => dispatchFilterUpdate("year", [filters.year?.[0] ?? null, e.target.value ? Number(e.target.value) : null])} />
+                                </div>
                             </FilterSection>
-
-                            <FilterSection label="Resolution (Å)">
-                                <RangeInputs
-                                    value={filters.resolution}
-                                    onChange={(v) => dispatchFilterUpdate("resolution", v)}
-                                    placeholders={["Min", "Max"]}
-                                    step={0.1}
-                                />
+                            <FilterSection label="Res (Å)">
+                                <div className="flex gap-1">
+                                    <Input placeholder="Min" className="rounded-sm border-gray-300 h-8 text-xs" value={filters.resolution?.[0] ?? ""} onChange={e => dispatchFilterUpdate("resolution", [e.target.value ? Number(e.target.value) : null, filters.resolution?.[1] ?? null])} />
+                                    <Input placeholder="Max" className="rounded-sm border-gray-300 h-8 text-xs" value={filters.resolution?.[1] ?? ""} onChange={e => dispatchFilterUpdate("resolution", [filters.resolution?.[0] ?? null, e.target.value ? Number(e.target.value) : null])} />
+                                </div>
                             </FilterSection>
                         </div>
 
-                        {/* Families */}
                         <FilterSection label="Protein Family">
                             <Select
-                                isMulti
+                                mode="multiple"
+                                style={{ width: '100%' }}
+                                placeholder="Select families"
+                                value={filters.family}
+                                tagRender={tagRender}
                                 options={familyOptions}
-                                placeholder="Any family..."
-                                styles={selectStyles}
-                                value={familyOptions.filter((o: any) =>
-                                    filters.family?.includes(o.value)
-                                )}
-                                onChange={(options) =>
-                                    dispatchFilterUpdate(
-                                        "family",
-                                        options.map((o) => o.value)
-                                    )
-                                }
+                                onChange={(v) => dispatchFilterUpdate("family", v)}
+                                className="text-xs ant-select-custom"
                             />
                         </FilterSection>
 
-                        {/* Source Organism */}
-                        <FilterSection label="Source Organism">
+                        <FilterSection label="Organism">
                             <TreeSelect
                                 style={{ width: "100%" }}
                                 value={filters.source_taxa}
                                 dropdownStyle={{ maxHeight: 400, overflow: "auto" }}
-                                showSearch
-                                treeNodeFilterProp="title"
-                                placeholder="Any organism..."
+                                placeholder="Select species"
                                 multiple
                                 allowClear
                                 treeData={sourceTaxaTree ?? []}
                                 onChange={(v) => dispatchFilterUpdate("source_taxa", v)}
-                                size="middle"
                             />
                         </FilterSection>
-                        {/* Ligands */}
-                        <Select
-                            isMulti
-                            options={ligandOptions}
-                            placeholder="Search ligands..."
-                            styles={{
-                                ...selectStyles,
-                                menu: (base) => ({ ...base, zIndex: 50 }),
-                                menuList: (base) => ({ ...base, maxHeight: 300 }),
-                            }}
-                            value={ligandOptions.filter((o) => filters.ligands?.includes(o.value))}
-                            onChange={(options) => dispatchFilterUpdate('ligands', options.map(o => o.value))}
-                            formatOptionLabel={(option) => (
-                                <div className="flex items-center justify-between w-full py-0.5">
-                                    <span className="font-mono text-sm font-medium text-gray-900">{option.value}</span>
-                                    <span className="text-xs text-gray-500 truncate ml-3 max-w-[180px]">
-                                        {option.label.split(' - ')[1]?.split(' (')[0]}
-                                    </span>
-                                </div>
-                            )}
-                            getOptionLabel={(option) => `${option.value} ${option.label}`} // For search
-                        />
-                        <FilterSection label="Mutations">
-                            <div className="space-y-3">
-                                {/* Family scope selector */}
-                                <Select
-                                    isClearable
-                                    options={familyOptions}
-                                    placeholder="Any family..."
-                                    styles={selectStyles}
-                                    value={familyOptions.find(o => o.value === filters.mutation_family) || null}
-                                    onChange={(option) => dispatchFilterUpdate('mutation_family', option?.value || null)}
-                                />
 
-                                {/* Toggle: has mutations */}
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => dispatchFilterUpdate('has_mutations',
-                                            filters.has_mutations === true ? null : true)}
-                                        className={`flex-1 px-3 py-1.5 text-xs rounded border transition-colors ${filters.has_mutations === true
-                                                ? 'bg-amber-100 border-amber-300 text-amber-700'
-                                                : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                                            }`}
-                                    >
-                                        With Mutations
-                                    </button>
-                                    <button
-                                        onClick={() => dispatchFilterUpdate('has_mutations',
-                                            filters.has_mutations === false ? null : false)}
-                                        className={`flex-1 px-3 py-1.5 text-xs rounded border transition-colors ${filters.has_mutations === false
-                                                ? 'bg-gray-700 border-gray-600 text-white'
-                                                : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                                            }`}
-                                    >
-                                        Wild-type Only
-                                    </button>
-                                </div>
-
-                                {/* Position range */}
-                                <div className="flex gap-2 items-center">
-                                    <span className="text-xs text-gray-500 w-8">Pos:</span>
-                                    <Input
-                                        placeholder="Min"
-                                        type="number"
-                                        className="flex-1 h-8 text-xs"
-                                        value={filters.mutation_position_min ?? ''}
-                                        onChange={e => dispatchFilterUpdate('mutation_position_min',
-                                            e.target.value ? Number(e.target.value) : null)}
-                                    />
-                                    <span className="text-gray-400">-</span>
-                                    <Input
-                                        placeholder="Max"
-                                        type="number"
-                                        className="flex-1 h-8 text-xs"
-                                        value={filters.mutation_position_max ?? ''}
-                                        onChange={e => dispatchFilterUpdate('mutation_position_max',
-                                            e.target.value ? Number(e.target.value) : null)}
-                                    />
-                                </div>
-
-                                {/* From/To residues */}
-                                <div className="flex gap-2 items-center">
-                                    <Input
-                                        placeholder="WT"
-                                        maxLength={1}
-                                        className="w-14 h-8 text-xs text-center font-mono uppercase"
-                                        value={filters.mutation_from ?? ''}
-                                        onChange={e => dispatchFilterUpdate('mutation_from',
-                                            e.target.value?.toUpperCase() || null)}
-                                    />
-                                    <span className="text-gray-400 text-sm">→</span>
-                                    <Input
-                                        placeholder="Mut"
-                                        maxLength={1}
-                                        className="w-14 h-8 text-xs text-center font-mono uppercase"
-                                        value={filters.mutation_to ?? ''}
-                                        onChange={e => dispatchFilterUpdate('mutation_to',
-                                            e.target.value?.toUpperCase() || null)}
-                                    />
-                                </div>
-
-                                {/* Phenotype search */}
-                                <Input
-                                    placeholder="Phenotype (e.g., resistance, cancer)"
-                                    className="h-8 text-xs"
-                                    value={filters.mutation_phenotype ?? ''}
-                                    onChange={e => dispatchFilterUpdate('mutation_phenotype',
-                                        e.target.value || null)}
-                                />
-
-                                {/* Show helper text if family is selected */}
-                                {filters.mutation_family && (
-                                    <p className="text-[10px] text-gray-400 italic">
-                                        Filtering mutations in {filters.mutation_family.replace('tubulin_', '')} tubulin
-                                    </p>
-                                )}
-                            </div>
+                        <FilterSection label="Ligands">
+                            <Select
+                                mode="multiple"
+                                style={{ width: '100%' }}
+                                placeholder="Filter ligands"
+                                value={filters.ligands}
+                                tagRender={tagRender}
+                                options={ligandOptions}
+                                onChange={(v) => dispatchFilterUpdate('ligands', v)}
+                            />
                         </FilterSection>
 
-                        {/* Group Toggle */}
-                        {update_state === "structures" && (
-                            <Button
-                                variant={grouped_by_deposition ? "default" : "outline"}
-                                size="sm"
-                                onClick={() =>
-                                    dispatch(update_grouped_by_deposition(!grouped_by_deposition))
-                                }
-                                className="w-full"
-                            >
-                                {grouped_by_deposition ? (
-                                    <>
-                                        <Layers className="h-4 w-4 mr-2" /> Grouped by Deposition
-                                    </>
-                                ) : (
-                                    <>
-                                        <LayoutGrid className="h-4 w-4 mr-2" /> Individual
-                                        Structures
-                                    </>
-                                )}
-                            </Button>
-                        )}
+                        <div className="mt-4 pt-3 border-t border-gray-200">
+                            <FilterSection label="Mutations">
+                                <div className="space-y-2">
+                                    <Select
+                                        className="w-full h-8 text-xs"
+                                        placeholder="Scope (e.g. BETA)"
+                                        options={familyOptions}
+                                        value={filters.mutation_family}
+                                        onChange={(v) => dispatchFilterUpdate('mutation_family', v)}
+                                    />
+
+                                    <div className="flex gap-1">
+                                        <button
+                                            onClick={() => dispatchFilterUpdate('has_mutations', filters.has_mutations === true ? null : true)}
+                                            className={`flex-1 py-1 text-[10px] font-bold uppercase border transition-none ${filters.has_mutations === true ? 'bg-blue-600 border-blue-700 text-white' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'}`}
+                                        >
+                                            Mutant
+                                        </button>
+                                        <button
+                                            onClick={() => dispatchFilterUpdate('has_mutations', filters.has_mutations === false ? null : false)}
+                                            className={`flex-1 py-1 text-[10px] font-bold uppercase border transition-none ${filters.has_mutations === false ? 'bg-gray-900 border-black text-white' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'}`}
+                                        >
+                                            Wild-type
+                                        </button>
+                                    </div>
+
+                                    <div className="flex gap-1 items-center">
+                                        <Input placeholder="Pos Min" className="h-7 text-xs rounded-sm" value={filters.mutation_position_min ?? ''} onChange={e => dispatchFilterUpdate('mutation_position_min', e.target.value ? Number(e.target.value) : null)} />
+                                        <span className="text-gray-400 font-bold px-1">to</span>
+                                        <Input placeholder="Pos Max" className="h-7 text-xs rounded-sm" value={filters.mutation_position_max ?? ''} onChange={e => dispatchFilterUpdate('mutation_position_max', e.target.value ? Number(e.target.value) : null)} />
+                                    </div>
+
+                                    <div className="flex gap-1">
+                                        <Input placeholder="WT" maxLength={1} className="text-center font-mono h-7 text-xs uppercase rounded-sm border-gray-300" value={filters.mutation_from ?? ''} onChange={e => dispatchFilterUpdate('mutation_from', e.target.value.toUpperCase() || null)} />
+                                        <Input placeholder="MUT" maxLength={1} className="text-center font-mono h-7 text-xs uppercase rounded-sm border-gray-300" value={filters.mutation_to ?? ''} onChange={e => dispatchFilterUpdate('mutation_to', e.target.value.toUpperCase() || null)} />
+                                    </div>
+
+                                    <Input
+                                        placeholder="Phenotype (e.g. Taxol res.)"
+                                        className="h-7 text-xs rounded-sm border-gray-300"
+                                        value={filters.mutation_phenotype ?? ''}
+                                        onChange={(e) => dispatchFilterUpdate('mutation_phenotype', e.target.value || null)}
+                                    />
+                                </div>
+                            </FilterSection>
+                        </div>
                     </div>
                 </CollapsibleContent>
             </Collapsible>
         </div>
     );
 };
+

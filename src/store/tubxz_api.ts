@@ -86,6 +86,15 @@ const injectedRtkApi = api
         query: (queryArg) => ({ url: `/structures/${queryArg.rcsbId}` }),
         providesTags: ["Structures"],
       }),
+      getStructureProfileStructuresRcsbIdProfileGet: build.query<
+        GetStructureProfileStructuresRcsbIdProfileGetApiResponse,
+        GetStructureProfileStructuresRcsbIdProfileGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/structures/${queryArg.rcsbId}/profile`,
+        }),
+        providesTags: ["Structures"],
+      }),
       listPolymersPolymersGet: build.query<
         ListPolymersPolymersGetApiResponse,
         ListPolymersPolymersGetApiArg
@@ -292,8 +301,13 @@ export type GetFamiliesStructuresFamiliesGetApiResponse =
   /** status 200 Successful Response */ any;
 export type GetFamiliesStructuresFamiliesGetApiArg = void;
 export type GetStructureStructuresRcsbIdGetApiResponse =
-  /** status 200 Successful Response */ any;
+  /** status 200 Successful Response */ TubulinStructure;
 export type GetStructureStructuresRcsbIdGetApiArg = {
+  rcsbId: string;
+};
+export type GetStructureProfileStructuresRcsbIdProfileGetApiResponse =
+  /** status 200 Successful Response */ TubulinStructure;
+export type GetStructureProfileStructuresRcsbIdProfileGetApiArg = {
   rcsbId: string;
 };
 export type ListPolymersPolymersGetApiResponse =
@@ -485,6 +499,202 @@ export type FilterFacets = {
   common_mutations: CommonMutation[];
   mutation_position_ranges: MutationPositionRange[];
 };
+export type TubulinFamily =
+  | "tubulin_alpha"
+  | "tubulin_beta"
+  | "tubulin_gamma"
+  | "tubulin_delta"
+  | "tubulin_epsilon";
+export type MapFamily =
+  | "map_atat1"
+  | "map_camsap1"
+  | "map_camsap2"
+  | "map_camsap3"
+  | "map_ccp_deglutamylase"
+  | "map_cfap53"
+  | "map_ckap5_chtog"
+  | "map_clasp"
+  | "map_clip115"
+  | "map_clip170"
+  | "map_doublecortin"
+  | "map_eb_family"
+  | "map_fap20_cfap20"
+  | "map_gcp2_3"
+  | "map_gcp4"
+  | "map_gcp5_6"
+  | "map_katanin_p60"
+  | "map_kinesin13"
+  | "map_map1_heavy"
+  | "map_map1s"
+  | "map_map2"
+  | "map_map4"
+  | "map_map7"
+  | "map_nme7"
+  | "map_nme8"
+  | "map_numa"
+  | "map_pacrg"
+  | "map_prc1"
+  | "map_rib72_efhc"
+  | "map_spag6"
+  | "map_spastin"
+  | "map_stathmin"
+  | "map_tacc"
+  | "map_tau"
+  | "map_tpx2"
+  | "map_ttll_glutamylase_long"
+  | "map_ttll_glutamylase_short"
+  | "map_vash_detyrosinase";
+export type Mutation = {
+  master_index: number;
+  utn_position?: number | null;
+  from_residue: string;
+  to_residue: string;
+  uniprot_id: string;
+  species: string;
+  tubulin_type: TubulinFamily;
+  phenotype: string;
+  database_source: string;
+  reference_link: string;
+  keywords: string;
+  notes?: string | null;
+};
+export type PolypeptideEntity = {
+  entity_id: string;
+  type?: "polymer";
+  pdbx_description?: string | null;
+  formula_weight?: number | null;
+  pdbx_strand_ids?: string[];
+  polymer_type?: "Protein";
+  one_letter_code: string;
+  one_letter_code_can: string;
+  sequence_length: number;
+  src_organism_names?: string[];
+  host_organism_names?: string[];
+  src_organism_ids?: number[];
+  host_organism_ids?: number[];
+  family?: TubulinFamily | MapFamily | null;
+  uniprot_accessions?: string[];
+  mutations?: Mutation[];
+  alignment_stats?: {
+    [key: string]: any;
+  };
+};
+export type PolynucleotideEntity = {
+  entity_id: string;
+  type?: "polymer";
+  pdbx_description?: string | null;
+  formula_weight?: number | null;
+  pdbx_strand_ids?: string[];
+  polymer_type: string;
+  one_letter_code: string;
+  one_letter_code_can: string;
+  sequence_length: number;
+  src_organism_names?: string[];
+  src_organism_ids?: number[];
+};
+export type DrugbankContainerIdentifiers = {
+  drugbank_id: string;
+};
+export type DrugbankInfo = {
+  cas_number?: string | null;
+  description?: string | null;
+};
+export type Drugbank = {
+  drugbank_container_identifiers?: DrugbankContainerIdentifiers | null;
+  drugbank_info?: DrugbankInfo | null;
+};
+export type RcsbChemCompTarget = {
+  interaction_type?: string | null;
+  name?: string | null;
+  provenance_source?: string | null;
+  reference_database_accession_code?: string | null;
+  reference_database_name?: string | null;
+};
+export type NonpolymerComp = {
+  drugbank?: Drugbank | null;
+  rcsb_chem_comp_target?: RcsbChemCompTarget[] | null;
+};
+export type NonpolymerEntity = {
+  entity_id: string;
+  type?: "non-polymer";
+  pdbx_description?: string | null;
+  formula_weight?: number | null;
+  pdbx_strand_ids?: string[];
+  chemical_id: string;
+  chemical_name: string;
+  nonpolymer_comp?: NonpolymerComp | null;
+  SMILES?: string | null;
+  SMILES_stereo?: string | null;
+  InChI?: string | null;
+  InChIKey?: string | null;
+  num_instances?: number;
+};
+export type Polypeptide = {
+  parent_rcsb_id: string;
+  auth_asym_id: string;
+  asym_id: string;
+  entity_id: string;
+  assembly_id: number;
+};
+export type Polynucleotide = {
+  parent_rcsb_id: string;
+  auth_asym_id: string;
+  asym_id: string;
+  entity_id: string;
+  assembly_id: number;
+};
+export type Nonpolymer = {
+  parent_rcsb_id: string;
+  auth_asym_id: string;
+  asym_id: string;
+  entity_id: string;
+  assembly_id: number;
+};
+export type InstanceIdentifier = {
+  entity_id: string;
+  auth_asym_id: string;
+  asym_id?: string | null;
+};
+export type AssemblyInstancesMap = {
+  rcsb_id: string;
+  nonpolymer_entity_instances?:
+    | {
+        [key: string]: InstanceIdentifier;
+      }[]
+    | null;
+  polymer_entity_instances: {
+    [key: string]: InstanceIdentifier;
+  }[];
+};
+export type TubulinStructure = {
+  rcsb_id: string;
+  expMethod: string;
+  resolution: number;
+  deposition_date?: string | null;
+  pdbx_keywords?: string | null;
+  pdbx_keywords_text?: string | null;
+  rcsb_external_ref_id: string[];
+  rcsb_external_ref_type: string[];
+  rcsb_external_ref_link: string[];
+  citation_year?: number | null;
+  citation_rcsb_authors?: string[] | null;
+  citation_title?: string | null;
+  citation_pdbx_doi?: string | null;
+  src_organism_ids?: number[];
+  src_organism_names?: string[];
+  host_organism_ids?: number[];
+  host_organism_names?: string[];
+  entities: {
+    [key: string]: PolypeptideEntity | PolynucleotideEntity | NonpolymerEntity;
+  };
+  polypeptides: Polypeptide[];
+  polynucleotides: Polynucleotide[];
+  nonpolymers: Nonpolymer[];
+  assembly_map?: AssemblyInstancesMap[] | null;
+  polymerization_state?:
+    | ("monomer" | "dimer" | "oligomer" | "filament" | "unknown")
+    | null;
+};
 export type PolypeptideEntitySummary = {
   parent_rcsb_id: string;
   entity_id: string;
@@ -573,6 +783,7 @@ export const {
   useGetTaxonomyStructuresTaxonomyTaxTypeGetQuery,
   useGetFamiliesStructuresFamiliesGetQuery,
   useGetStructureStructuresRcsbIdGetQuery,
+  useGetStructureProfileStructuresRcsbIdProfileGetQuery,
   useListPolymersPolymersGetQuery,
   useListLigandsLigandsGetQuery,
   useLigandOptionsLigandsOptionsGetQuery,

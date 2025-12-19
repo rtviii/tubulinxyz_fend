@@ -2,7 +2,7 @@
 import { useCallback, useState } from 'react';
 import { useSequenceStructureRegistry } from '../hooks/useSequenceStructureSync';
 import { MolstarService } from '@/components/molstar/molstar_service';
-import { createTubulinClassificationMap } from '@/services/gql_parser';
+// import { createTubulinClassificationMap } from '@/services/gql_parser';
 import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 import { useSequenceAligner } from '../hooks/useSequenceAligner';
 import { ChainAnnotationSummary } from './ChainAnnotationSummary';
@@ -38,9 +38,9 @@ export function PDBSequenceExtractor({
       const cleanId = pdbId.trim().toUpperCase();
 
       const gqlData = await fetchRcsbGraphQlData(cleanId);
-      const classification = createTubulinClassificationMap(gqlData);
+      // const classification = createTubulinClassificationMap(gqlData);
 
-      await mainService.controller.loadStructure(cleanId, classification);
+      await mainService.controller.loadStructure(cleanId, {});
       await mainService.viewer.representations.stylized_lighting();
 
       const chainIds = mainService.controller.getAllChains(cleanId);
