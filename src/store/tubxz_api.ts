@@ -45,6 +45,13 @@ const injectedRtkApi = api
             ligands: queryArg.ligands,
             family: queryArg.family,
             uniprot: queryArg.uniprot,
+            hasMutations: queryArg.hasMutations,
+            mutationFamily: queryArg.mutationFamily,
+            mutationPosMin: queryArg.mutationPosMin,
+            mutationPosMax: queryArg.mutationPosMax,
+            mutationFrom: queryArg.mutationFrom,
+            mutationTo: queryArg.mutationTo,
+            mutationPhenotype: queryArg.mutationPhenotype,
           },
         }),
         providesTags: ["Structures"],
@@ -265,6 +272,13 @@ export type ListStructuresStructuresGetApiArg = {
   ligands?: string[] | null;
   family?: string[] | null;
   uniprot?: string[] | null;
+  hasMutations?: boolean | null;
+  mutationFamily?: string | null;
+  mutationPosMin?: number | null;
+  mutationPosMax?: number | null;
+  mutationFrom?: string | null;
+  mutationTo?: string | null;
+  mutationPhenotype?: string | null;
 };
 export type GetFacetsStructuresFacetsGetApiResponse =
   /** status 200 Successful Response */ FilterFacets;
@@ -443,6 +457,23 @@ export type LigandFacet = {
   chemical_name?: string | null;
   count: number;
 };
+export type MutationByFamily = {
+  family: string;
+  mutation_count: number;
+  structure_count: number;
+};
+export type CommonMutation = {
+  family?: string | null;
+  position: number;
+  from_residue: string;
+  to_residue: string;
+  count: number;
+};
+export type MutationPositionRange = {
+  family: string;
+  min_position: number;
+  max_position: number;
+};
 export type FilterFacets = {
   total_structures: number;
   exp_methods: FacetValue[];
@@ -450,6 +481,9 @@ export type FilterFacets = {
   year_range: RangeValue;
   resolution_range: RangeValue;
   top_ligands: LigandFacet[];
+  mutations_by_family: MutationByFamily[];
+  common_mutations: CommonMutation[];
+  mutation_position_ranges: MutationPositionRange[];
 };
 export type PolypeptideEntitySummary = {
   parent_rcsb_id: string;

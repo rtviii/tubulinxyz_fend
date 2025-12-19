@@ -235,6 +235,102 @@ export const StructureFiltersComponent = ({
                             )}
                             getOptionLabel={(option) => `${option.value} ${option.label}`} // For search
                         />
+                        <FilterSection label="Mutations">
+                            <div className="space-y-3">
+                                {/* Family scope selector */}
+                                <Select
+                                    isClearable
+                                    options={familyOptions}
+                                    placeholder="Any family..."
+                                    styles={selectStyles}
+                                    value={familyOptions.find(o => o.value === filters.mutation_family) || null}
+                                    onChange={(option) => dispatchFilterUpdate('mutation_family', option?.value || null)}
+                                />
+
+                                {/* Toggle: has mutations */}
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => dispatchFilterUpdate('has_mutations',
+                                            filters.has_mutations === true ? null : true)}
+                                        className={`flex-1 px-3 py-1.5 text-xs rounded border transition-colors ${filters.has_mutations === true
+                                                ? 'bg-amber-100 border-amber-300 text-amber-700'
+                                                : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                                            }`}
+                                    >
+                                        With Mutations
+                                    </button>
+                                    <button
+                                        onClick={() => dispatchFilterUpdate('has_mutations',
+                                            filters.has_mutations === false ? null : false)}
+                                        className={`flex-1 px-3 py-1.5 text-xs rounded border transition-colors ${filters.has_mutations === false
+                                                ? 'bg-gray-700 border-gray-600 text-white'
+                                                : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                                            }`}
+                                    >
+                                        Wild-type Only
+                                    </button>
+                                </div>
+
+                                {/* Position range */}
+                                <div className="flex gap-2 items-center">
+                                    <span className="text-xs text-gray-500 w-8">Pos:</span>
+                                    <Input
+                                        placeholder="Min"
+                                        type="number"
+                                        className="flex-1 h-8 text-xs"
+                                        value={filters.mutation_position_min ?? ''}
+                                        onChange={e => dispatchFilterUpdate('mutation_position_min',
+                                            e.target.value ? Number(e.target.value) : null)}
+                                    />
+                                    <span className="text-gray-400">-</span>
+                                    <Input
+                                        placeholder="Max"
+                                        type="number"
+                                        className="flex-1 h-8 text-xs"
+                                        value={filters.mutation_position_max ?? ''}
+                                        onChange={e => dispatchFilterUpdate('mutation_position_max',
+                                            e.target.value ? Number(e.target.value) : null)}
+                                    />
+                                </div>
+
+                                {/* From/To residues */}
+                                <div className="flex gap-2 items-center">
+                                    <Input
+                                        placeholder="WT"
+                                        maxLength={1}
+                                        className="w-14 h-8 text-xs text-center font-mono uppercase"
+                                        value={filters.mutation_from ?? ''}
+                                        onChange={e => dispatchFilterUpdate('mutation_from',
+                                            e.target.value?.toUpperCase() || null)}
+                                    />
+                                    <span className="text-gray-400 text-sm">→</span>
+                                    <Input
+                                        placeholder="Mut"
+                                        maxLength={1}
+                                        className="w-14 h-8 text-xs text-center font-mono uppercase"
+                                        value={filters.mutation_to ?? ''}
+                                        onChange={e => dispatchFilterUpdate('mutation_to',
+                                            e.target.value?.toUpperCase() || null)}
+                                    />
+                                </div>
+
+                                {/* Phenotype search */}
+                                <Input
+                                    placeholder="Phenotype (e.g., resistance, cancer)"
+                                    className="h-8 text-xs"
+                                    value={filters.mutation_phenotype ?? ''}
+                                    onChange={e => dispatchFilterUpdate('mutation_phenotype',
+                                        e.target.value || null)}
+                                />
+
+                                {/* Show helper text if family is selected */}
+                                {filters.mutation_family && (
+                                    <p className="text-[10px] text-gray-400 italic">
+                                        Filtering mutations in {filters.mutation_family.replace('tubulin_', '')} tubulin
+                                    </p>
+                                )}
+                            </div>
+                        </FilterSection>
 
                         {/* Group Toggle */}
                         {update_state === "structures" && (
