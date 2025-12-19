@@ -16,9 +16,26 @@ import jpegjs from 'jpeg-js';
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { InteractionsParams } from 'molstar/lib/mol-model-props/computed/interactions/interactions';
 
-// --- Types ---
+
+// [auth_asym_id, auth_seq_id, auth_comp_id]
+type ResidueTuple = [string, number, string];
+
+// [auth_asym_id, auth_seq_id, auth_comp_id, atom_id, isLigand]
+type ParticipantTuple = [string, number, string, string, boolean];
+
+interface Interaction {
+    type: string;
+    participants: [ParticipantTuple, ParticipantTuple];
+}
+
+interface BindingSiteResult {
+    ligand: ResidueTuple;
+    interactions: Interaction[];
+    neighborhood: ResidueTuple[];
+}
+
+// --- Internal Types (for processing) ---
 
 interface ResidueInfo {
     auth_asym_id: string;
@@ -30,21 +47,6 @@ interface AtomInfo extends ResidueInfo {
     atom_id: string;
 }
 
-interface Participant {
-    atom: AtomInfo;
-    isLigand: boolean;
-}
-
-interface FormattedInteraction {
-    type: string;
-    participants: [Participant, Participant];
-}
-
-interface InteractionResult {
-    ligand: ResidueInfo;
-    interactions: FormattedInteraction[];
-    neighborhoodResidues: ResidueInfo[];
-}
 
 // --- Helper Functions ---
 
@@ -54,6 +56,14 @@ function getResidueInfo(loc: StructureElement.Location): ResidueInfo {
         auth_seq_id: StructureProperties.residue.auth_seq_id(loc),
         auth_comp_id: StructureProperties.atom.auth_comp_id(loc)
     };
+}
+
+function toResidueTuple(info: ResidueInfo): ResidueTuple {
+    return [info.auth_asym_id, info.auth_seq_id, info.auth_comp_id];
+}
+
+function toParticipantTuple(atom: AtomInfo, isLigand: boolean): ParticipantTuple {
+    return [atom.auth_asym_id, atom.auth_seq_id, atom.auth_comp_id, atom.atom_id, isLigand];
 }
 
 function getAtomInfoFromFeature(
@@ -74,7 +84,6 @@ function getAtomInfoFromFeature(
     };
 }
 
-// Find the ligand unit and its atom indices in a structure by residue info
 function findLigandInStructure(structure: Structure, ligandInfo: ResidueInfo): { unit: Unit, indices: OrderedSet } | null {
     for (const unit of structure.units) {
         const atomIndices: number[] = [];
@@ -99,9 +108,9 @@ function findLigandInStructure(structure: Structure, ligandInfo: ResidueInfo): {
     return null;
 }
 
-function extractNeighborhoodResidues(structure: Structure, ligandInfo: ResidueInfo): ResidueInfo[] {
+function extractNeighborhoodResidues(structure: Structure, ligandInfo: ResidueInfo): ResidueTuple[] {
     const seen = new Set<string>();
-    const residues: ResidueInfo[] = [];
+    const residues: ResidueTuple[] = [];
 
     for (const unit of structure.units) {
         const loc = StructureElement.Location.create(structure, unit, unit.elements[0]);
@@ -110,7 +119,6 @@ function extractNeighborhoodResidues(structure: Structure, ligandInfo: ResidueIn
             loc.element = unit.elements[i];
             const info = getResidueInfo(loc);
 
-            // Skip the ligand itself
             if (info.auth_asym_id === ligandInfo.auth_asym_id &&
                 info.auth_seq_id === ligandInfo.auth_seq_id &&
                 info.auth_comp_id === ligandInfo.auth_comp_id) continue;
@@ -118,7 +126,7 @@ function extractNeighborhoodResidues(structure: Structure, ligandInfo: ResidueIn
             const key = `${info.auth_asym_id}:${info.auth_seq_id}:${info.auth_comp_id}`;
             if (!seen.has(key)) {
                 seen.add(key);
-                residues.push(info);
+                residues.push(toResidueTuple(info));
             }
         }
     }
@@ -126,25 +134,23 @@ function extractNeighborhoodResidues(structure: Structure, ligandInfo: ResidueIn
     return residues;
 }
 
-// Extract ligand-polymer interactions using atom indices
 function extractInteractionsFromStructure(
     structure: Structure,
     ligandUnitId: number,
     ligandIndices: OrderedSet
-): FormattedInteraction[] {
+): Interaction[] {
     const interactions = InteractionsProvider.get(structure).value;
     if (!interactions) {
         console.log('  WARNING: No interactions object found');
         return [];
     }
 
-    const results: FormattedInteraction[] = [];
+    const results: Interaction[] = [];
     const seen = new Set<string>();
     const { contacts: interUnitContacts, unitsFeatures } = interactions;
 
     console.log(`  Inter-unit contacts: ${interUnitContacts.edgeCount}`);
 
-    // Check if atom (via feature) is in the ligand
     const isAtomInLigand = (unitId: number, featureIndex: number, features: Features): boolean => {
         if (unitId !== ligandUnitId) return false;
         const atomIndex = features.members[features.offsets[featureIndex]];
@@ -163,7 +169,6 @@ function extractInteractionsFromStructure(
         const isALigand = isAtomInLigand(bond.unitA, bond.indexA, featuresA);
         const isBLigand = isAtomInLigand(bond.unitB, bond.indexB, featuresB);
 
-        // Only include ligand-polymer interactions
         if ((isALigand && !isBLigand) || (!isALigand && isBLigand)) {
             const atomA = getAtomInfoFromFeature(structure, unitA, bond.indexA, featuresA);
             const atomB = getAtomInfoFromFeature(structure, unitB, bond.indexB, featuresB);
@@ -180,8 +185,8 @@ function extractInteractionsFromStructure(
             results.push({
                 type: interactionTypeLabel(bond.props.type),
                 participants: [
-                    { atom: atomA, isLigand: isALigand },
-                    { atom: atomB, isLigand: isBLigand }
+                    toParticipantTuple(atomA, isALigand),
+                    toParticipantTuple(atomB, isBLigand)
                 ]
             });
         }
@@ -233,7 +238,7 @@ async function runExtraction(pdbPath: string, ligandCompId: string, authAsymId: 
             console.warn(`No ligand found with comp_id=${ligandCompId} and auth_asym_id=${authAsymId}`);
         }
 
-        const findings: InteractionResult[] = [];
+        const findings: BindingSiteResult[] = [];
 
         for (const element of ligandLoci.elements) {
             const unit = element.unit;
@@ -272,7 +277,6 @@ async function runExtraction(pdbPath: string, ligandCompId: string, authAsymId: 
                 const surroundingsSelection = surroundingsQuery(new QueryContext(structure));
                 const neighborhoodStructure = StructureSelection.unionStructure(surroundingsSelection);
 
-                // Find ligand in the neighborhood structure (unit IDs are different!)
                 const ligandInNeighborhood = findLigandInStructure(neighborhoodStructure, currentLigandInfo);
                 if (!ligandInNeighborhood) {
                     console.warn(`  Could not find ligand in neighborhood structure`);
@@ -282,7 +286,7 @@ async function runExtraction(pdbPath: string, ligandCompId: string, authAsymId: 
                 console.log(`  Found ligand unit ${ligandInNeighborhood.unit.id} with ${OrderedSet.size(ligandInNeighborhood.indices)} atoms`);
 
                 const ctx = { runtime: SyncRuntimeContext, assetManager: new AssetManager() };
-                await InteractionsProvider.attach(ctx, neighborhoodStructure, {
+                const allInteractionsParams = {
                     providers: {
                         'ionic': { name: 'on', params: { distanceMax: 5.0 } },
                         'cation-pi': { name: 'on', params: { distanceMax: 6.0 } },
@@ -305,21 +309,22 @@ async function runExtraction(pdbPath: string, ligandCompId: string, authAsymId: 
                             }
                         },
                     }
-                }, true);
+                };
+                await InteractionsProvider.attach(ctx, neighborhoodStructure, allInteractionsParams, true);
 
                 const interactions = extractInteractionsFromStructure(
                     neighborhoodStructure,
                     ligandInNeighborhood.unit.id,
                     ligandInNeighborhood.indices
                 );
-                const neighborhoodResidues = extractNeighborhoodResidues(neighborhoodStructure, currentLigandInfo);
+                const neighborhood = extractNeighborhoodResidues(neighborhoodStructure, currentLigandInfo);
 
                 console.log(`  Found ${interactions.length} ligand-polymer interactions`);
 
                 findings.push({
-                    ligand: currentLigandInfo,
+                    ligand: toResidueTuple(currentLigandInfo),
                     interactions,
-                    neighborhoodResidues
+                    neighborhood
                 });
             }
         }

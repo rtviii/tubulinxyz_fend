@@ -1,9 +1,12 @@
 import { emptySplitApi as api } from "./emptyApi";
 export const addTagTypes = [
-  "Annotations",
   "Structures",
   "Polymers",
   "Ligands",
+  "MSA Alignment",
+  "Grid",
+  "Annotations",
+  "Health",
 ] as const;
 const injectedRtkApi = api
   .enhanceEndpoints({
@@ -11,6 +14,150 @@ const injectedRtkApi = api
   })
   .injectEndpoints({
     endpoints: (build) => ({
+      getTaxonomyTreeStructuresTaxonomyTreeTaxTypeGet: build.query<
+        GetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetApiResponse,
+        GetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/structures/taxonomy-tree/${queryArg.taxType}`,
+        }),
+        providesTags: ["Structures"],
+      }),
+      listStructuresStructuresGet: build.query<
+        ListStructuresStructuresGetApiResponse,
+        ListStructuresStructuresGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/structures`,
+          params: {
+            cursor: queryArg.cursor,
+            limit: queryArg.limit,
+            search: queryArg.search,
+            ids: queryArg.ids,
+            resMin: queryArg.resMin,
+            resMax: queryArg.resMax,
+            yearMin: queryArg.yearMin,
+            yearMax: queryArg.yearMax,
+            expMethod: queryArg.expMethod,
+            polyState: queryArg.polyState,
+            sourceTaxa: queryArg.sourceTaxa,
+            hostTaxa: queryArg.hostTaxa,
+            ligands: queryArg.ligands,
+            family: queryArg.family,
+            uniprot: queryArg.uniprot,
+          },
+        }),
+        providesTags: ["Structures"],
+      }),
+      getFacetsStructuresFacetsGet: build.query<
+        GetFacetsStructuresFacetsGetApiResponse,
+        GetFacetsStructuresFacetsGetApiArg
+      >({
+        query: () => ({ url: `/structures/facets` }),
+        providesTags: ["Structures"],
+      }),
+      getTaxonomyStructuresTaxonomyTaxTypeGet: build.query<
+        GetTaxonomyStructuresTaxonomyTaxTypeGetApiResponse,
+        GetTaxonomyStructuresTaxonomyTaxTypeGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/structures/taxonomy/${queryArg.taxType}`,
+        }),
+        providesTags: ["Structures"],
+      }),
+      getFamiliesStructuresFamiliesGet: build.query<
+        GetFamiliesStructuresFamiliesGetApiResponse,
+        GetFamiliesStructuresFamiliesGetApiArg
+      >({
+        query: () => ({ url: `/structures/families` }),
+        providesTags: ["Structures"],
+      }),
+      getStructureStructuresRcsbIdGet: build.query<
+        GetStructureStructuresRcsbIdGetApiResponse,
+        GetStructureStructuresRcsbIdGetApiArg
+      >({
+        query: (queryArg) => ({ url: `/structures/${queryArg.rcsbId}` }),
+        providesTags: ["Structures"],
+      }),
+      listPolymersPolymersGet: build.query<
+        ListPolymersPolymersGetApiResponse,
+        ListPolymersPolymersGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/polymers`,
+          params: {
+            cursor: queryArg.cursor,
+            limit: queryArg.limit,
+            resMin: queryArg.resMin,
+            resMax: queryArg.resMax,
+            yearMin: queryArg.yearMin,
+            yearMax: queryArg.yearMax,
+            sourceTaxa: queryArg.sourceTaxa,
+            family: queryArg.family,
+            uniprot: queryArg.uniprot,
+            motif: queryArg.motif,
+            seqLenMin: queryArg.seqLenMin,
+            seqLenMax: queryArg.seqLenMax,
+            hasMutations: queryArg.hasMutations,
+          },
+        }),
+        providesTags: ["Polymers"],
+      }),
+      listLigandsLigandsGet: build.query<
+        ListLigandsLigandsGetApiResponse,
+        ListLigandsLigandsGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/ligands`,
+          params: {
+            cursor: queryArg.cursor,
+            limit: queryArg.limit,
+            search: queryArg.search,
+            ids: queryArg.ids,
+            hasDrugbank: queryArg.hasDrugbank,
+            inStructures: queryArg.inStructures,
+          },
+        }),
+        providesTags: ["Ligands"],
+      }),
+      ligandOptionsLigandsOptionsGet: build.query<
+        LigandOptionsLigandsOptionsGetApiResponse,
+        LigandOptionsLigandsOptionsGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/ligands/options`,
+          params: {
+            search: queryArg.search,
+            limit: queryArg.limit,
+          },
+        }),
+        providesTags: ["Ligands"],
+      }),
+      alignSequenceMsaSequencePost: build.mutation<
+        AlignSequenceMsaSequencePostApiResponse,
+        AlignSequenceMsaSequencePostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/msa/sequence`,
+          method: "POST",
+          body: queryArg.alignmentRequest,
+        }),
+        invalidatesTags: ["MSA Alignment"],
+      }),
+      getMasterProfileMsaMasterGet: build.query<
+        GetMasterProfileMsaMasterGetApiResponse,
+        GetMasterProfileMsaMasterGetApiArg
+      >({
+        query: () => ({ url: `/msa/master` }),
+        providesTags: ["MSA Alignment"],
+      }),
+      getGridGridPdbIdGet: build.query<
+        GetGridGridPdbIdGetApiResponse,
+        GetGridGridPdbIdGetApiArg
+      >({
+        query: (queryArg) => ({ url: `/grid/${queryArg.pdbId}` }),
+        providesTags: ["Grid"],
+      }),
       getMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGet:
         build.query<
           GetMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGetApiResponse,
@@ -84,105 +231,104 @@ const injectedRtkApi = api
           }),
           providesTags: ["Annotations"],
         }),
-      allStructureIdsStructuresAllIdsGet: build.query<
-        AllStructureIdsStructuresAllIdsGetApiResponse,
-        AllStructureIdsStructuresAllIdsGetApiArg
+      healthHealthGet: build.query<
+        HealthHealthGetApiResponse,
+        HealthHealthGetApiArg
       >({
-        query: () => ({ url: `/structures/all_ids` }),
-        providesTags: ["Structures"],
-      }),
-      randomStructureStructuresRandomGet: build.query<
-        RandomStructureStructuresRandomGetApiResponse,
-        RandomStructureStructuresRandomGetApiArg
-      >({
-        query: () => ({ url: `/structures/random` }),
-        providesTags: ["Structures"],
-      }),
-      getStructureStructuresRcsbIdGet: build.query<
-        GetStructureStructuresRcsbIdGetApiResponse,
-        GetStructureStructuresRcsbIdGetApiArg
-      >({
-        query: (queryArg) => ({ url: `/structures/${queryArg.rcsbId}` }),
-        providesTags: ["Structures"],
-      }),
-      listStructuresStructuresListPost: build.mutation<
-        ListStructuresStructuresListPostApiResponse,
-        ListStructuresStructuresListPostApiArg
-      >({
-        query: (queryArg) => ({
-          url: `/structures/list`,
-          method: "POST",
-          body: queryArg.structureFilterParams,
-        }),
-        invalidatesTags: ["Structures"],
-      }),
-      getTaxaStructuresTaxaSourceOrHostGet: build.query<
-        GetTaxaStructuresTaxaSourceOrHostGetApiResponse,
-        GetTaxaStructuresTaxaSourceOrHostGetApiArg
-      >({
-        query: (queryArg) => ({
-          url: `/structures/taxa/${queryArg.sourceOrHost}`,
-        }),
-        providesTags: ["Structures"],
-      }),
-      getTaxaDictStructuresTaxaDictAllGet: build.query<
-        GetTaxaDictStructuresTaxaDictAllGetApiResponse,
-        GetTaxaDictStructuresTaxaDictAllGetApiArg
-      >({
-        query: () => ({ url: `/structures/taxa_dict/all` }),
-        providesTags: ["Structures"],
-      }),
-      listPolymersPolymersListPost: build.mutation<
-        ListPolymersPolymersListPostApiResponse,
-        ListPolymersPolymersListPostApiArg
-      >({
-        query: (queryArg) => ({
-          url: `/polymers/list`,
-          method: "POST",
-          body: queryArg.polymersFilterParams,
-        }),
-        invalidatesTags: ["Polymers"],
-      }),
-      getTubulinFamiliesPolymersFamiliesGet: build.query<
-        GetTubulinFamiliesPolymersFamiliesGetApiResponse,
-        GetTubulinFamiliesPolymersFamiliesGetApiArg
-      >({
-        query: () => ({ url: `/polymers/families` }),
-        providesTags: ["Polymers"],
-      }),
-      listAllLigandsLigandsAllGet: build.query<
-        ListAllLigandsLigandsAllGetApiResponse,
-        ListAllLigandsLigandsAllGetApiArg
-      >({
-        query: () => ({ url: `/ligands/all` }),
-        providesTags: ["Ligands"],
-      }),
-      alignSequenceMsaprofileSequencePost: build.mutation<
-        AlignSequenceMsaprofileSequencePostApiResponse,
-        AlignSequenceMsaprofileSequencePostApiArg
-      >({
-        query: (queryArg) => ({
-          url: `/msaprofile/sequence`,
-          method: "POST",
-          body: queryArg.alignmentRequest,
-        }),
-      }),
-      getMasterProfileMsaprofileMasterGet: build.query<
-        GetMasterProfileMsaprofileMasterGetApiResponse,
-        GetMasterProfileMsaprofileMasterGetApiArg
-      >({
-        query: () => ({ url: `/msaprofile/master` }),
-      }),
-      getGridGridPdbIdGet: build.query<
-        GetGridGridPdbIdGetApiResponse,
-        GetGridGridPdbIdGetApiArg
-      >({
-        query: (queryArg) => ({ url: `/grid/${queryArg.pdbId}` }),
+        query: () => ({ url: `/health` }),
+        providesTags: ["Health"],
       }),
     }),
     overrideExisting: false,
   });
 export { injectedRtkApi as tubxz_api };
+export type GetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type GetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetApiArg = {
+  taxType: string;
+};
+export type ListStructuresStructuresGetApiResponse =
+  /** status 200 Successful Response */ StructureListResponse;
+export type ListStructuresStructuresGetApiArg = {
+  cursor?: string | null;
+  limit?: number;
+  search?: string | null;
+  ids?: string[] | null;
+  resMin?: number | null;
+  resMax?: number | null;
+  yearMin?: number | null;
+  yearMax?: number | null;
+  expMethod?: string[] | null;
+  polyState?: string[] | null;
+  sourceTaxa?: number[] | null;
+  hostTaxa?: number[] | null;
+  ligands?: string[] | null;
+  family?: string[] | null;
+  uniprot?: string[] | null;
+};
+export type GetFacetsStructuresFacetsGetApiResponse =
+  /** status 200 Successful Response */ FilterFacets;
+export type GetFacetsStructuresFacetsGetApiArg = void;
+export type GetTaxonomyStructuresTaxonomyTaxTypeGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type GetTaxonomyStructuresTaxonomyTaxTypeGetApiArg = {
+  taxType: string;
+};
+export type GetFamiliesStructuresFamiliesGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type GetFamiliesStructuresFamiliesGetApiArg = void;
+export type GetStructureStructuresRcsbIdGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type GetStructureStructuresRcsbIdGetApiArg = {
+  rcsbId: string;
+};
+export type ListPolymersPolymersGetApiResponse =
+  /** status 200 Successful Response */ PolypeptideListResponse;
+export type ListPolymersPolymersGetApiArg = {
+  cursor?: string | null;
+  limit?: number;
+  resMin?: number | null;
+  resMax?: number | null;
+  yearMin?: number | null;
+  yearMax?: number | null;
+  sourceTaxa?: number[] | null;
+  family?: string[] | null;
+  uniprot?: string | null;
+  motif?: string | null;
+  seqLenMin?: number | null;
+  seqLenMax?: number | null;
+  hasMutations?: boolean | null;
+};
+export type ListLigandsLigandsGetApiResponse =
+  /** status 200 Successful Response */ LigandListResponse;
+export type ListLigandsLigandsGetApiArg = {
+  cursor?: string | null;
+  limit?: number;
+  search?: string | null;
+  ids?: string[] | null;
+  hasDrugbank?: boolean | null;
+  inStructures?: string[] | null;
+};
+export type LigandOptionsLigandsOptionsGetApiResponse =
+  /** status 200 Successful Response */ LigandListResponse;
+export type LigandOptionsLigandsOptionsGetApiArg = {
+  /** Search by ID or name */
+  search?: string | null;
+  limit?: number;
+};
+export type AlignSequenceMsaSequencePostApiResponse =
+  /** status 200 Successful Response */ AlignmentResponse;
+export type AlignSequenceMsaSequencePostApiArg = {
+  alignmentRequest: AlignmentRequest;
+};
+export type GetMasterProfileMsaMasterGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type GetMasterProfileMsaMasterGetApiArg = void;
+export type GetGridGridPdbIdGetApiResponse =
+  /** status 200 Successful Response */ GridData;
+export type GetGridGridPdbIdGetApiArg = {
+  pdbId: string;
+};
 export type GetMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGetApiResponse =
   /** status 200 Successful Response */ {
     [key: string]: any;
@@ -252,54 +398,9 @@ export type GetPolymerAllAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdAllGetApiA
     rcsbId: string;
     authAsymId: string;
   };
-export type AllStructureIdsStructuresAllIdsGetApiResponse =
-  /** status 200 Successful Response */ string[];
-export type AllStructureIdsStructuresAllIdsGetApiArg = void;
-export type RandomStructureStructuresRandomGetApiResponse =
+export type HealthHealthGetApiResponse =
   /** status 200 Successful Response */ any;
-export type RandomStructureStructuresRandomGetApiArg = void;
-export type GetStructureStructuresRcsbIdGetApiResponse =
-  /** status 200 Successful Response */ any;
-export type GetStructureStructuresRcsbIdGetApiArg = {
-  rcsbId: string;
-};
-export type ListStructuresStructuresListPostApiResponse =
-  /** status 200 Successful Response */ any;
-export type ListStructuresStructuresListPostApiArg = {
-  structureFilterParams: StructureFilterParams;
-};
-export type GetTaxaStructuresTaxaSourceOrHostGetApiResponse =
-  /** status 200 Successful Response */ any;
-export type GetTaxaStructuresTaxaSourceOrHostGetApiArg = {
-  sourceOrHost: string;
-};
-export type GetTaxaDictStructuresTaxaDictAllGetApiResponse =
-  /** status 200 Successful Response */ any;
-export type GetTaxaDictStructuresTaxaDictAllGetApiArg = void;
-export type ListPolymersPolymersListPostApiResponse =
-  /** status 200 Successful Response */ any;
-export type ListPolymersPolymersListPostApiArg = {
-  polymersFilterParams: PolymersFilterParams;
-};
-export type GetTubulinFamiliesPolymersFamiliesGetApiResponse =
-  /** status 200 Successful Response */ string[];
-export type GetTubulinFamiliesPolymersFamiliesGetApiArg = void;
-export type ListAllLigandsLigandsAllGetApiResponse =
-  /** status 200 Successful Response */ any;
-export type ListAllLigandsLigandsAllGetApiArg = void;
-export type AlignSequenceMsaprofileSequencePostApiResponse =
-  /** status 200 Successful Response */ AlignmentResponse;
-export type AlignSequenceMsaprofileSequencePostApiArg = {
-  alignmentRequest: AlignmentRequest;
-};
-export type GetMasterProfileMsaprofileMasterGetApiResponse =
-  /** status 200 Successful Response */ any;
-export type GetMasterProfileMsaprofileMasterGetApiArg = void;
-export type GetGridGridPdbIdGetApiResponse =
-  /** status 200 Successful Response */ GridData;
-export type GetGridGridPdbIdGetApiArg = {
-  pdbId: string;
-};
+export type HealthHealthGetApiArg = void;
 export type ValidationError = {
   loc: (string | number)[];
   msg: string;
@@ -308,27 +409,83 @@ export type ValidationError = {
 export type HttpValidationError = {
   detail?: ValidationError[];
 };
-export type StructureFilterParams = {
-  cursor?: string | null;
-  limit?: number;
-  year?: [number | null, number | null] | null;
-  search?: string | null;
-  resolution?: [number | null, number | null] | null;
-  source_taxa?: number[] | null;
-  host_taxa?: number[] | null;
-  polymerization_state?: string[] | null;
+export type StructureSummary = {
+  rcsb_id: string;
+  resolution?: number | null;
+  expMethod?: string | null;
+  citation_title?: string | null;
+  citation_year?: number | null;
+  deposition_date?: string | null;
+  src_organism_names?: string[];
+  pdbx_keywords?: string | null;
+  entity_count?: number | null;
+  ligand_count?: number | null;
 };
-export type PolymersFilterParams = {
-  cursor?: [string | null, string | null] | (string | null)[] | string | null;
-  limit?: number;
-  year?: [number | null, number | null] | null;
-  search?: string | null;
-  resolution?: [number | null, number | null] | null;
-  source_taxa?: number[] | null;
-  host_taxa?: number[] | null;
-  family?: string[] | null;
-  uniprot_id?: string | null;
-  has_motif?: string | null;
+export type StructureListResponse = {
+  data: StructureSummary[];
+  /** Total matching results (before pagination) */
+  total_count: number;
+  /** Cursor for next page. Null if no more results. */
+  next_cursor?: string | null;
+  /** Whether more results exist */
+  has_more: boolean;
+};
+export type FacetValue = {
+  value: string;
+  count: number;
+};
+export type RangeValue = {
+  min?: number | null;
+  max?: number | null;
+};
+export type LigandFacet = {
+  chemical_id: string;
+  chemical_name?: string | null;
+  count: number;
+};
+export type FilterFacets = {
+  total_structures: number;
+  exp_methods: FacetValue[];
+  tubulin_families: FacetValue[];
+  year_range: RangeValue;
+  resolution_range: RangeValue;
+  top_ligands: LigandFacet[];
+};
+export type PolypeptideEntitySummary = {
+  parent_rcsb_id: string;
+  entity_id: string;
+  pdbx_description?: string | null;
+  family?: string | null;
+  sequence_length?: number | null;
+  src_organism_names?: string[];
+  uniprot_accessions?: string[];
+  mutation_count?: number | null;
+};
+export type PolypeptideListResponse = {
+  data: PolypeptideEntitySummary[];
+  /** Total matching results (before pagination) */
+  total_count: number;
+  /** Cursor for next page. Null if no more results. */
+  next_cursor?: string | null;
+  /** Whether more results exist */
+  has_more: boolean;
+};
+export type LigandSummary = {
+  chemical_id: string;
+  chemical_name?: string | null;
+  drugbank_id?: string | null;
+  formula_weight?: number | null;
+  /** Number of structures containing this ligand */
+  structure_count?: number | null;
+};
+export type LigandListResponse = {
+  data: LigandSummary[];
+  /** Total matching results (before pagination) */
+  total_count: number;
+  /** Cursor for next page. Null if no more results. */
+  next_cursor?: string | null;
+  /** Whether more results exist */
+  has_more: boolean;
 };
 export type Annotation = {
   start: number;
@@ -376,6 +533,18 @@ export type GridData = {
   };
 };
 export const {
+  useGetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetQuery,
+  useListStructuresStructuresGetQuery,
+  useGetFacetsStructuresFacetsGetQuery,
+  useGetTaxonomyStructuresTaxonomyTaxTypeGetQuery,
+  useGetFamiliesStructuresFamiliesGetQuery,
+  useGetStructureStructuresRcsbIdGetQuery,
+  useListPolymersPolymersGetQuery,
+  useListLigandsLigandsGetQuery,
+  useLigandOptionsLigandsOptionsGetQuery,
+  useAlignSequenceMsaSequencePostMutation,
+  useGetMasterProfileMsaMasterGetQuery,
+  useGetGridGridPdbIdGetQuery,
   useGetMutationsAtPositionAnnotationsMutationsFamilyVersionPositionGetQuery,
   useGetModificationsAtPositionAnnotationsModificationsFamilyVersionPositionGetQuery,
   useGetAllAnnotationsAtPositionAnnotationsAllFamilyVersionPositionGetQuery,
@@ -383,16 +552,5 @@ export const {
   useGetPolymerMutationsAnnotationsPolymerRcsbIdAuthAsymIdMutationsGetQuery,
   useGetPolymerModificationsAnnotationsPolymerRcsbIdAuthAsymIdModificationsGetQuery,
   useGetPolymerAllAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdAllGetQuery,
-  useAllStructureIdsStructuresAllIdsGetQuery,
-  useRandomStructureStructuresRandomGetQuery,
-  useGetStructureStructuresRcsbIdGetQuery,
-  useListStructuresStructuresListPostMutation,
-  useGetTaxaStructuresTaxaSourceOrHostGetQuery,
-  useGetTaxaDictStructuresTaxaDictAllGetQuery,
-  useListPolymersPolymersListPostMutation,
-  useGetTubulinFamiliesPolymersFamiliesGetQuery,
-  useListAllLigandsLigandsAllGetQuery,
-  useAlignSequenceMsaprofileSequencePostMutation,
-  useGetMasterProfileMsaprofileMasterGetQuery,
-  useGetGridGridPdbIdGetQuery,
+  useHealthHealthGetQuery,
 } = injectedRtkApi;

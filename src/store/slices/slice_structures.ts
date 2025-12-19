@@ -1,16 +1,19 @@
+// src/store/slices/slice_structures.ts
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { ListStructuresStructuresGetApiArg } from '../tubxz_api';
 
-// Matches your Backend Pydantic Model: StructureFilterParams
+// Keep your nice readable filter shape for UI state
 export interface StructureFilters {
   cursor: string | null;
   limit: number;
-  year: [number | null, number | null]; // [start, end]
   search: string | null;
-  resolution: [number | null, number | null]; // [min, max]
+  year: [number | null, number | null];
+  resolution: [number | null, number | null];
   source_taxa: number[];
   host_taxa: number[];
-  polymerization_state: string[]; // ['monomer', 'dimer', etc.]
-  family: string[]; // ['alpha', 'beta', etc.] (optional if shared)
+  polymerization_state: string[];
+  family: string[];
+  ligands: string[];  // <-- Add this
 }
 
 interface StructuresState {
@@ -23,17 +26,20 @@ interface StructuresState {
 const initialState: StructuresState = {
   total_count: 0,
   next_cursor: null,
-  grouped_by_deposition: true, // UI toggle state
+  grouped_by_deposition: true,
   filters: {
     cursor: null,
-    limit: 20,
-    year: [null, null],
+    limit: 100,
     search: null,
+    year: [null, null],
     resolution: [null, null],
     source_taxa: [],
     host_taxa: [],
     polymerization_state: [],
-    family: []
+    family: [],
+    ligands: []
+
+
   },
 };
 
@@ -41,37 +47,46 @@ export const structuresSlice = createSlice({
   name: 'structures_page',
   initialState,
   reducers: {
-    // 1. Generic Filter Updater (Handles any field in StructureFilters)
     set_structures_filter: (
       state,
       action: PayloadAction<{ filter_type: keyof StructureFilters; value: any }>
     ) => {
-      // @ts-ignore - Dynamic assignment is safe here due to payload typing
-      state.filters[action.payload.filter_type] = action.payload.value;
-      
-      // Reset cursor when filters change so we start from page 1
-      state.filters.cursor = null; 
+      (state.filters as any)[action.payload.filter_type] = action.payload.value;
+      state.filters.cursor = null;
       state.next_cursor = null;
     },
-
-    // 2. Metadata Updaters (Called when API returns data)
     set_structures_total_count: (state, action: PayloadAction<number>) => {
       state.total_count = action.payload;
     },
     set_structures_next_cursor: (state, action: PayloadAction<string | null>) => {
       state.next_cursor = action.payload;
     },
-    
-    // 3. UI Toggle
     update_grouped_by_deposition: (state, action: PayloadAction<boolean>) => {
       state.grouped_by_deposition = action.payload;
     },
-    
-    // 4. Pagination
     set_structures_page_cursor: (state, action: PayloadAction<string | null>) => {
       state.filters.cursor = action.payload;
     }
   },
+});
+
+// --- SELECTOR: Transform UI state → API query args ---
+export const selectStructureApiArgs = (filters: StructureFilters): ListStructuresStructuresGetApiArg => ({
+  cursor: filters.cursor ?? undefined,
+  limit: filters.limit,
+  search: filters.search ?? undefined,
+  yearMin: filters.year[0] ?? undefined,
+  yearMax: filters.year[1] ?? undefined,
+  resMin: filters.resolution[0] ?? undefined,
+  resMax: filters.resolution[1] ?? undefined,
+  sourceTaxa: filters.source_taxa.length > 0 ? filters.source_taxa : undefined,
+  hostTaxa: filters.host_taxa.length > 0 ? filters.host_taxa : undefined,
+  polyState: filters.polymerization_state.length > 0 
+    ? filters.polymerization_state as any 
+    : undefined,
+  family: filters.family.length > 0 ? filters.family : undefined,
+ ligands: filters.ligands.length ? filters.ligands : undefined,  // <-- Add this
+
 });
 
 export const {

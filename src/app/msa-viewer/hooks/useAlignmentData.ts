@@ -13,7 +13,7 @@ export function useAlignmentData() {
   useEffect(() => {
     const fetchAlignmentData = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/msaprofile/master`);
+        const response = await fetch(`${API_BASE_URL}/msa/master`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }

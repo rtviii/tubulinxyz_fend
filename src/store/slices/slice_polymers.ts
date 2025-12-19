@@ -1,6 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
-// Matches Backend Pydantic Model: PolymersFilterParams
 export interface PolymerFilters {
   cursor: string | null; 
   limit: number;

@@ -2,13 +2,13 @@
 import { MolstarService } from "@/components/molstar/molstar_service";
 import { useCallback, useState } from "react";
 import { useSequenceStructureRegistry } from "./useSequenceStructureSync";
-import { useAlignSequenceMsaprofileSequencePostMutation } from "@/store/tubxz_api";
+import { useAlignSequenceMsaSequencePostMutation } from "@/store/tubxz_api";
 
 export function useSequenceAligner(registry: ReturnType<typeof useSequenceStructureRegistry>) {
   const [isAligning, setIsAligning] = useState(false);
   const [currentChain, setCurrentChain] = useState<string | null>(null);
   
-  const [alignSequence] = useAlignSequenceMsaprofileSequencePostMutation();
+  const [alignSequence] = useAlignSequenceMsaSequencePostMutation();
 
   const alignAndRegisterChain = useCallback(
     async (

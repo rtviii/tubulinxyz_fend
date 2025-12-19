@@ -1,0 +1,9 @@
+- query engine repair
+- structures page
+- re-render thumbnails (ligand and family types colorschemes etc.)
+- msa viewer:
+    - colorscheme for mutations (Carsten)
+    - annotations
+    - ligand binding windows 
+    - ligand binding windows 
+- front page flex
