@@ -4,8 +4,6 @@ import jpegjs from 'jpeg-js';
 import { HeadlessPluginContext } from 'molstar/lib/mol-plugin/headless-plugin-context';
 import { DefaultPluginSpec } from 'molstar/lib/mol-plugin/spec';
 import { EnhancedTubulinSplitPreset } from '../src/components/molstar/molstar_preset_computed_residues';
-import { fetchRcsbGraphQlData } from '../src/services/rcsb_graphql_service';
-import { createTubulinClassificationMap } from '../src/services/gql_parser';
 import * as fs from 'fs';
 import * as path from 'path';
 import { STYLIZED_POSTPROCESSING } from '@/components/molstar/rendering/postprocessing-config';
@@ -20,14 +18,14 @@ const CONFIG = {
     // Image dimensions
     IMAGE_WIDTH: 1920,
     IMAGE_HEIGHT: 1080,
-    
+
     // Rendering settings
     TRANSPARENT_BACKGROUND: true,
     MULTISAMPLE_LEVEL: 4,  // Anti-aliasing quality (2, 4, or 8)
-    
+
     // Performance
     DEFAULT_CONCURRENCY: 4,
-    
+
     // Output
     DEFAULT_OUTPUT_DIR: './output',
     IMAGE_FORMAT: 'png' as const,  // 'png' or 'jpeg'
@@ -46,13 +44,13 @@ interface RenderResult {
 async function createPlugin(): Promise<HeadlessPluginContext> {
     const externalModules = { gl, pngjs, 'jpeg-js': jpegjs };
     const spec = DefaultPluginSpec();
-    
+
     const plugin = new HeadlessPluginContext(
         externalModules,
         spec,
-        { 
-            width: CONFIG.IMAGE_WIDTH, 
-            height: CONFIG.IMAGE_HEIGHT 
+        {
+            width: CONFIG.IMAGE_WIDTH,
+            height: CONFIG.IMAGE_HEIGHT
         },
         {
             // Configure transparent background and quality settings
@@ -71,7 +69,7 @@ async function createPlugin(): Promise<HeadlessPluginContext> {
 
     await plugin.init();
     plugin.builders.structure.representation.registerPreset(EnhancedTubulinSplitPreset);
-    
+
     return plugin;
 }
 
@@ -81,17 +79,30 @@ async function renderStructure(
     outputPath: string
 ): Promise<RenderResult> {
     const startTime = Date.now();
-    
+
     try {
         // Fetch GraphQL data from RCSB
-        const gqlData = await fetchRcsbGraphQlData(pdbId);
-        const tubulinClassification = createTubulinClassificationMap(gqlData);
+        console.log(`[Backend] Fetching profile for ${pdbId}...`);
+        const backendUrl = `http://localhost:8000/structures/${pdbId}/profile`;
 
-        if (Object.keys(tubulinClassification).length === 0) {
-            console.warn(`  ⚠️  ${pdbId}: No tubulin chains found`);
+        const response = await fetch(backendUrl);
+        if (!response.ok) {
+            throw new Error(`Backend fetch failed: ${response.status} ${response.statusText}`);
         }
 
-        // Download and parse structure
+        const profileData = await response.json();
+
+        // Use your existing helper to convert the backend profile into 
+        // the map format required by the Mol* Preset
+        const { createClassificationFromProfile } = await import('../src/services/profile_service');
+        const tubulinClassification = createClassificationFromProfile(profileData);
+
+        if (Object.keys(tubulinClassification).length === 0) {
+            console.warn(`  ⚠️  ${pdbId}: No tubulin chains found in backend profile`);
+        }
+        // ---------------------------------------------------------------
+
+        // Download and parse structure (using standard RCSB CIF as fallback or your local source)
         const data = await plugin.builders.data.download({
             url: `https://files.rcsb.org/download/${pdbId}.cif`,
             isBinary: false
@@ -101,14 +112,14 @@ async function renderStructure(
         const model = await plugin.builders.structure.createModel(trajectory);
         const structure = await plugin.builders.structure.createStructure(model);
 
-        // Apply preset
+        // Apply preset with vibrant colors and backend classification
         await plugin.builders.structure.representation.applyPreset(
             structure,
             'tubulin-split-preset-computed-res',
             {
                 pdbId: pdbId,
                 tubulinClassification: tubulinClassification,
-                computedResidues: []
+                computedResidues: [] // Pass empty or fetch from backend if available
             }
         );
 
@@ -154,11 +165,11 @@ async function renderStructure(
 
         // Render and save with configured settings
         await plugin.saveImage(
-            outputPath, 
-            { 
-                width: CONFIG.IMAGE_WIDTH, 
-                height: CONFIG.IMAGE_HEIGHT 
-            }, 
+            outputPath,
+            {
+                width: CONFIG.IMAGE_WIDTH,
+                height: CONFIG.IMAGE_HEIGHT
+            },
             STYLIZED_POSTPROCESSING,
             CONFIG.IMAGE_FORMAT,
             CONFIG.JPEG_QUALITY
@@ -178,7 +189,7 @@ async function renderStructure(
 }
 
 async function processQueue(
-    pdbIds: string[], 
+    pdbIds: string[],
     concurrency: number,
     outputDir: string
 ): Promise<RenderResult[]> {
@@ -188,21 +199,21 @@ async function processQueue(
 
     // Create a queue of tasks
     const queue = [...pdbIds];
-    
+
     // Worker function
     const worker = async (workerId: number): Promise<void> => {
         // Each worker gets its own plugin instance
         const plugin = await createPlugin();
-        
+
         try {
             while (queue.length > 0) {
                 const pdbId = queue.shift();
                 if (!pdbId) break;
 
                 const outputPath = path.join(outputDir, `${pdbId}.${CONFIG.IMAGE_FORMAT}`);
-                
+
                 console.log(`[Worker ${workerId}] Processing ${pdbId} (${completed + 1}/${total})...`);
-                
+
                 const result = await renderStructure(plugin, pdbId, outputPath);
                 results.push(result);
                 completed++;
@@ -285,7 +296,7 @@ async function main() {
     console.log('='.repeat(60) + '\n');
 
     const startTime = Date.now();
-    
+
     // Process with parallelization
     const results = await processQueue(pdbIds, concurrency, outputDir);
 

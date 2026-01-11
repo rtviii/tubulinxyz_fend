@@ -2,11 +2,12 @@
 import { useCallback, useState } from 'react';
 import { useSequenceStructureRegistry } from '../hooks/useSequenceStructureSync';
 import { MolstarService } from '@/components/molstar/molstar_service';
-import { createTubulinClassificationMap } from '@/services/gql_parser';
+// import { createTubulinClassificationMap } from '@/services/gql_parser';
 import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 import { useSequenceAligner } from '../hooks/useSequenceAligner';
 import { ChainAnnotationSummary } from './ChainAnnotationSummary';
 import { useChainAnnotations } from '../hooks/useChainAnnotations';
+import { createClassificationFromProfile } from '@/services/profile_service';
 
 interface PDBSequenceExtractorProps {
   mainService: MolstarService | null;
@@ -27,6 +28,7 @@ export function PDBSequenceExtractor({
   const { alignAndRegisterChain, isAligning, currentChain } = useSequenceAligner(registry);
   const { cacheAnnotations, getAnnotations } = useChainAnnotations();
 
+
   const handleLoadStructure = async () => {
     if (!mainService || !pdbId.trim()) return;
 
@@ -37,8 +39,13 @@ export function PDBSequenceExtractor({
     try {
       const cleanId = pdbId.trim().toUpperCase();
 
-      const gqlData = await fetchRcsbGraphQlData(cleanId);
-      const classification = createTubulinClassificationMap(gqlData);
+      // Fetch profile from backend instead of GQL
+      const response = await fetch(`http://localhost:8000/structures/${cleanId}/profile`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch profile for ${cleanId}`);
+      }
+      const profileData = await response.json();
+      const classification = createClassificationFromProfile(profileData);
 
       await mainService.controller.loadStructure(cleanId, classification);
       await mainService.viewer.representations.stylized_lighting();
@@ -69,6 +76,7 @@ export function PDBSequenceExtractor({
     }
   };
 
+
   const handleAlignClick = async (chainId: string) => {
     if (!mainService || !loadedPdbId) return;
 
@@ -83,9 +91,15 @@ export function PDBSequenceExtractor({
         annotations?.modifications || []
       );
 
-      await mainService.controller.isolateChain(loadedPdbId, chainId);
+      // Keep ligands visible when isolating
+      await mainService.controller.isolateChain(loadedPdbId, chainId, true);
 
-      console.log(`Isolated chain ${chainId} in structure ${loadedPdbId}`);
+      // Trigger selection for the ligand panel
+      if (onMutationClick) {
+        onMutationClick(loadedPdbId, chainId, 1);
+      }
+
+      console.log(`Isolated chain ${chainId} in structure ${loadedPdbId} (ligands visible)`);
     } catch (err: any) {
       alert(`Alignment failed: ${err.message}`);
     }

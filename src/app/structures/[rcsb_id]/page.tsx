@@ -8,12 +8,11 @@ import React from 'react';
 import { EntitiesPanel } from '@/components/entities_panel';
 import { useParams } from 'next/navigation';
 import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
-import { createTubulinClassificationMap } from '@/services/gql_parser';
 import { SubunitData } from '@/components/protofilament_grid';
-import { TubulinClassification, TubulinClass } from '@/components/molstar/molstar_preset';
 import { SequenceViewer } from '@/components/sequence_viewer';
 import { useMolstarSync } from '@/hooks/useMolstarSync';
-import { ResearchPanel } from '@/app/research_panel';
+import { TubulinClassification } from '@/components/molstar/molstar_preset_computed_residues';
+import { createClassificationFromProfile } from '@/services/profile_service';
 
 const SUGGESTED_PDB_IDS = ["6WVR", "8QV0", "3JAT", "6O2R", "4TV9", "6U0H", "8VRK", "6E7B", "5J2T", "6FKJ", "4O2B", "6DPU", "1SA0", "6BR1", "7SJ8", "2MZ7", "7SJ9", "6O2T"];
 
@@ -26,11 +25,11 @@ function SettingsPanel({
   onStructureSelect: (pdbId: string) => void;
   onBackendStructureSelect: (filename: string) => void;
 }) {
-  const selectedStructure                   = useAppSelector(selectSelectedStructure);
-  const isLoading                           = useAppSelector(selectIsLoading);
-  const error                               = useAppSelector(selectError);
+  const selectedStructure = useAppSelector(selectSelectedStructure);
+  const isLoading = useAppSelector(selectIsLoading);
+  const error = useAppSelector(selectError);
 
-  const [customPdbId, setCustomPdbId]       = useState('');
+  const [customPdbId, setCustomPdbId] = useState('');
   const [suggestedPdbId, setSuggestedPdbId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -139,18 +138,18 @@ function SettingsPanel({
 }
 
 export default function TubulinViewerPage() {
-  const molstarRef                 = useRef<HTMLDivElement>(null);
-  const loadedPdbFromUrl           = useRef<string | null>(null);
+  const molstarRef = useRef<HTMLDivElement>(null);
+  const loadedPdbFromUrl = useRef<string | null>(null);
   const { isInitialized, service } = useMolstarService(molstarRef, 'main');
-  const dispatch                   = useAppDispatch();
-  const selectedStructure          = useAppSelector(selectSelectedStructure);
+  const dispatch = useAppDispatch();
+  const selectedStructure = useAppSelector(selectSelectedStructure);
   useMolstarSync();
 
-  const params = useParams();
+  const params                                        = useParams();
   const [selectedGridSubunit, setSelectedGridSubunit] = useState<string | null>(null);
-  const [hoveredGridSubunit, setHoveredGridSubunit] = useState<string | null>(null);
-  const [hoveredSubunitData, setHoveredSubunitData] = useState<SubunitData | null>(null);
-  const [classificationMap, setClassificationMap] = useState<TubulinClassification | null>(null);
+  const [hoveredGridSubunit, setHoveredGridSubunit]   = useState<string | null>(null);
+  const [hoveredSubunitData, setHoveredSubunitData]   = useState<SubunitData | null>(null);
+  const [classificationMap, setClassificationMap]     = useState<TubulinClassification | null>(null);
 
   // Centralized structure loading function that ensures proper cleanup
   const loadStructureWithCleanup = useCallback(async (
@@ -200,16 +199,20 @@ export default function TubulinViewerPage() {
 
   // Load structure from URL with cleanup
   const loadStructureFromUrl = useCallback(async (pdbId: string) => {
-    // Prevent duplicate loading
-    if (loadedPdbFromUrl.current === pdbId) {
-      console.log(`Structure ${pdbId} already loaded from URL`);
-      return true;
-    }
+    if (loadedPdbFromUrl.current === pdbId) return true;
 
     return await loadStructureWithCleanup(pdbId, async () => {
-      const gqlData = await fetchRcsbGraphQlData(pdbId);
-      const classificationMap = createTubulinClassificationMap(gqlData);
-      await service!.controller.loadStructure(pdbId, classificationMap);
+      // FIX: You need to fetch the profile here too, otherwise initial 
+      // URL loads have no classification data!
+      const response = await fetch(`http://localhost:8000/structures/${pdbId}/profile`);
+      if (!response.ok) throw new Error("Failed to fetch profile");
+      const profileData = await response.json();
+      const map = createClassificationFromProfile(profileData);
+
+      // Update state so the rest of the UI knows about it
+      setClassificationMap(map);
+
+      await service!.controller.loadStructure(pdbId, map);
       await service!.viewer.representations.stylized_lighting();
     }, 'url');
   }, [loadStructureWithCleanup, service]);
@@ -235,22 +238,31 @@ export default function TubulinViewerPage() {
   }, [isInitialized, service?.controller, params.rcsb_id, loadStructureFromUrl]);
 
   // Manual structure selection with cleanup
+  // Inside TubulinViewerPage component in your page.tsx
   const handleStructureSelect = useCallback(async (pdbId: string) => {
     return await loadStructureWithCleanup(pdbId, async () => {
-      const gqlData = await fetchRcsbGraphQlData(pdbId);
-      const classificationMap = createTubulinClassificationMap(gqlData);
-      await service!.controller.loadStructure(pdbId, classificationMap);
+      const response = await fetch(`http://localhost:8000/structures/${pdbId}/profile`);
+      if (!response.ok) throw new Error("Failed to fetch structure profile.");
+
+      const profileData = await response.json();
+      const map = createClassificationFromProfile(profileData);
+
+      // FIX: Update the state so the React cycle reflects this if needed elsewhere
+      setClassificationMap(map);
+
+      // Pass the freshly created 'map' directly, don't rely on state 'classificationMap'
+      // because setState is asynchronous.
+      await service!.controller.loadStructure(pdbId, map);
       await service!.viewer.representations.stylized_lighting();
     }, 'manual');
   }, [loadStructureWithCleanup, service]);
-
   // Backend structure selection with cleanup
   const handleBackendStructureSelect = useCallback(async (filename: string) => {
     const pdbId = filename.split('_')[0].toUpperCase();
 
     return await loadStructureWithCleanup(pdbId, async () => {
-      const dummyClassificationMap = { A: TubulinClass.Alpha, B: TubulinClass.Beta };
-      await service!.controller.loadStructureFromBackend(filename, dummyClassificationMap);
+      // const dummyClassificationMap = { A: TubulinClass.Alpha, B: TubulinClass.Beta };
+      await service!.controller.loadStructureFromBackend(filename, {});
       await service!.viewer.representations.stylized_lighting();
     }, 'backend');
   }, [loadStructureWithCleanup, service]);
@@ -306,7 +318,6 @@ export default function TubulinViewerPage() {
             hoveredSubunitId={hoveredGridSubunit}
             selectedSubunitId={selectedGridSubunit}
           />
-          <ResearchPanel />
         </div>
       </div>
       <div className="flex-shrink-0 h-[250px] border-t bg-white shadow-inner">

@@ -5,7 +5,6 @@ import { PluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
 import { PluginCommands } from 'molstar/lib/mol-plugin/commands';
 import { Color } from 'molstar/lib/mol-util/color';
 import { ribxzSpec } from './molstar_spec';
-import { TubulinSplitPreset } from './molstar_preset';
 import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state';
 import { StateSelection } from 'molstar/lib/mol-state';
 import { Structure } from 'molstar/lib/mol-model/structure';
@@ -33,7 +32,6 @@ export class MolstarViewer {
 
         try {
             this.ctx = await createPluginUI({ target: parent, spec, render: renderReact18 });
-            this.ctx.builders.structure.representation.registerPreset(TubulinSplitPreset);
             this.ctx.builders.structure.representation.registerPreset(EnhancedTubulinSplitPreset);
 
             this.setupBasicStyling();

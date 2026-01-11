@@ -14,6 +14,14 @@ export interface StructureFilters {
   polymerization_state: string[];
   family: string[];
   ligands: string[];  // <-- Add this
+
+    has_mutations: boolean | null;
+    mutation_family: string | null;
+    mutation_position_min: number | null;
+    mutation_position_max: number | null;
+    mutation_from: string | null;
+    mutation_to: string | null;
+    mutation_phenotype: string | null;
 }
 
 interface StructuresState {
@@ -37,8 +45,15 @@ const initialState: StructuresState = {
     host_taxa: [],
     polymerization_state: [],
     family: [],
-    ligands: []
+    ligands: [],
 
+    has_mutations: null,
+    mutation_family: null,
+    mutation_position_min: null,
+    mutation_position_max: null,
+    mutation_from: null,
+    mutation_to: null,
+    mutation_phenotype: null,
 
   },
 };
@@ -85,7 +100,15 @@ export const selectStructureApiArgs = (filters: StructureFilters): ListStructure
     ? filters.polymerization_state as any 
     : undefined,
   family: filters.family.length > 0 ? filters.family : undefined,
- ligands: filters.ligands.length ? filters.ligands : undefined,  // <-- Add this
+ ligands: filters.ligands.length ? filters.ligands : undefined,  
+
+    hasMutations: filters.has_mutations ?? undefined,
+    mutationFamily: filters.mutation_family ?? undefined,
+    mutationPosMin: filters.mutation_position_min ?? undefined,
+    mutationPosMax: filters.mutation_position_max ?? undefined,
+    mutationFrom: filters.mutation_from ?? undefined,
+    mutationTo: filters.mutation_to ?? undefined,
+    mutationPhenotype: filters.mutation_phenotype ?? undefined,
 
 });
 
