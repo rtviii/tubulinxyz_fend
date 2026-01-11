@@ -131,14 +131,14 @@ export default function MSAViewerPage() {
           />
         </div>
 
-        {/* Ligand Panel */}
-        <div className="w-1/4 border rounded-lg bg-white overflow-hidden">
-          <PolymerLigandPanel
-            rcsb_id={selectedPolymer?.rcsb_id || null}
-            auth_asym_id={selectedPolymer?.auth_asym_id || null}
-            onInteractionClick={handleInteractionClick}
-          />
-        </div>
+<div className="w-1/4 border rounded-lg bg-white overflow-hidden">
+  <PolymerLigandPanel
+    rcsb_id={selectedPolymer?.rcsb_id || null}
+    auth_asym_id={selectedPolymer?.auth_asym_id || null}
+    molstarService={mainService}
+    onInteractionClick={handleInteractionClick}
+  />
+</div>
 
         {/* Structure Viewer */}
         <div className="flex-1 h-full min-h-0">

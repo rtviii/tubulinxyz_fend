@@ -22,6 +22,7 @@ import { setResidueHover, setResidueSelection } from '@/store/slices/sequence_st
 import { StructureFocusRepresentation } from 'molstar/lib/mol-plugin/behavior/dynamic/selection/structure-focus-representation';
 import { PresetObjects, TubulinClassification } from './molstar_preset_computed_residues';
 
+
 export interface InteractionInfo {
     type: string;
     partnerA: { label: string, loci: StructureElement.Loci };
@@ -46,6 +47,7 @@ export class MolstarController {
     viewer: MolstarViewer;
     private dispatch: AppDispatch;
     private getState: () => RootState;
+    private ligandInteractionsCache: Map<string, InteractionInfo[]> = new Map();
 
     constructor(viewer: MolstarViewer, dispatch: AppDispatch, getState: () => RootState) {
         this.viewer = viewer;
@@ -53,6 +55,167 @@ export class MolstarController {
         this.getState = getState;
     }
 
+// Add to molstar_controller.tsx
+
+// Cache for computed interactions
+
+/**
+ * Compute interactions for a ligand (without focusing camera)
+ */
+async computeLigandInteractions(pdbId: string, ligand: LigandComponent): Promise<InteractionInfo[]> {
+    if (!this.viewer.ctx) return [];
+
+    const structure = this.getCurrentStructure();
+    if (!structure) return [];
+
+    const ligandQuery = this.createLigandQuery(ligand);
+    const loci = this.queryToLoci(ligandQuery, structure);
+
+    if (!loci || Loci.isEmpty(loci)) {
+        console.warn(`Could not find loci for ligand ${ligand.uniqueKey}`);
+        return [];
+    }
+
+    // Calculate surroundings and interactions (WITHOUT focusing)
+    const surroundingsQuery = MS.struct.modifier.includeSurroundings({
+        0: ligandQuery,
+        radius: 5,
+        'as-whole-residues': true
+    });
+
+    const surroundingsSelection = compile(surroundingsQuery)(new QueryContext(structure));
+    const surroundingsStructure = StructureSelection.unionStructure(surroundingsSelection);
+
+    if (surroundingsStructure.elementCount === 0) return [];
+
+    const customPropertyContext = {
+        runtime: SyncRuntimeContext,
+        assetManager: new AssetManager()
+    };
+    await InteractionsProvider.attach(customPropertyContext, surroundingsStructure, undefined, true);
+
+    return this.getInteractionData(surroundingsStructure);
+}
+
+/**
+ * Get or compute interactions for a ligand by unique key
+ */
+async getOrComputeLigandInteractions(pdbId: string, uniqueKey: string): Promise<InteractionInfo[]> {
+    const cacheKey = `${pdbId}_${uniqueKey}`;
+    
+    if (this.ligandInteractionsCache.has(cacheKey)) {
+        console.log(`[Interactions] Cache hit for ${cacheKey}`);
+        return this.ligandInteractionsCache.get(cacheKey)!;
+    }
+
+    const state = this.getState();
+    const component = state.molstarRefs.components[`${pdbId}_${uniqueKey}`];
+    
+    if (!component || component.type !== 'ligand') {
+        console.warn(`[Interactions] No ligand component found for ${pdbId}_${uniqueKey}`);
+        return [];
+    }
+
+    console.log(`[Interactions] Computing for ${cacheKey}...`);
+    const ligand = component as LigandComponent;
+    const interactions = await this.computeLigandInteractions(pdbId, ligand);
+    
+    console.log(`[Interactions] Computed ${interactions.length} interactions for ${cacheKey}`);
+    interactions.forEach((ix, i) => {
+        console.log(`  [${i}] ${ix.type}: ${ix.partnerA.label} <-> ${ix.partnerB.label}`);
+    });
+
+    this.ligandInteractionsCache.set(cacheKey, interactions);
+    return interactions;
+}
+
+/**
+ * Clear interactions cache
+ */
+clearInteractionsCache(): void {
+    this.ligandInteractionsCache.clear();
+}
+
+
+// Add this method to MolstarController
+
+/**
+ * Debug: List all available ligand components for a structure
+ */
+listAvailableLigands(pdbId: string): string[] {
+    const state = this.getState();
+    const pdbIdUpper = pdbId.toUpperCase();
+    const components = state.molstarRefs.components;
+
+    const ligands = Object.entries(components)
+        .filter(([, component]) => 
+            component.type === 'ligand' && 
+            component.pdbId === pdbIdUpper
+        )
+        .map(([key, component]) => {
+            const lig = component as LigandComponent;
+            return `${lig.compId}_${lig.auth_asym_id}_${lig.auth_seq_id}`;
+        });
+
+    console.log(`[Ligands] Available for ${pdbIdUpper}:`, ligands);
+    return ligands;
+}
+
+    /**
+     * Find and highlight a specific interaction by matching residue/atom info
+     */
+    async highlightInteractionByDetails(
+        pdbId: string,
+        ligandUniqueKey: string,
+        targetChainId: string,
+        targetSeqId: number,
+        targetAtomId: string,
+        shouldHighlight: boolean
+    ): Promise<void> {
+        if (!shouldHighlight) {
+            this.highlightLoci(null, false);
+            return;
+        }
+
+        const interactions = await this.getOrComputeLigandInteractions(pdbId, ligandUniqueKey);
+
+        // Find matching interaction
+        // Labels are formatted like: [compId]chainId.seqId:atomId
+        const targetPattern = `${targetChainId}.${targetSeqId}:${targetAtomId}`;
+
+        const matchingInteraction = interactions.find(ix => {
+            return ix.partnerA.label.includes(targetPattern) ||
+                ix.partnerB.label.includes(targetPattern);
+        });
+
+        if (matchingInteraction) {
+            await this.highlightInteraction(matchingInteraction, true);
+        }
+    }
+
+    /**
+     * Highlight interaction by index in cached list
+     */
+    async highlightInteractionByIndex(
+        pdbId: string,
+        ligandUniqueKey: string,
+        interactionIndex: number,
+        shouldHighlight: boolean
+    ): Promise<void> {
+        if (!shouldHighlight) {
+            this.highlightLoci(null, false);
+            return;
+        }
+
+        const interactions = await this.getOrComputeLigandInteractions(pdbId, ligandUniqueKey);
+
+        if (interactionIndex >= 0 && interactionIndex < interactions.length) {
+            await this.highlightInteraction(interactions[interactionIndex], true);
+        }
+    }
+
+
+    // Update clearCurrentStructure to also clear the cache
     // ============================================================
     // CORE QUERY HELPERS - Reusable building blocks
     // ============================================================
@@ -715,6 +878,7 @@ export class MolstarController {
 
     async clearCurrentStructure(): Promise<void> {
         await this.clearLigandFocus();
+        this.clearInteractionsCache(); // Add this line
         const currentStructure = this.getState().molstarRefs.currentStructure;
 
         if (!currentStructure) return;
@@ -742,7 +906,11 @@ export class MolstarController {
     dispose() {
         this.viewer.dispose();
     }
-    async isolateChain(pdbId: string, chainId: string): Promise<void> {
+
+
+    // In molstar_controller.tsx - update isolateChain method
+
+    async isolateChain(pdbId: string, chainId: string, keepLigands: boolean = true): Promise<void> {
         if (!this.viewer.ctx) return;
 
         const state = this.getState();
@@ -779,21 +947,82 @@ export class MolstarController {
         for (const { component } of polymerComponents) {
             if (component.chainId !== chainId) {
                 await this.setChainVisibility(pdbIdUpper, component.chainId, false);
-                console.log(`- Hid polymer chain: ${component.chainId}`);
             }
         }
 
-        // Hide ALL non-polymer components
-        for (const { component } of nonPolymerComponents) {
-            await this.setNonPolymerVisibility(pdbIdUpper, component.uniqueKey, false);
-            console.log(`- Hid non-polymer: ${component.uniqueKey}`);
+        // Only hide ligands if keepLigands is false
+        if (!keepLigands) {
+            for (const { component } of nonPolymerComponents) {
+                await this.setNonPolymerVisibility(pdbIdUpper, component.uniqueKey, false);
+            }
+        } else {
+            // Make sure all ligands are visible
+            for (const { component } of nonPolymerComponents) {
+                await this.setNonPolymerVisibility(pdbIdUpper, component.uniqueKey, true);
+            }
         }
 
         // Show the selected chain
         await this.setChainVisibility(pdbIdUpper, chainId, true);
-        console.log(`- Showing polymer chain: ${chainId}`);
 
-        console.log(`Successfully isolated chain ${chainId} in structure ${pdbIdUpper}`);
+        console.log(`Successfully isolated chain ${chainId} (keepLigands: ${keepLigands})`);
+    }
+
+    /**
+     * Highlight a specific ligand by its unique key
+     */
+    async highlightLigandByKey(pdbId: string, uniqueKey: string, shouldHighlight: boolean): Promise<void> {
+        await this.highlightNonPolymer(pdbId, uniqueKey, shouldHighlight);
+    }
+
+    /**
+     * Highlight ligand by comp_id and chain (finds all matching instances)
+     */
+    async highlightLigandByCompId(pdbId: string, compId: string, ligandChain: string, shouldHighlight: boolean): Promise<void> {
+        const state = this.getState();
+        const pdbIdUpper = pdbId.toUpperCase();
+        const components = state.molstarRefs.components;
+
+        // Find matching ligand component
+        const matchingLigand = Object.entries(components).find(([key, component]) => {
+            if (component.type !== 'ligand' || component.pdbId !== pdbIdUpper) return false;
+            const ligand = component as LigandComponent;
+            return ligand.compId === compId && ligand.auth_asym_id === ligandChain;
+        });
+
+        if (matchingLigand) {
+            const [, component] = matchingLigand;
+            await this.highlightNonPolymer(pdbIdUpper, (component as LigandComponent).uniqueKey, shouldHighlight);
+        }
+    }
+
+    /**
+     * Focus on a ligand and highlight it
+     */
+    async focusLigandByKey(pdbId: string, uniqueKey: string): Promise<void> {
+        await this.focusNonPolymer(pdbId, uniqueKey);
+    }
+
+    /**
+     * Highlight residue involved in an interaction
+     */
+    async highlightInteractionResidue(
+        pdbId: string,
+        chainId: string,
+        authSeqId: number,
+        shouldHighlight: boolean
+    ): Promise<void> {
+        if (!shouldHighlight) {
+            this.highlightLoci(null, false);
+            return;
+        }
+
+        const query = this.createResidueQuery(chainId, authSeqId);
+        const loci = this.queryToLoci(query);
+
+        if (loci) {
+            this.highlightLoci(loci, true);
+        }
     }
     // In molstar_controller.tsx - add this method as well
 

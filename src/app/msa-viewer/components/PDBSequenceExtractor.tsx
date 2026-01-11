@@ -91,14 +91,15 @@ export function PDBSequenceExtractor({
         annotations?.modifications || []
       );
 
-      await mainService.controller.isolateChain(loadedPdbId, chainId);
+      // Keep ligands visible when isolating
+      await mainService.controller.isolateChain(loadedPdbId, chainId, true);
 
-      // Trigger mutation click to select this polymer for the ligand panel
+      // Trigger selection for the ligand panel
       if (onMutationClick) {
-        onMutationClick(loadedPdbId, chainId, 1); // Position 1 just to trigger selection
+        onMutationClick(loadedPdbId, chainId, 1);
       }
 
-      console.log(`Isolated chain ${chainId} in structure ${loadedPdbId}`);
+      console.log(`Isolated chain ${chainId} in structure ${loadedPdbId} (ligands visible)`);
     } catch (err: any) {
       alert(`Alignment failed: ${err.message}`);
     }
