@@ -1,7 +1,6 @@
 'use client';
 import React, { useState, useCallback } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/store';
-import { selectSelectedStructure } from '@/store/slices/tubulin_structures';
 import { PolymerComponent, LigandComponent, selectComponentsForStructure } from '@/store/slices/molstar_refs';
 import { selectPolymerState } from '@/store/slices/polymer_states';
 import { selectNonPolymerState } from '@/store/slices/nonpolymer_states';
@@ -9,7 +8,7 @@ import { setSelectedSequence } from '@/store/slices/sequence_viewer';
 import { MolstarContext } from '@/components/molstar/molstar_service';
 import { Eye, EyeOff, Focus, FileText, Search } from 'lucide-react';
 import { ProtofilamentGrid, SubunitData } from './protofilament_grid';
-import { InteractionInfo } from '@/components/molstar/_molstar_controller';
+import { InteractionInfo } from '@/components/molstar/molstar_controller';
 
 const PolymerRow = ({ component }: { component: PolymerComponent }) => {
     const dispatch = useAppDispatch();
@@ -149,7 +148,6 @@ const LigandInteractionPanel = ({ ligand, data, onFocus, onHover, onLeave, isLoa
                         <div
                             key={index}
                             onClick={() => onFocus(interaction)}
-                            // ✨ ADD THESE EVENT HANDLERS
                             onMouseEnter={() => onHover(interaction)}
                             onMouseLeave={onLeave}
                             className="p-1 bg-white rounded hover:bg-blue-50 cursor-pointer"
@@ -172,8 +170,9 @@ export const EntitiesPanel = ({ onSubunitHover, onSubunitSelect, hoveredSubunitI
     hoveredSubunitId: string | null;
     selectedSubunitId: string | null;
 }) => {
-    const selectedStructure = useAppSelector(selectSelectedStructure);
-    const components = useAppSelector(state => selectComponentsForStructure(state, selectedStructure || ''));
+    // Use molstarRefs.currentStructure instead of tubulin_structures
+    const currentStructure = useAppSelector(state => state.molstarRefs.currentStructure);
+    const components = useAppSelector(state => selectComponentsForStructure(state, currentStructure || ''));
     const molstarService = React.useContext(MolstarContext)?.getService('main');
 
     const [analyzedLigand, setAnalyzedLigand] = useState<LigandComponent | null>(null);
@@ -183,11 +182,9 @@ export const EntitiesPanel = ({ onSubunitHover, onSubunitSelect, hoveredSubunitI
     const polymerComponents = (components?.filter(c => c.type === 'polymer') as PolymerComponent[]) || [];
     const ligandComponents = (components?.filter(c => c.type === 'ligand') as LigandComponent[]) || [];
 
-    // 🚨 REFACTORED: This handler now uses the new, simpler controller methods.
     const handleAnalyzeLigand = useCallback(async (ligand: LigandComponent) => {
         if (!molstarService) return;
 
-        // If clicking the same ligand that's already analyzed, clear the focus.
         if (analyzedLigand?.uniqueKey === ligand.uniqueKey) {
             await molstarService.controller.clearLigandFocus();
             setAnalyzedLigand(null);
@@ -195,8 +192,6 @@ export const EntitiesPanel = ({ onSubunitHover, onSubunitSelect, hoveredSubunitI
             return;
         }
 
-        // If clicking a new ligand, call the focus and get data method.
-        // Mol*'s focus manager will automatically handle deleting the previous view.
         setIsAnalyzing(true);
         setInteractionData([]);
         setAnalyzedLigand(ligand);
@@ -210,15 +205,14 @@ export const EntitiesPanel = ({ onSubunitHover, onSubunitSelect, hoveredSubunitI
     const handleFocusInteraction = useCallback((interaction: InteractionInfo) => {
         molstarService?.controller.focusOnInteraction(interaction.partnerA.loci, interaction.partnerB.loci);
     }, [molstarService]);
+
     const handleInteractionHover = useCallback((interaction: InteractionInfo) => {
         molstarService?.controller.highlightInteraction(interaction, true);
     }, [molstarService]);
 
-    // ✨ NEW HANDLER: For when the user's mouse leaves an interaction row
     const handleInteractionMouseLeave = useCallback(() => {
         molstarService?.controller.highlightInteraction(undefined, false);
     }, [molstarService]);
-
 
     return (
         <div className="w-64 h-full bg-gray-50 border-l border-gray-200 flex flex-col">
@@ -226,7 +220,7 @@ export const EntitiesPanel = ({ onSubunitHover, onSubunitSelect, hoveredSubunitI
                 <div>
                     <h3 className="text-sm font-semibold text-gray-800 mb-1 px-1">Polymer Chains</h3>
                     <div className="space-y-0.5">
-                        {!selectedStructure ? (
+                        {!currentStructure ? (
                             <p className="text-xs text-gray-500 px-1">No structure loaded.</p>
                         ) : polymerComponents.length > 0 ? (
                             polymerComponents.sort((a, b) => a.chainId.localeCompare(b.chainId, undefined, { numeric: true }))
@@ -251,7 +245,6 @@ export const EntitiesPanel = ({ onSubunitHover, onSubunitSelect, hoveredSubunitI
                                                 ligand={analyzedLigand}
                                                 data={interactionData}
                                                 onFocus={handleFocusInteraction}
-                                                // ✨ PASS THE NEW HANDLERS
                                                 onHover={handleInteractionHover}
                                                 onLeave={handleInteractionMouseLeave}
                                                 isLoading={isAnalyzing}
@@ -263,10 +256,10 @@ export const EntitiesPanel = ({ onSubunitHover, onSubunitSelect, hoveredSubunitI
                     </div>
                 )}
 
-                {selectedStructure && (
+                {currentStructure && (
                     <div className="border-t border-gray-200 pt-3">
                         <ProtofilamentGrid
-                            pdbId={selectedStructure}
+                            pdbId={currentStructure}
                             onSubunitHover={onSubunitHover}
                             onSubunitSelect={onSubunitSelect}
                             hoveredSubunitId={hoveredSubunitId}

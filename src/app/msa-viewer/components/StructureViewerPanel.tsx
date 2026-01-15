@@ -1,28 +1,22 @@
-// src/app/msa-viewer/components/StructureViewerPanel.tsx
 import { MolstarNode } from "@/components/molstar/molstar_spec";
-import { useSequenceStructureRegistry } from "../hooks/useSequenceStructureSync";
-import { MolstarService } from "@/components/molstar/molstar_service";
+import { useAppSelector } from "@/store/store";
 
 interface StructureViewerPanelProps {
   mainNodeRef: React.RefObject<HTMLDivElement>;
   mainInitialized: boolean;
-  mainService: MolstarService | null;
-  registry: ReturnType<typeof useSequenceStructureRegistry>;
 }
 
 export function StructureViewerPanel({
   mainNodeRef,
   mainInitialized,
-  mainService,
-  registry
 }: StructureViewerPanelProps) {
-  const structures = Array.from(registry.structures.values()).map(s => s.pdbId);
+  const currentStructure = useAppSelector(state => state.molstarRefs.currentStructure);
 
   return (
     <div className="w-full h-full border rounded-lg p-2 bg-white flex flex-col">
       <div className="flex-1 flex flex-col">
         <div className="text-xs font-medium text-gray-700 mb-1 px-1">
-          Loaded: {structures.join(', ') || 'None'}
+          Loaded: {currentStructure || 'None'}
         </div>
         <div className="flex-1 overflow-hidden relative bg-gray-100 rounded-md">
           <MolstarNode ref={mainNodeRef} />

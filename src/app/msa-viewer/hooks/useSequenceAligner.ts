@@ -1,28 +1,19 @@
-// src/app/msa-viewer/hooks/useSequenceAligner.ts
-import { MolstarService } from "@/components/molstar/molstar_service";
 import { useCallback, useState } from "react";
-import { useSequenceStructureRegistry } from "./useSequenceStructureSync";
+import { useAppDispatch } from "@/store/store";
+import { addSequence, setPositionMapping } from "@/store/slices/sequence_registry";
 import { useAlignSequenceMsaSequencePostMutation } from "@/store/tubxz_api";
+import { MolstarService } from "@/components/molstar/molstar_service";
 
-export function useSequenceAligner(registry: ReturnType<typeof useSequenceStructureRegistry>) {
+export function useSequenceAligner() {
+  const dispatch = useAppDispatch();
   const [isAligning, setIsAligning] = useState(false);
   const [currentChain, setCurrentChain] = useState<string | null>(null);
-  
   const [alignSequence] = useAlignSequenceMsaSequencePostMutation();
 
   const alignAndRegisterChain = useCallback(
-    async (
-      pdbId: string,
-      chainId: string,
-      service: MolstarService,
-      mutations: any[] = [],
-      modifications: any[] = []
-    ) => {
+    async (pdbId: string, chainId: string, service: MolstarService) => {
       setIsAligning(true);
       setCurrentChain(chainId);
-
-      console.log('🔍 Aligning with mutations:', mutations);
-      console.log('🔍 Aligning with modifications:', modifications);
 
       try {
         const observed = service.controller.getObservedSequenceAndMapping(pdbId, chainId);
@@ -39,36 +30,33 @@ export function useSequenceAligner(registry: ReturnType<typeof useSequenceStruct
 
         const mapping = result.mapping;
         const positionMapping: Record<number, number> = {};
-        
         mapping.forEach((msaPos: number, idx: number) => {
           if (msaPos !== -1) {
             positionMapping[msaPos] = observed.authSeqIds[idx];
           }
         });
 
-        console.log('✅ Registering sequence with mutations:', mutations.length);
+        const sequenceId = `${pdbId}_${chainId}`;
 
-        registry.addSequence(
-          `${pdbId}_${chainId}`,
-          `${pdbId}_${chainId}`,
-          result.aligned_sequence,
-          {
-            type: 'pdb',
-            pdbId,
-            chainId,
-            positionMapping,
-            mutations,
-            modifications
-          }
-        );
-      } catch (error: any) {
-        throw new Error(`Alignment failed: ${error.message || 'Unknown error'}`);
+        dispatch(addSequence({
+          id: sequenceId,
+          name: sequenceId,
+          sequence: result.aligned_sequence,
+          originType: 'pdb',
+          chainRef: { pdbId, chainId },
+        }));
+
+        dispatch(setPositionMapping({
+          sequenceId,
+          mapping: positionMapping,
+        }));
+
       } finally {
         setIsAligning(false);
         setCurrentChain(null);
       }
     },
-    [registry, alignSequence]
+    [dispatch, alignSequence]
   );
 
   return { alignAndRegisterChain, isAligning, currentChain };

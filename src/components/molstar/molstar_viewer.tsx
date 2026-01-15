@@ -8,7 +8,7 @@ import { ribxzSpec } from './molstar_spec';
 import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state';
 import { StateSelection } from 'molstar/lib/mol-state';
 import { Structure } from 'molstar/lib/mol-model/structure';
-import { EnhancedTubulinSplitPreset } from './molstar_preset_computed_residues';
+import { EnhancedTubulinSplitPreset } from './colors/molstar_preset_computed_residues';
 import { applyStylizedLighting } from './colors/stylized-lighting';
 
 
