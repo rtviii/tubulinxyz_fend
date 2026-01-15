@@ -80,8 +80,6 @@ export function ColoringControls({
       <div>
 
         <button onClick={() => {
-
-
           applyRowHighlight(2, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], '#ff0000');
           msaDisplayRef.current?.redraw();
         }}>Testsingle seq</button>

@@ -1,13 +1,11 @@
 'use client';
-
-import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { ColoringMode } from './ColoringControls';
 import {
   setCustomColorData,
   createGradientColors,
   createAlternatingColors,
   createBindingSiteColors,
-  CustomColorData
 } from './customColorScheme';
 
 interface SequenceData {
@@ -25,7 +23,6 @@ interface MSALiteDisplayProps {
   onResidueClick: (seqId: string, position: number) => void;
 }
 
-// Map our mode to actual nightingale color scheme names
 const BUILTIN_SCHEMES: Record<string, string> = {
   'clustal': 'clustal2',
   'clustal-original': 'clustal',
@@ -46,17 +43,12 @@ const BUILTIN_SCHEMES: Record<string, string> = {
   'positive': 'positive',
 };
 
-// Custom scheme modes that need injection
-const CUSTOM_SCHEME_MODES = ['custom-gradient', 'custom-alternating', 'custom-binding'];
-
-// Generate feature overlays
 function generateFeatures(
   maxLength: number,
   sequenceCount: number,
   mode: ColoringMode
 ): any[] {
   if (!mode.startsWith('features-')) return [];
-
   const features: any[] = [];
 
   if (mode === 'features-highlight') {
@@ -103,14 +95,13 @@ function generateFeatures(
       }
     });
   }
-
   return features;
 }
-
 
 export interface MSALiteDisplayHandle {
   redraw: () => void;
 }
+
 export const MSALiteDisplay = forwardRef<MSALiteDisplayHandle, MSALiteDisplayProps>(
   function MSALiteDisplay(
     {
@@ -126,105 +117,143 @@ export const MSALiteDisplay = forwardRef<MSALiteDisplayHandle, MSALiteDisplayPro
     const containerRef = useRef<HTMLDivElement>(null);
     const msaRef = useRef<any>(null);
     const navRef = useRef<any>(null);
-    const [isReady, setIsReady] = useState(false);
+    const [containerWidth, setContainerWidth] = useState<number>(0);
 
     const labelWidth = 100;
     const rowHeight = 20;
+    const msaWidth = Math.max(containerWidth - labelWidth, 100);
 
-    // Initialize after mount
+    // Track container width with ResizeObserver
     useEffect(() => {
-      const timer = setTimeout(() => setIsReady(true), 100);
-      return () => clearTimeout(timer);
+      const container = containerRef.current;
+      if (!container) return;
+
+      const observer = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        if (entry) {
+          const width = entry.contentRect.width;
+          if (width > 0) {
+            setContainerWidth(width);
+          }
+        }
+      });
+
+      observer.observe(container);
+      return () => observer.disconnect();
     }, []);
 
-// Update the useImperativeHandle to use the new method
-useImperativeHandle(ref, () => ({
-  redraw: () => {
-    if (msaRef.current?.sequenceViewer) {
-      msaRef.current.sequenceViewer.invalidateAndRedraw();
+    // Redraw helper
+    const triggerRedraw = () => {
+      console.log('[MSA Debug] triggerRedraw called');
+
+      const msa = msaRef.current;
+      if (!msa) return;
+
+      // Try calling onDimensionsChange which is what the ResizeObserver triggers
+      if (typeof msa.onDimensionsChange === 'function') {
+        console.log('[MSA Debug] Calling onDimensionsChange');
+        msa.onDimensionsChange();
+      }
+
+      // Also try drawScene on the sequenceViewer
+      if (msa.sequenceViewer?.drawScene) {
+        console.log('[MSA Debug] Calling sequenceViewer.drawScene');
+        msa.sequenceViewer.drawScene();
+      }
+
+      // Navigation refresh
+      if (navRef.current?.refresh) {
+        navRef.current.refresh();
+      }
+    };
+
+    useImperativeHandle(ref, () => ({
+      redraw: triggerRedraw,
+    }), []);
+
+    // Set MSA data and trigger redraw when data or width changes
+    // In the effect that sets MSA data:
+    // Set MSA data and trigger redraw when data or width changes
+    // Set MSA data and trigger redraw when data or width changes
+    // Set MSA data after component mounts (it already has sequences from props check)
+    // Set MSA data after component mounts (it already has sequences baked in via props check)
+useEffect(() => {
+  if (!msaRef.current) return;
+
+  const timer = setTimeout(() => {
+    msaRef.current.data = sequences.map(s => ({
+      name: s.name,
+      sequence: s.sequence
+    }));
+
+    // Trigger resize hack for MSA
+    const currentWidth = msaWidth;
+    msaRef.current.setAttribute('width', String(currentWidth - 1));
+    requestAnimationFrame(() => {
+      msaRef.current?.setAttribute('width', String(currentWidth));
+    });
+  }, 50);
+
+  return () => clearTimeout(timer);
+}, [sequences, msaWidth]);
+
+// Separate effect to handle navigation resize
+// Separate effect to handle navigation resize
+useEffect(() => {
+  if (!navRef.current || msaWidth === 0) return;
+
+  const nav = navRef.current;
+  
+  // Set width attribute
+  nav.setAttribute('width', String(msaWidth));
+  
+  requestAnimationFrame(() => {
+    // Try calling onDimensionsChange if it exists
+    if (typeof nav.onDimensionsChange === 'function') {
+      nav.onDimensionsChange();
     }
-  },
-}), []);
-
-    // Initialize after mount
-    useEffect(() => {
-      const timer = setTimeout(() => setIsReady(true), 100);
-      return () => clearTimeout(timer);
-    }, []);
-
-
-    // Set MSA data
-    useEffect(() => {
-      if (!msaRef.current || !isReady || sequences.length === 0) return;
-
-      msaRef.current.data = sequences.map(s => ({
-        name: s.name,
-        sequence: s.sequence
-      }));
-    }, [sequences, isReady]);
-
+    // Also try refresh
+    if (typeof nav.refresh === 'function') {
+      nav.refresh();
+    }
+  });
+}, [msaWidth]);;;;;;;
 
     // Handle color scheme changes
-    // Handle color scheme changes
     useEffect(() => {
-      if (!msaRef.current || !isReady) return;
+      if (!msaRef.current || containerWidth === 0) return;
 
       const msa = msaRef.current;
 
-      // Custom position-based schemes
       if (coloringMode === 'custom-gradient') {
         setCustomColorData(createGradientColors(maxLength));
         msa.setAttribute('color-scheme', 'custom-position');
-        setTimeout(() => msa.sequenceViewer?.draw(), 50);
-        return;
-      }
-
-      if (coloringMode === 'custom-alternating') {
+      } else if (coloringMode === 'custom-alternating') {
         setCustomColorData(createAlternatingColors(maxLength));
         msa.setAttribute('color-scheme', 'custom-position');
-        setTimeout(() => msa.sequenceViewer?.draw(), 50);
-        return;
-      }
-
-      if (coloringMode === 'custom-binding') {
+      } else if (coloringMode === 'custom-binding') {
         setCustomColorData(createBindingSiteColors([10, 11, 12, 50, 51, 52, 53, 100, 150, 200]));
         msa.setAttribute('color-scheme', 'custom-position');
-        setTimeout(() => msa.sequenceViewer?.draw(), 50);
-        return;
-      }
-
-      // NEW: Ligand mode - just switch to custom-position, data is already set via hook
-      if (coloringMode === 'ligands') {
+      } else if (coloringMode === 'ligands') {
         msa.setAttribute('color-scheme', 'custom-position');
-        setTimeout(() => msa.sequenceViewer?.draw(), 50);
-        return;
-      }
-
-      // Built-in schemes
-      if (BUILTIN_SCHEMES[coloringMode]) {
+      } else if (BUILTIN_SCHEMES[coloringMode]) {
         msa.setAttribute('color-scheme', BUILTIN_SCHEMES[coloringMode]);
-        setTimeout(() => msa.sequenceViewer?.draw(), 50);
-        return;
+      } else {
+        msa.setAttribute('color-scheme', 'clustal2');
       }
 
-      // Default
-      msa.setAttribute('color-scheme', 'clustal2');
-      setTimeout(() => msa.sequenceViewer?.draw(), 50);
-    }, [coloringMode, maxLength, isReady]);
+      requestAnimationFrame(() => triggerRedraw());
+    }, [coloringMode, maxLength, containerWidth]);
 
     // Apply features
     useEffect(() => {
-      if (!msaRef.current || !isReady) return;
+      if (!msaRef.current || containerWidth === 0) return;
 
       const features = generateFeatures(maxLength, sequences.length, coloringMode);
       msaRef.current.features = features;
 
-      setTimeout(() => {
-        if (msaRef.current?.sequenceViewer) {
-          msaRef.current.sequenceViewer.invalidateAndRedraw();
-        }
-      }, 50);
-    }, [coloringMode, maxLength, sequences.length, isReady]);
+      requestAnimationFrame(() => triggerRedraw());
+    }, [coloringMode, maxLength, sequences.length, containerWidth]);
 
     // Event handlers
     useEffect(() => {
@@ -260,12 +289,16 @@ useImperativeHandle(ref, () => ({
       };
     }, [sequences, onResidueClick, onResidueHover, onResidueLeave]);
 
-    if (!isReady) {
-      return <div className="text-gray-500 text-sm">Initializing...</div>;
+    // Don't render nightingale components until we have a real width
+    if (containerWidth === 0) {
+      return (
+        <div ref={containerRef} style={{ width: '100%', minHeight: 100 }}>
+          <div className="text-gray-500 text-sm">Measuring container...</div>
+        </div>
+      );
     }
 
     return (
-
       <div ref={containerRef} style={{ width: '100%' }}>
         <nightingale-manager style={{ width: '100%', display: 'block' }}>
           {/* Navigation */}
@@ -274,6 +307,7 @@ useImperativeHandle(ref, () => ({
             <div style={{ flex: 1, lineHeight: 0 }}>
               <nightingale-navigation
                 ref={navRef}
+                width={msaWidth}
                 height="30"
                 length={maxLength}
                 display-start="1"
@@ -289,6 +323,7 @@ useImperativeHandle(ref, () => ({
             <div style={{ flex: 1, lineHeight: 0 }}>
               <nightingale-msa
                 ref={msaRef}
+                width={msaWidth}
                 height={Math.min(sequences.length * rowHeight, 400)}
                 length={maxLength}
                 display-start="1"
@@ -302,13 +337,11 @@ useImperativeHandle(ref, () => ({
           </div>
         </nightingale-manager>
 
-        {/* Status indicator */}
         {coloringMode === 'ligands' && (
           <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
             Ligand binding site coloring active
           </div>
         )}
-
         {coloringMode.startsWith('features-') && (
           <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
             Feature overlay opacity is hardcoded at 30% in nightingale source.
