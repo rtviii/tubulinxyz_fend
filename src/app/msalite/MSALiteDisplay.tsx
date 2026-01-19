@@ -1,4 +1,6 @@
+// src/app/msalite/MSALiteDisplay.tsx
 'use client';
+
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { ColoringMode } from './ColoringControls';
 import {
@@ -23,31 +25,26 @@ interface MSALiteDisplayProps {
   onResidueClick: (seqId: string, position: number) => void;
 }
 
+export interface MSALiteDisplayHandle {
+  redraw: () => void;
+}
+
 const BUILTIN_SCHEMES: Record<string, string> = {
-  'clustal': 'clustal2',
-  'clustal-original': 'clustal',
+  'clustal'     : 'clustal2',
   'conservation': 'conservation',
-  'hydro': 'hydro',
-  'taylor': 'taylor',
-  'zappo': 'zappo',
-  'cinema': 'cinema',
-  'lesk': 'lesk',
-  'mae': 'mae',
-  'buried': 'buried',
-  'helix': 'helix',
-  'strand': 'strand',
-  'turn': 'turn',
-  'polar': 'polar',
-  'charged': 'charged',
-  'negative': 'negative',
-  'positive': 'positive',
+  'hydro'       : 'hydro',
+  'taylor'      : 'taylor',
+  'zappo'       : 'zappo',
+  'buried'      : 'buried',
+  'polar'       : 'polar',
+  'charged'     : 'charged',
 };
 
-function generateFeatures(
-  maxLength: number,
-  sequenceCount: number,
-  mode: ColoringMode
-): any[] {
+const MIN_TILE_WIDTH = 4;
+const ROW_HEIGHT = 20;
+const NAV_HEIGHT = 30;
+
+function generateFeatures(maxLength: number, sequenceCount: number, mode: ColoringMode): any[] {
   if (!mode.startsWith('features-')) return [];
   const features: any[] = [];
 
@@ -58,8 +55,6 @@ function generateFeatures(
       sequences: { from: 0, to: sequenceCount - 1 },
       fillColor: '#FF0000',
       borderColor: '#CC0000',
-      mouseOverFillColor: '#FF4444',
-      mouseOverBorderColor: '#AA0000',
     });
     features.push({
       id: 'region-2',
@@ -67,21 +62,9 @@ function generateFeatures(
       sequences: { from: 0, to: sequenceCount - 1 },
       fillColor: '#00FF00',
       borderColor: '#00CC00',
-      mouseOverFillColor: '#44FF44',
-      mouseOverBorderColor: '#00AA00',
-    });
-    features.push({
-      id: 'region-3',
-      residues: { from: 100, to: 120 },
-      sequences: { from: 0, to: sequenceCount - 1 },
-      fillColor: '#0000FF',
-      borderColor: '#0000CC',
-      mouseOverFillColor: '#4444FF',
-      mouseOverBorderColor: '#0000AA',
     });
   } else if (mode === 'features-single') {
-    const markerPositions = [15, 45, 75, 105, 135, 165, 195];
-    markerPositions.forEach((pos, idx) => {
+    [15, 45, 75, 105, 135, 165, 195].forEach((pos, idx) => {
       if (pos <= maxLength) {
         features.push({
           id: `marker-${idx}`,
@@ -89,8 +72,6 @@ function generateFeatures(
           sequences: { from: 0, to: sequenceCount - 1 },
           fillColor: '#FFD700',
           borderColor: '#FF8C00',
-          mouseOverFillColor: '#FFEC8B',
-          mouseOverBorderColor: '#FF4500',
         });
       }
     });
@@ -98,131 +79,86 @@ function generateFeatures(
   return features;
 }
 
-export interface MSALiteDisplayHandle {
-  redraw: () => void;
-}
-
 export const MSALiteDisplay = forwardRef<MSALiteDisplayHandle, MSALiteDisplayProps>(
   function MSALiteDisplay(
-    {
-      sequences,
-      maxLength,
-      coloringMode,
-      onResidueHover,
-      onResidueLeave,
-      onResidueClick,
-    },
+    { sequences, maxLength, coloringMode, onResidueHover, onResidueLeave, onResidueClick },
     ref
   ) {
-    const containerRef = useRef<HTMLDivElement>(null);
+    // Refs
+    const outerRef = useRef<HTMLDivElement>(null);
     const msaRef = useRef<any>(null);
     const navRef = useRef<any>(null);
-    const [containerWidth, setContainerWidth] = useState<number>(0);
 
-    const labelWidth = 100;
-    const rowHeight = 20;
-    const msaWidth = Math.max(containerWidth - labelWidth, 100);
+    // State: available width from parent
+    const [availableWidth, setAvailableWidth] = useState(0);
 
-    // Track container width with ResizeObserver
+    // Measure the outer container (available space)
     useEffect(() => {
-      const container = containerRef.current;
-      if (!container) return;
+      const el = outerRef.current;
+      if (!el) return;
 
       const observer = new ResizeObserver((entries) => {
-        const entry = entries[0];
-        if (entry) {
-          const width = entry.contentRect.width;
-          if (width > 0) {
-            setContainerWidth(width);
-          }
-        }
+        const width = entries[0]?.contentRect.width;
+        if (width > 0) setAvailableWidth(width);
       });
 
-      observer.observe(container);
+      observer.observe(el);
       return () => observer.disconnect();
     }, []);
 
+    // Calculate dimensions
+    const minMsaWidth = maxLength * MIN_TILE_WIDTH;
+
+    // If we have enough space, fill it. Otherwise use minimum (triggers overflow)
+    const msaWidth = availableWidth >= minMsaWidth ? availableWidth : minMsaWidth;
+
+    // Content width is just msaWidth since we have no labels
+    const contentWidth = msaWidth;
+
+    // Sync navigation width
+    useEffect(() => {
+      if (!navRef.current || msaWidth === 0) return;
+
+      const nav = navRef.current;
+      nav.width = msaWidth;
+
+      // Wait for Lit's update cycle to complete
+      (nav as any).updateComplete?.then(() => {
+        nav.onDimensionsChange?.();
+        (nav as any).renderD3?.();
+      });
+    }, [msaWidth]);
     // Redraw helper
     const triggerRedraw = () => {
-      console.log('[MSA Debug] triggerRedraw called');
-
       const msa = msaRef.current;
       if (!msa) return;
-
-      // Try calling onDimensionsChange which is what the ResizeObserver triggers
       if (typeof msa.onDimensionsChange === 'function') {
-        console.log('[MSA Debug] Calling onDimensionsChange');
         msa.onDimensionsChange();
       }
-
-      // Also try drawScene on the sequenceViewer
       if (msa.sequenceViewer?.drawScene) {
-        console.log('[MSA Debug] Calling sequenceViewer.drawScene');
         msa.sequenceViewer.drawScene();
-      }
-
-      // Navigation refresh
-      if (navRef.current?.refresh) {
-        navRef.current.refresh();
       }
     };
 
-    useImperativeHandle(ref, () => ({
-      redraw: triggerRedraw,
-    }), []);
+    useImperativeHandle(ref, () => ({ redraw: triggerRedraw }), []);
 
-    // Set MSA data and trigger redraw when data or width changes
-    // In the effect that sets MSA data:
-    // Set MSA data and trigger redraw when data or width changes
-    // Set MSA data and trigger redraw when data or width changes
-    // Set MSA data after component mounts (it already has sequences from props check)
-    // Set MSA data after component mounts (it already has sequences baked in via props check)
-useEffect(() => {
-  if (!msaRef.current) return;
+    // Set MSA data when sequences or width changes
+    useEffect(() => {
+      if (!msaRef.current || sequences.length === 0 || msaWidth === 0) return;
 
-  const timer = setTimeout(() => {
-    msaRef.current.data = sequences.map(s => ({
-      name: s.name,
-      sequence: s.sequence
-    }));
+      const timer = setTimeout(() => {
+        msaRef.current.data = sequences.map(s => ({
+          name: s.name,
+          sequence: s.sequence
+        }));
+      }, 50);
 
-    // Trigger resize hack for MSA
-    const currentWidth = msaWidth;
-    msaRef.current.setAttribute('width', String(currentWidth - 1));
-    requestAnimationFrame(() => {
-      msaRef.current?.setAttribute('width', String(currentWidth));
-    });
-  }, 50);
-
-  return () => clearTimeout(timer);
-}, [sequences, msaWidth]);
-
-// Separate effect to handle navigation resize
-// Separate effect to handle navigation resize
-useEffect(() => {
-  if (!navRef.current || msaWidth === 0) return;
-
-  const nav = navRef.current;
-  
-  // Set width attribute
-  nav.setAttribute('width', String(msaWidth));
-  
-  requestAnimationFrame(() => {
-    // Try calling onDimensionsChange if it exists
-    if (typeof nav.onDimensionsChange === 'function') {
-      nav.onDimensionsChange();
-    }
-    // Also try refresh
-    if (typeof nav.refresh === 'function') {
-      nav.refresh();
-    }
-  });
-}, [msaWidth]);;;;;;;
+      return () => clearTimeout(timer);
+    }, [sequences, msaWidth]);
 
     // Handle color scheme changes
     useEffect(() => {
-      if (!msaRef.current || containerWidth === 0) return;
-
+      if (!msaRef.current) return;
       const msa = msaRef.current;
 
       if (coloringMode === 'custom-gradient') {
@@ -243,17 +179,14 @@ useEffect(() => {
       }
 
       requestAnimationFrame(() => triggerRedraw());
-    }, [coloringMode, maxLength, containerWidth]);
+    }, [coloringMode, maxLength]);
 
     // Apply features
     useEffect(() => {
-      if (!msaRef.current || containerWidth === 0) return;
-
-      const features = generateFeatures(maxLength, sequences.length, coloringMode);
-      msaRef.current.features = features;
-
+      if (!msaRef.current) return;
+      msaRef.current.features = generateFeatures(maxLength, sequences.length, coloringMode);
       requestAnimationFrame(() => triggerRedraw());
-    }, [coloringMode, maxLength, sequences.length, containerWidth]);
+    }, [coloringMode, maxLength, sequences.length]);
 
     // Event handlers
     useEffect(() => {
@@ -266,17 +199,13 @@ useEffect(() => {
           onResidueClick(sequences[i].id, position);
         }
       };
-
       const handleMouseEnter = (e: any) => {
         const { position, i } = e.detail || {};
         if (typeof position === 'number' && sequences[i]) {
           onResidueHover(sequences[i].id, position);
         }
       };
-
-      const handleMouseLeave = () => {
-        onResidueLeave();
-      };
+      const handleMouseLeave = () => onResidueLeave();
 
       msa.addEventListener('onResidueClick', handleClick);
       msa.addEventListener('onResidueMouseEnter', handleMouseEnter);
@@ -289,42 +218,57 @@ useEffect(() => {
       };
     }, [sequences, onResidueClick, onResidueHover, onResidueLeave]);
 
-    // Don't render nightingale components until we have a real width
-    if (containerWidth === 0) {
+    // Loading states
+    if (sequences.length === 0) {
       return (
-        <div ref={containerRef} style={{ width: '100%', minHeight: 100 }}>
-          <div className="text-gray-500 text-sm">Measuring container...</div>
+        <div ref={outerRef} style={{ width: '100%', height: '100%' }}>
+          <div className="text-gray-500 text-sm p-4">Waiting for sequences...</div>
         </div>
       );
     }
 
+    if (availableWidth === 0) {
+      return (
+        <div ref={outerRef} style={{ width: '100%', height: '100%' }}>
+          <div className="text-gray-500 text-sm p-4">Measuring...</div>
+        </div>
+      );
+    }
+
+    const msaHeight = Math.min(sequences.length * ROW_HEIGHT, 400);
+
     return (
-      <div ref={containerRef} style={{ width: '100%' }}>
-        <nightingale-manager style={{ width: '100%', display: 'block' }}>
-          {/* Navigation */}
-          <div style={{ display: 'flex', marginBottom: 4 }}>
-            <div style={{ width: labelWidth, minWidth: labelWidth }} />
-            <div style={{ flex: 1, lineHeight: 0 }}>
+      <div
+        ref={outerRef}
+        style={{
+          width: '100%',
+          height: '100%',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+        }}
+      >
+        <div style={{ width: contentWidth, minWidth: minMsaWidth }}>
+          <nightingale-manager style={{ display: 'block', width: '100%' }}>
+            {/* Navigation - let it inherit width from container */}
+            <div style={{ width: contentWidth }}>
               <nightingale-navigation
                 ref={navRef}
-                width={msaWidth}
-                height="30"
+                height={NAV_HEIGHT}
+
+                key={`nav-${msaWidth}`}  // Force re-create when width changes
                 length={maxLength}
                 display-start="1"
                 display-end={maxLength}
                 highlight-color="#EB3BFF22"
+                style={{ display: 'block', width: '100%' }}
               />
             </div>
-          </div>
 
-          {/* MSA */}
-          <div style={{ display: 'flex' }}>
-            <div style={{ width: labelWidth, minWidth: labelWidth }} />
-            <div style={{ flex: 1, lineHeight: 0 }}>
+            {/* MSA - let it inherit width from container */}
+            <div style={{ width: contentWidth }}>
               <nightingale-msa
                 ref={msaRef}
-                width={msaWidth}
-                height={Math.min(sequences.length * rowHeight, 400)}
+                height={msaHeight}
                 length={maxLength}
                 display-start="1"
                 display-end={maxLength}
@@ -332,11 +276,13 @@ useEffect(() => {
                 label-width="0"
                 highlight-event="onmouseover"
                 highlight-color="#00FF0044"
+                style={{ display: 'block', width: '100%' }}
               />
             </div>
-          </div>
-        </nightingale-manager>
+          </nightingale-manager>
+        </div>
 
+        {/* Status messages */}
         {coloringMode === 'ligands' && (
           <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
             Ligand binding site coloring active

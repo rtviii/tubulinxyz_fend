@@ -1,7 +1,10 @@
 {
-  "name": "tubulin-structure-viewer",
-  "version": "0.1.0",
-  "private": true,
+  "name"      : "tubulin-structure-viewer",
+  "version"   : "0.1.0",
+  "private"   : true,
+  "workspaces": [
+    "nightingale/packages/*"
+  ],
   "scripts": {
     "codegen": "npx @rtk-query/codegen-openapi openapi-config.ts",
     "dev": "next dev",
@@ -9,14 +12,15 @@
     "start": "next start",
     "lint": "next lint",
     "render": "tsx scripts/bulk-render.ts",
-    "render:list": "tsx scripts/bulk-render.ts --list"
+    "render:list": "tsx scripts/bulk-render.ts --list",
+    "build:nightingale": "npm run build -w nightingale"
   },
   "dependencies": {
-    "@nightingale-elements/nightingale-manager"   : "^5.6.0",
-    "@nightingale-elements/nightingale-msa"       : "^5.6.0",
-    "@nightingale-elements/nightingale-navigation": "^5.6.0",
-    "@nightingale-elements/nightingale-sequence"  : "^5.6.0",
-    "@nightingale-elements/nightingale-track"     : "^5.6.0",
+    "@nightingale-elements/nightingale-manager"   : "*",
+    "@nightingale-elements/nightingale-msa"       : "*",
+    "@nightingale-elements/nightingale-navigation": "*",
+    "@nightingale-elements/nightingale-sequence"  : "*",
+    "@nightingale-elements/nightingale-track"     : "*",
     "@radix-ui/react-collapsible"                 : "^1.1.12",
     "@radix-ui/react-slot"                        : "^1.2.4",
     "@reduxjs/toolkit"                            : "^2.11.0",
@@ -45,13 +49,13 @@
   },
   "devDependencies": {
     "@rtk-query/codegen-openapi": "^2.1.0",
-    "autoprefixer": "^10.4.0",
-    "eslint": "^8.0.0",
-    "eslint-config-next": "14.0.0",
-    "gl": "^8.1.6",
-    "jpeg-js": "^0.4.4",
-    "pngjs": "^7.0.0",
-    "postcss": "^8.4.0",
-    "tailwindcss": "^3.3.0"
+    "autoprefixer"              : "^10.4.0",
+    "eslint"                    : "^8.0.0",
+    "eslint-config-next"        : "14.0.0",
+    "gl"                        : "^8.1.6",
+    "jpeg-js"                   : "^0.4.4",
+    "pngjs"                     : "^7.0.0",
+    "postcss"                   : "^8.4.0",
+    "tailwindcss"               : "^3.3.0"
   }
 }

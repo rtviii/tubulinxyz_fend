@@ -34,16 +34,3 @@ html, body {
 .msp-layout-main {
   height: 100% !important;
 }
-
-/* 
-nightingale-manager,
-nightingale-navigation,
-nightingale-track,
-nightingale-msa {
-  display: block;
-  width: 100%;
-}
-
-nightingale-manager {
-  min-height: 400px;
-} */
