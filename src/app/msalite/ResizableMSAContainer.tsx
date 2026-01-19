@@ -27,10 +27,10 @@ export interface ResizableMSAContainerHandle {
 }
 
 const DEFAULTS = {
-  minTileWidth: 2,
-  navHeight: 30,
-  rowHeight: 20,
-  maxMsaHeight: 400,
+  minTileWidth: 1,
+  navHeight: 40,
+  rowHeight: 10,
+  maxMsaHeight: 200,
 };
 
 export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, ResizableMSAContainerProps>(
