@@ -1,14 +1,13 @@
-// src/app/msalite/components/ChainAligner.tsx
 'use client';
 
 import { useState, useCallback } from 'react';
-import { MolstarService } from '@/components/molstar/molstar_service';
+import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import { useChainAlignment } from '../hooks/useChainAlignment';
 import { useAppSelector } from '@/store/store';
 import { selectIsChainAligned } from '@/store/slices/sequence_registry';
 
 interface ChainAlignerProps {
-  molstarService: MolstarService | null;
+  molstarInstance: MolstarInstance | null;
   onLog?: (message: string) => void;
 }
 
@@ -18,7 +17,7 @@ interface ChainInfo {
   sequence: string;
 }
 
-export function ChainAligner({ molstarService, onLog }: ChainAlignerProps) {
+export function ChainAligner({ molstarInstance, onLog }: ChainAlignerProps) {
   const [pdbInput, setPdbInput] = useState('');
   const [loadedPdbId, setLoadedPdbId] = useState<string | null>(null);
   const [chains, setChains] = useState<ChainInfo[]>([]);
@@ -32,7 +31,7 @@ export function ChainAligner({ molstarService, onLog }: ChainAlignerProps) {
   }, [onLog]);
 
   const handleLoadStructure = async () => {
-    if (!molstarService || !pdbInput.trim()) return;
+    if (!molstarInstance || !pdbInput.trim()) return;
 
     const pdbId = pdbInput.trim().toUpperCase();
     setIsLoading(true);
@@ -43,25 +42,26 @@ export function ChainAligner({ molstarService, onLog }: ChainAlignerProps) {
       log(`Loading ${pdbId}...`);
       
       // Fetch profile for classification (optional, for coloring)
-      let classification = undefined;
+      let classification = {};
       try {
         const response = await fetch(`http://localhost:8000/structures/${pdbId}/profile`);
         if (response.ok) {
           const profile = await response.json();
-          // You can process profile here if needed
+          // You can process profile here if needed for classification
         }
       } catch {
         // Profile fetch is optional, continue without it
       }
 
-      await molstarService.controller.loadStructure(pdbId, classification);
+      // Use the new instance method directly
+      await molstarInstance.loadStructure(pdbId, classification);
       
-      // Extract chain info
-      const chainIds = molstarService.controller.getAllChains(pdbId);
+      // Extract chain info using new instance methods
+      const chainIds = molstarInstance.getAllChainIds();
       const chainInfos: ChainInfo[] = [];
 
       for (const chainId of chainIds) {
-        const observed = molstarService.controller.getObservedSequenceAndMapping(pdbId, chainId);
+        const observed = molstarInstance.getObservedSequence(chainId);
         if (observed && observed.sequence.length > 0) {
           chainInfos.push({
             id: chainId,
@@ -83,11 +83,11 @@ export function ChainAligner({ molstarService, onLog }: ChainAlignerProps) {
   };
 
   const handleAlignChain = async (chainId: string) => {
-    if (!molstarService || !loadedPdbId) return;
+    if (!molstarInstance || !loadedPdbId) return;
 
     try {
       log(`Aligning ${loadedPdbId}:${chainId}...`);
-      const result = await alignChain(loadedPdbId, chainId, molstarService);
+      const result = await alignChain(loadedPdbId, chainId, molstarInstance);
       log(`Aligned ${result.sequenceId}: ${Object.keys(result.mapping).length} mapped positions`);
     } catch (err: any) {
       log(`Alignment failed: ${err.message}`);
@@ -108,7 +108,7 @@ export function ChainAligner({ molstarService, onLog }: ChainAlignerProps) {
         />
         <button
           onClick={handleLoadStructure}
-          disabled={isLoading || !molstarService || !pdbInput.trim()}
+          disabled={isLoading || !molstarInstance || !pdbInput.trim()}
           className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
         >
           {isLoading ? '...' : 'Load'}

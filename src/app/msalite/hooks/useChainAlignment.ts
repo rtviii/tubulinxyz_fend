@@ -1,10 +1,8 @@
-// src/app/msalite/hooks/useChainAlignment.ts
-
 import { useCallback, useState } from 'react';
 import { useAppDispatch } from '@/store/store';
 import { addSequence, setPositionMapping, PositionMapping } from '@/store/slices/sequence_registry';
 import { useAlignSequenceMsaSequencePostMutation } from '@/store/tubxz_api';
-import { MolstarService } from '@/components/molstar/molstar_service';
+import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 
 export interface AlignmentResult {
   sequenceId: string;
@@ -24,15 +22,15 @@ export function useChainAlignment() {
     async (
       pdbId: string,
       chainId: string,
-      service: MolstarService
+      instance: MolstarInstance  // Changed from MolstarService
     ): Promise<AlignmentResult> => {
       setIsAligning(true);
       setCurrentChain(chainId);
       setError(null);
 
       try {
-        // Extract sequence from Molstar
-        const observed = service.controller.getObservedSequenceAndMapping(pdbId, chainId);
+        // Extract sequence from Molstar - use instance method directly
+        const observed = instance.getObservedSequence(chainId);
         if (!observed) {
           throw new Error(`Failed to get observed sequence for ${pdbId}:${chainId}`);
         }
@@ -76,7 +74,6 @@ export function useChainAlignment() {
           alignedSequence: result.aligned_sequence,
           mapping: positionMapping,
         };
-
       } catch (err: any) {
         const message = err?.data?.detail || err?.message || 'Alignment failed';
         setError(message);

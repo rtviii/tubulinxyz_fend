@@ -1,4 +1,3 @@
-// src/app/msalite/page.tsx
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
@@ -6,8 +5,11 @@ import { useAppDispatch, useAppSelector } from '@/store/store';
 import { useGetMasterProfileMsaMasterGetQuery } from '@/store/tubxz_api';
 import { addSequence, selectMasterSequences, selectAddedSequenceGroups, removeSequence } from '@/store/slices/sequence_registry';
 import { useNightingaleComponents } from '../msa-viewer/hooks/useNightingaleComponents';
-import { useMolstarService } from '@/components/molstar/molstar_service';
+
+// New imports
+import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
 import { MolstarNode } from '@/components/molstar/spec';
+
 import { ResizableMSAContainer, ResizableMSAContainerHandle } from './components/ResizableMSAContainer';
 import { ChainAligner } from './components/ChainAligner';
 import { clearColorConfig } from './services/msaColorService';
@@ -31,9 +33,9 @@ const BUILTIN_SCHEMES = [
 ];
 
 export default function MSALitePage() {
-  const dispatch                   = useAppDispatch();
-  const msaRef                     = useRef<ResizableMSAContainerHandle>(null);
-  const molstarNodeRef             = useRef<HTMLDivElement>(null);
+  const dispatch = useAppDispatch();
+  const msaRef = useRef<ResizableMSAContainerHandle>(null);
+  const molstarNodeRef = useRef<HTMLDivElement>(null);
   const masterSequencesInitialized = useRef(false);
 
   const [colorScheme, setColorScheme] = useState('clustal2');
@@ -44,9 +46,12 @@ export default function MSALitePage() {
   const [activeMode, setActiveMode] = useState<string | null>(null);
 
   const { areLoaded: componentsLoaded } = useNightingaleComponents();
-  const { service: molstarService, isInitialized: molstarReady } = useMolstarService(molstarNodeRef, 'msalite');
+
+  // New hook usage
+  const { instance: molstarInstance, isInitialized: molstarReady } = useMolstarInstance(molstarNodeRef, 'msalite');
+
   const { data: masterData, isLoading: loadingMaster } = useGetMasterProfileMsaMasterGetQuery();
-  
+
   const masterSequences = useAppSelector(selectMasterSequences);
   const addedGroups = useAppSelector(selectAddedSequenceGroups);
 
@@ -145,7 +150,7 @@ export default function MSALitePage() {
                 maxLength={maxLength}
                 colorScheme={colorScheme}
                 onResidueHover={(id, pos) => log(`Hover: ${id} @ ${pos}`)}
-                onResidueLeave={() => {}}
+                onResidueLeave={() => { }}
                 onResidueClick={(id, pos) => log(`Click: ${id} @ ${pos}`)}
               />
             ) : (
@@ -158,7 +163,7 @@ export default function MSALitePage() {
 
         {/* Right Panel */}
         <div className="flex-1 flex flex-col gap-3 min-w-0 overflow-y-auto">
-          
+
           {/* Structure + Chain Aligner */}
           <div className="bg-white rounded-lg shadow p-3">
             <div className="text-sm font-medium text-gray-700 mb-2">Load Structure & Align Chains</div>
@@ -172,9 +177,9 @@ export default function MSALitePage() {
                   </div>
                 )}
               </div>
-              {/* Chain aligner */}
+              {/* Chain aligner - pass the new instance */}
               <div className="flex-1 min-w-0">
-                <ChainAligner molstarService={molstarService} onLog={log} />
+                <ChainAligner molstarInstance={molstarInstance} onLog={log} />
               </div>
             </div>
           </div>
@@ -208,7 +213,7 @@ export default function MSALitePage() {
           <div className="bg-white rounded-lg shadow p-3">
             <div className="text-sm font-medium text-gray-700 mb-2">Jump to Range</div>
             <div className="flex flex-wrap gap-2 mb-2">
-              {[[1,50], [100,150], [200,250]].map(([s,e]) => (
+              {[[1, 50], [100, 150], [200, 250]].map(([s, e]) => (
                 <button key={`${s}-${e}`} onClick={() => msaRef.current?.jumpToRange(s, e)} className="px-2 py-1 bg-blue-100 hover:bg-blue-200 rounded text-xs">{s}-{e}</button>
               ))}
               <button onClick={() => msaRef.current?.jumpToRange(1, maxLength)} className="px-2 py-1 bg-green-100 hover:bg-green-200 rounded text-xs">Full</button>

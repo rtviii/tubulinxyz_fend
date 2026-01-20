@@ -3,10 +3,10 @@ import { TypedUseSelectorHook, useDispatch, useSelector, useStore } from 'react-
 
 import { tubxz_api } from './tubxz_api';
 
-// New consolidated slice
-import molstarInstancesReducer from '@/components/molstar/state/molstarInstancesSlice';
+// New consolidated Molstar state
+import molstarInstancesReducer from '@/components/molstar/state/molstarInstancesSlice'
 
-// Keep other slices as needed
+// Keep these
 import sequenceViewerReducer from './slices/sequence_viewer';
 import sequenceStructureSyncReducer from './slices/sequence_structure_sync';
 import interactionReducer from './slices/interaction_slice';
@@ -20,7 +20,7 @@ export const makeStore = () => {
       // New consolidated Molstar state
       molstarInstances: molstarInstancesReducer,
 
-      // Other slices
+      // Keep these
       sequenceViewer: sequenceViewerReducer,
       sequenceStructureSync: sequenceStructureSyncReducer,
       interaction: interactionReducer,

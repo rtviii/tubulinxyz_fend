@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import { useAppSelector } from '@/store/store';
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
 import { selectLoadedStructure, selectPolymerComponents, selectLigandComponents } from '@/components/molstar/state/selectors';
-import { TubulinClassification } from '@/components/molstar/core/types';
 import { createClassificationFromProfile } from '@/services/profile_service';
 import { API_BASE_URL } from '@/config';
 

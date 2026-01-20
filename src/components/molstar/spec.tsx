@@ -1,3 +1,4 @@
+import React, { forwardRef } from 'react';
 import { DefaultPluginUISpec, PluginUISpec } from "molstar/lib/mol-plugin-ui/spec";
 import { PluginConfig } from 'molstar/lib/mol-plugin/config';
 import { PluginBehaviors } from 'molstar/lib/mol-plugin/behavior';
@@ -55,3 +56,15 @@ export const ribxzSpec: PluginUISpec = {
     remoteState: 'none',
   },
 };
+
+// Container component for Molstar viewer
+export const MolstarNode = forwardRef<HTMLDivElement>((props, ref) => {
+  return (
+    <div
+      ref={ref}
+      className="w-full h-full"
+      style={{ position: 'relative' }}
+    />
+  );
+});
+MolstarNode.displayName = 'MolstarNode';

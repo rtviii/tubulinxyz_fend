@@ -4,7 +4,8 @@ import { Color } from 'molstar/lib/mol-util/color';
 // Instance Types
 // ============================================================
 
-export type MolstarInstanceId = 'structure' | 'monomer';
+// Add 'msalite' to the union type
+export type MolstarInstanceId = 'structure' | 'monomer' | 'msalite';
 
 // ============================================================
 // Component Types

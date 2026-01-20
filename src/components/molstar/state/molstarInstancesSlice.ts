@@ -39,6 +39,7 @@ const initialState: MolstarInstancesState = {
   instances: {
     structure: createEmptyInstanceState(),
     monomer: createEmptyInstanceState(),
+    msalite: createEmptyInstanceState(),  // <-- Add this
   },
 };
 

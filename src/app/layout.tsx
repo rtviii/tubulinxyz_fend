@@ -2,7 +2,6 @@
 import { useRef } from 'react';
 import { Provider } from 'react-redux';
 import { makeStore, AppStore } from '@/store/store';
-import { MolstarProvider } from '@/components/molstar/molstar_service';
 import './globals.css';
 import { MolstarInstanceManagerProvider } from '@/components/molstar/services/MolstarInstanceManager';
 
