@@ -25,8 +25,8 @@ interface ResizableMSAContainerProps {
 export interface ResizableMSAContainerHandle {
   redraw: () => void;
   jumpToRange: (start: number, end: number) => void;
+  setColorScheme: (scheme: string) => void;
 }
-
 
 const DEFAULTS = {
   minTileWidth: 1,
@@ -55,7 +55,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     const navRef = useRef<any>(null);
 
     const [availableWidth, setAvailableWidth] = useState(0);
-    const [dataLoaded, setDataLoaded] = useState(false);
+    const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
       const el = outerRef.current;
@@ -75,21 +75,32 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     const needsScroll = availableWidth > 0 && contentWidth > availableWidth;
     const msaHeight = Math.min(sequences.length * rowHeight, maxMsaHeight);
 
+    // Get the inner sequence viewer component
+    const getSequenceViewer = useCallback((): any | null => {
+      const msa = msaRef.current;
+      if (!msa) return null;
+      return msa.renderRoot?.querySelector('msa-sequence-viewer') ?? null;
+    }, []);
+
+    // Invalidate cache and redraw - this is the key fix
+    const triggerRedraw = useCallback(() => {
+      const seqViewer = getSequenceViewer();
+      if (seqViewer && typeof seqViewer.invalidateAndRedraw === 'function') {
+        seqViewer.invalidateAndRedraw();
+      }
+    }, [getSequenceViewer]);
+
     const syncWidths = useCallback(() => {
       const nav = navRef.current;
       const msa = msaRef.current;
 
       if (nav) {
-        // 1. Set attribute to disable withResizable auto-sizing
         nav.setAttribute('width', String(contentWidth));
-        // 2. Set property
         nav.width = contentWidth;
-        // 3. Override the style.width = "100%" that withResizable sets
         nav.style.width = `${contentWidth}px`;
         nav.style.minWidth = `${contentWidth}px`;
         nav.style.maxWidth = `${contentWidth}px`;
 
-        // 4. Also force the SVG inside shadow DOM
         const svg = nav.renderRoot?.querySelector('svg');
         if (svg) {
           svg.setAttribute('width', String(contentWidth));
@@ -97,7 +108,6 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
           svg.style.minWidth = `${contentWidth}px`;
         }
 
-        // 5. Update D3 scale and re-render
         if (typeof nav.onDimensionsChange === 'function') {
           nav.onDimensionsChange();
         }
@@ -117,7 +127,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
           msa.onDimensionsChange();
         }
 
-        const seqViewer = msa.renderRoot?.querySelector('msa-sequence-viewer');
+        const seqViewer = getSequenceViewer();
         if (seqViewer) {
           const labelWidth = msa.labelWidth || 0;
           const seqViewerWidth = contentWidth - labelWidth;
@@ -125,16 +135,13 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
           seqViewer.width = seqViewerWidth;
           seqViewer.style.width = `${seqViewerWidth}px`;
           seqViewer.style.minWidth = `${seqViewerWidth}px`;
-          if (typeof seqViewer.drawScene === 'function') {
-            seqViewer.drawScene();
+
+          if (typeof seqViewer.invalidateAndRedraw === 'function') {
+            seqViewer.invalidateAndRedraw();
           }
         }
       }
-    }, [contentWidth]);
-
-    const triggerRedraw = useCallback(() => {
-      syncWidths();
-    }, [syncWidths]);
+    }, [contentWidth, getSequenceViewer]);
 
     const jumpToRange = useCallback((start: number, end: number) => {
       const nav = navRef.current;
@@ -143,17 +150,35 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       }
     }, []);
 
+    const setColorScheme = useCallback((scheme: string) => {
+      const msa = msaRef.current;
+      if (!msa) return;
+
+      msa.setAttribute('color-scheme', scheme);
+
+      // Wait for Lit to process the attribute change, then invalidate cache and redraw
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const seqViewer = getSequenceViewer();
+          if (seqViewer && typeof seqViewer.invalidateAndRedraw === 'function') {
+            seqViewer.invalidateAndRedraw();
+          }
+        });
+      });
+    }, [getSequenceViewer]);
+
     useImperativeHandle(ref, () => ({
       redraw: triggerRedraw,
       jumpToRange,
-    }), [triggerRedraw, jumpToRange]);
-
+      setColorScheme,
+    }), [triggerRedraw, jumpToRange, setColorScheme]);
 
     useLayoutEffect(() => {
       if (contentWidth === 0) return;
       requestAnimationFrame(() => syncWidths());
     }, [contentWidth, syncWidths]);
 
+    // Load data into MSA
     useEffect(() => {
       if (!msaRef.current || sequences.length === 0 || contentWidth === 0) return;
 
@@ -162,31 +187,38 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
           name: s.name,
           sequence: s.sequence,
         }));
-        setDataLoaded(true);
-        requestAnimationFrame(() => syncWidths());
+
+        requestAnimationFrame(() => {
+          syncWidths();
+          setIsInitialized(true);
+        });
       }, 100);
 
       return () => clearTimeout(timer);
     }, [sequences, contentWidth, syncWidths]);
 
+    // Handle color scheme prop changes
     useEffect(() => {
-      if (!msaRef.current) return;
+      if (!msaRef.current || !isInitialized) return;
       msaRef.current.setAttribute('color-scheme', colorScheme);
-      requestAnimationFrame(() => syncWidths());
-    }, [colorScheme, syncWidths]);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => triggerRedraw());
+      });
+    }, [colorScheme, isInitialized, triggerRedraw]);
 
+    // Event handlers
     useEffect(() => {
       const msa = msaRef.current;
-      if (!msa) return;
+      if (!msa || !isInitialized) return;
 
-      const handleClick = (e: any) => {
+      const handleClick = (e: CustomEvent) => {
         const { position, i } = e.detail || {};
         if (typeof position === 'number' && sequences[i] && onResidueClick) {
           onResidueClick(sequences[i].id, position);
         }
       };
 
-      const handleMouseEnter = (e: any) => {
+      const handleMouseEnter = (e: CustomEvent) => {
         const { position, i } = e.detail || {};
         if (typeof position === 'number' && sequences[i] && onResidueHover) {
           onResidueHover(sequences[i].id, position);
@@ -204,7 +236,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
         msa.removeEventListener('onResidueMouseEnter', handleMouseEnter);
         msa.removeEventListener('onResidueMouseLeave', handleMouseLeave);
       };
-    }, [sequences, onResidueClick, onResidueHover, onResidueLeave]);
+    }, [sequences, isInitialized, onResidueClick, onResidueHover, onResidueLeave]);
 
     if (sequences.length === 0) {
       return (
