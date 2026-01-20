@@ -1,7 +1,7 @@
 // src/app/structures/[rcsb_id]/page.tsx
 'use client';
 
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useAppSelector, useAppDispatch } from '@/store/store';
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
@@ -191,6 +191,7 @@ export default function StructureProfilePage() {
                 masterSequences={masterSequences}
                 maxLength={masterData?.alignment_length ?? 0}
                 nglLoaded={nglLoaded}
+                profile={profile}  // Add this
               />
             </div>
           )}
@@ -204,6 +205,14 @@ export default function StructureProfilePage() {
 // Monomer MSA Panel
 // ============================================================
 
+// In src/app/structures/[rcsb_id]/page.tsx
+// Replace the MonomerMSAPanel component with this:
+
+import { MSAViewerPanel } from '@/app/msalite/components/MSAViewerPanel';
+import { AnnotationData } from '@/app/msalite/components/AnnotationPanel';
+
+// ... existing code ...
+
 function MonomerMSAPanel({
   pdbId,
   chainId,
@@ -212,6 +221,7 @@ function MonomerMSAPanel({
   masterSequences,
   maxLength,
   nglLoaded,
+  profile,
 }: {
   pdbId: string | null;
   chainId: string;
@@ -220,8 +230,8 @@ function MonomerMSAPanel({
   masterSequences: any[];
   maxLength: number;
   nglLoaded: boolean;
+  profile: StructureProfile | null;
 }) {
-  const msaRef = useRef<ResizableMSAContainerHandle>(null);
   const { alignChain, isAligning } = useChainAlignment();
 
   const sequenceId = pdbId ? `${pdbId}_${chainId}` : null;
@@ -259,11 +269,53 @@ function MonomerMSAPanel({
     })),
   ];
 
-  // Handle MSA hover -> Molstar highlight
+  // Extract annotations from profile
+  const annotations = useMemo((): AnnotationData => {
+    if (!profile) return {};
+
+    // Get entity for this chain
+    const poly = profile.polypeptides?.find(p => p.auth_asym_id === chainId);
+    const entity = poly ? profile.entities?.[poly.entity_id] : null;
+
+    const result: AnnotationData = {};
+
+    // Extract mutations if available
+    if (entity?.mutations && entity.mutations.length > 0) {
+      result.mutations = entity.mutations.map((m: any) => ({
+        masterIndex: m.master_index,
+        fromResidue: m.from_residue,
+        toResidue: m.to_residue,
+        phenotype: m.phenotype,
+        source: m.database_source,
+      }));
+    }
+
+    // Mock binding sites for now - these would come from your backend
+    // TODO: Replace with real data from profile or separate API
+    result.bindingSites = [
+      {
+        id: 'colchicine',
+        name: 'Colchicine Site',
+        positions: [247, 248, 249, 250, 251, 252, 314, 315, 316, 317, 318],
+      },
+      {
+        id: 'taxol',
+        name: 'Paclitaxel Site',
+        positions: [22, 23, 24, 25, 26, 227, 228, 229, 230, 274, 275, 276, 277],
+      },
+      {
+        id: 'gtp',
+        name: 'GTP Binding',
+        positions: [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 140, 141, 142, 143, 144, 145],
+      },
+    ];
+
+    return result;
+  }, [profile, chainId]);
+
+  // Handlers for MSA <-> Molstar sync
   const handleResidueHover = useCallback((seqId: string, msaPosition: number) => {
     if (!instance || !positionMapping) return;
-
-    // Only sync if hovering on the current chain's sequence
     if (seqId !== sequenceId) return;
 
     const authSeqId = positionMapping[msaPosition];
@@ -309,39 +361,19 @@ function MonomerMSAPanel({
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="flex-shrink-0 px-3 py-2 border-b bg-gray-50 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-700">
-            Sequence Alignment
-          </span>
-          <span className="text-xs text-gray-500">
-            {allSequences.length} sequences, {maxLength} positions
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {isAligned && (
-            <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">
-              {pdbId}:{chainId} aligned
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* MSA */}
-      <div className="flex-1 min-h-0 p-2">
-        <ResizableMSAContainer
-          ref={msaRef}
-          sequences={allSequences}
-          maxLength={maxLength}
-          colorScheme="clustal2"
-          onResidueHover={handleResidueHover}
-          onResidueLeave={handleResidueLeave}
-          onResidueClick={handleResidueClick}
-        />
-      </div>
-    </div>
+    <MSAViewerPanel
+      sequences={allSequences}
+      maxLength={maxLength}
+      annotations={annotations}
+      activeSequenceId={sequenceId ?? undefined}
+      title={`${pdbId}:${chainId} Alignment`}
+      onResidueHover={handleResidueHover}
+      onResidueLeave={handleResidueLeave}
+      onResidueClick={handleResidueClick}
+      showToolbar={true}
+      showAnnotations={true}
+      compact={true}
+    />
   );
 }
 
@@ -474,8 +506,8 @@ function MonomerSidebar({
               key={chain.chainId}
               onClick={() => handleChainSwitch(chain.chainId)}
               className={`px-2 py-1 text-xs font-mono rounded ${chain.chainId === activeChainId
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
             >
               {chain.chainId}
