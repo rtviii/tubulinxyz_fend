@@ -19,7 +19,8 @@ export function getColorscheme(id: string): ColorschemeDefinition | null {
 
 /**
  * Apply a colorscheme to an instance.
- * This uses Molstar's overpaint functionality.
+ * This computes the specific residue colorings and passes them to the 
+ * MolstarInstance to be applied via overpaint.
  */
 export async function applyColorscheme(
   instance: MolstarInstance,
@@ -33,27 +34,38 @@ export async function applyColorscheme(
     return;
   }
 
-  const pdbId = instance.viewer.getCurrentStructure()?.model.entryId ?? '';
+  const structure = instance.viewer.getCurrentStructure();
+  if (!structure) {
+    console.warn(`[Colorscheme] No structure loaded in instance ${instance.id}`);
+    return;
+  }
 
+  const pdbId = structure.model.entryId ?? '';
+
+  // Calculate the specific colorings (chainId, authSeqId, color) based on the scheme logic
   const colorings = scheme.getColorings({
     pdbId,
     chainId,
     annotationData,
   });
 
-  // TODO: Apply colorings using Molstar overpaint
-  // This requires building overpaint bundles and applying them
-  // to the structure representations
+  if (colorings.length === 0) {
+    console.log(`[Colorscheme] No residues to color for ${colorschemeId}`);
+    // Optional: Clear existing overpaint if no new data is present
+    await instance.restoreDefaultColors();
+    return;
+  }
 
-  console.log(`[Colorscheme] Would apply ${colorings.length} colorings for ${colorschemeId}`);
+  console.log(`[Colorscheme] Applying ${colorings.length} colorings for scheme: ${colorschemeId}`);
 
-  await instance.applyColorscheme(colorschemeId);
+  // Pass the computed colorings to the instance which handles the Molstar state updates
+  await instance.applyColorscheme(colorschemeId, colorings);
 }
 
 /**
  * Remove all colorscheme overpaints and restore default colors.
  */
 export async function restoreDefaultColors(instance: MolstarInstance): Promise<void> {
-  // TODO: Clear all overpaint and restore original representation colors
+  console.log(`[Colorscheme] Restoring default colors for instance ${instance.id}`);
   await instance.restoreDefaultColors();
 }

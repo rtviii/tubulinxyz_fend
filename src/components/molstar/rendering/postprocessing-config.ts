@@ -1,9 +1,6 @@
+// src/components/molstar/rendering/postprocessing-config.ts
 import { Color } from 'molstar/lib/mol-util/color';
 
-/**
- * Postprocessing configuration for stylized lighting
- * Use this for both frontend canvas settings and headless rendering
- */
 export const STYLIZED_POSTPROCESSING = {
     outline: {
         name: 'on' as const,

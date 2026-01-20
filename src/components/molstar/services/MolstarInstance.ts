@@ -29,10 +29,12 @@ import {
   clearInstance,
   getComponentKey,
 } from '../state/molstarInstancesSlice'
-import { Structure } from 'molstar/lib/mol-model/structure';
-import { StructureElement } from 'molstar/lib/mol-model/structure';
+import { Structure, StructureElement } from 'molstar/lib/mol-model/structure';
 import { Loci } from 'molstar/lib/mol-model/loci';
+import { Color } from 'molstar/lib/mol-util/color';
 import { MonomerPresetResult } from '../colors/preset_monomer';
+import { STYLIZED_POSTPROCESSING } from '../rendering/postprocessing-config';
+import { ResidueColoring } from '../coloring/types';
 
 /**
  * MolstarInstance - orchestrates viewer operations with Redux state.
@@ -66,6 +68,29 @@ export class MolstarInstance {
     return this.instanceState.componentStates[key];
   }
 
+  /**
+   * Internal helper to apply stylized lighting (turning lights off)
+   * and post-processing (contours/occlusion) by default.
+   */
+  private async applyStylizedLighting() {
+    const plugin = this.viewer.ctx;
+    if (!plugin) return;
+
+    // 1. Set ignoreLight on structure component manager globally.
+    // This ensures all representations default to flat/uniform shading.
+    plugin.managers.structure.component.setOptions({
+      ...plugin.managers.structure.component.state.options,
+      ignoreLight: true
+    });
+
+    // 2. Apply the post-processing configuration (Outline and Occlusion).
+    if (plugin.canvas3d) {
+      plugin.canvas3d.setProps({
+        postprocessing: STYLIZED_POSTPROCESSING
+      });
+    }
+  }
+
   // ============================================================
   // Structure Loading
   // ============================================================
@@ -79,14 +104,16 @@ export class MolstarInstance {
 
       if (!this.viewer.ctx) throw new Error('Viewer not initialized');
 
-      // Apply preset - use correct ID
+      // Automatically apply the "flat" lighting and contours
+
+      // Apply preset
       const result = await this.viewer.ctx.builders.structure.representation.applyPreset(
         structureRef,
-        'tubulin-split-preset-computed-res',  // <-- Fixed: match the actual preset ID
+        'tubulin-split-preset-computed-res',
         {
           pdbId: pdbId.toUpperCase(),
           tubulinClassification: classification,
-          computedResidues: []  // <-- Add this required param
+          computedResidues: []
         }
       );
 
@@ -105,6 +132,7 @@ export class MolstarInstance {
         components,
       }));
 
+      await this.applyStylizedLighting();
       return true;
     } catch (error) {
       console.error(`[${this.id}] Failed to load structure:`, error);
@@ -120,6 +148,8 @@ export class MolstarInstance {
       const structureRef = await this.viewer.loadFromUrl(url, true, pdbId.toUpperCase());
 
       if (!this.viewer.ctx) throw new Error('Viewer not initialized');
+
+      // Automatically apply the "flat" lighting and contours
 
       const result = await this.viewer.ctx.builders.structure.representation.applyPreset(
         structureRef,
@@ -147,12 +177,14 @@ export class MolstarInstance {
         }],
       }));
 
+      await this.applyStylizedLighting();
       return result;
     } catch (error) {
       console.error(`[${this.id}] Failed to load monomer chain:`, error);
       return null;
     }
   }
+
   private extractComponentsFromPreset(pdbId: string, presetResult: any): Component[] {
     const components: Component[] = [];
 
@@ -399,14 +431,69 @@ export class MolstarInstance {
   // Colorscheme Operations
   // ============================================================
 
-  async applyColorscheme(colorschemeId: string): Promise<void> {
-    // TODO: Implement colorscheme application
-    // This will use overpaint to color specific residues
+  /**
+   * Applies an overpaint colorscheme to the structure.
+   * Groups residue selections by color to optimize Molstar overpaint layers.
+   */
+  async applyColorscheme(colorschemeId: string, colorings: ResidueColoring[]): Promise<void> {
+    const plugin = this.viewer.ctx;
+    if (!plugin || colorings.length === 0) return;
+
+    const structure = this.viewer.getCurrentStructure();
+    if (!structure) return;
+
+    // Batch colorings by their color hex to reduce representation update overhead
+    const colorGroups: Record<number, ResidueColoring[]> = {};
+    for (const coloring of colorings) {
+      if (!colorGroups[coloring.color]) colorGroups[coloring.color] = [];
+      colorGroups[coloring.color].push(coloring);
+    }
+
+    const layers: { bundle: StructureElement.Bundle, color: Color }[] = [];
+
+    for (const [colorValue, residues] of Object.entries(colorGroups)) {
+      const color = Color(Number(colorValue));
+      const lociList: StructureElement.Loci[] = [];
+
+      for (const res of residues) {
+        const query = buildResidueQuery(res.chainId, res.authSeqId);
+        const loci = executeQuery(query, structure);
+        if (loci && StructureElement.Loci.is(loci)) {
+          lociList.push(loci);
+        }
+      }
+
+      if (lociList.length > 0) {
+        // Concatenate individual residue loci into a single mask for the color bundle
+        const concatenatedLoci = Loci.concat(lociList) as StructureElement.Loci;
+        layers.push({
+          bundle: StructureElement.Bundle.fromLoci(concatenatedLoci),
+          color
+        });
+      }
+    }
+
+    if (layers.length > 0) {
+      // Apply the calculated overpaint layers to all active representations
+      await plugin.managers.structure.component.eachRepresentation(repr => {
+        plugin.managers.structure.component.overpaint.set(layers, repr);
+      });
+    }
+
     this.dispatch(setActiveColorscheme({ instanceId: this.id, colorschemeId }));
   }
 
+  /**
+   * Clears all overpaint layers and restores the default representation colors.
+   */
   async restoreDefaultColors(): Promise<void> {
-    // TODO: Clear overpaint and restore original colors
+    const plugin = this.viewer.ctx;
+    if (!plugin) return;
+
+    await plugin.managers.structure.component.eachRepresentation(repr => {
+      plugin.managers.structure.component.overpaint.clear(repr);
+    });
+
     this.dispatch(setActiveColorscheme({ instanceId: this.id, colorschemeId: null }));
   }
 
