@@ -1,7 +1,7 @@
 import { MolstarInstance } from '../services/MolstarInstance';
 import { ColorschemeDefinition, AnnotationDataMap, ResidueColoring } from './types';
 import { mutationColorscheme } from './schemes/mutationScheme';
-import { interactionColorscheme } from './schemes/interactionScheme';
+import { interactionColorscheme } from './schemes/interactionScheme'
 
 // Registry of available colorschemes
 const COLORSCHEME_REGISTRY: Record<string, ColorschemeDefinition> = {

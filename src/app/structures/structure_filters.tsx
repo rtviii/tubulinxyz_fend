@@ -22,7 +22,7 @@ import {
     update_grouped_by_deposition,
 } from "@/store/slices/slice_structures";
 import { set_polymers_filter as set_poly_filter_real } from "@/store/slices/slice_polymers";
-import { getHexColor } from "@/components/molstar/colors/tubulin-colors";
+import { getHexColor } from "@/components/molstar/colors/tubulin-color-theme";
 
 // --- Custom Tag Renderer (Strict & High Contrast) ---
 const tagRender = (props: any) => {
