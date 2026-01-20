@@ -43,7 +43,7 @@ export class MolstarInstance {
     public readonly viewer: MolstarViewer,
     private dispatch: AppDispatch,
     private getState: () => RootState
-  ) {}
+  ) { }
 
   // ============================================================
   // State Access Helpers
@@ -78,11 +78,15 @@ export class MolstarInstance {
 
       if (!this.viewer.ctx) throw new Error('Viewer not initialized');
 
-      // Apply preset
+      // Apply preset - use correct ID
       const result = await this.viewer.ctx.builders.structure.representation.applyPreset(
         structureRef,
-        'tubulin-split-preset',
-        { pdbId: pdbId.toUpperCase(), tubulinClassification: classification }
+        'tubulin-split-preset-computed-res',  // <-- Fixed: match the actual preset ID
+        {
+          pdbId: pdbId.toUpperCase(),
+          tubulinClassification: classification,
+          computedResidues: []  // <-- Add this required param
+        }
       );
 
       // Extract components from preset result

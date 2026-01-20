@@ -9,6 +9,8 @@ import { Structure } from 'molstar/lib/mol-model/structure';
 import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state';
 import { StructureElement } from 'molstar/lib/mol-model/structure';
 import { ribxzSpec } from '../spec';
+import { EnhancedTubulinSplitPreset } from '../colors/molstar_preset'; // <-- Add import
+
 
 /**
  * Pure Molstar wrapper - handles lifecycle and low-level canvas operations.
@@ -17,6 +19,7 @@ import { ribxzSpec } from '../spec';
 export class MolstarViewer {
   ctx: PluginUIContext | null = null;
   private initPromise: Promise<void> | null = null;
+
 
   async init(container: HTMLElement, spec: PluginUISpec = ribxzSpec): Promise<void> {
     if (this.ctx) return;
@@ -28,6 +31,10 @@ export class MolstarViewer {
 
   private async doInit(container: HTMLElement, spec: PluginUISpec): Promise<void> {
     this.ctx = await createPluginUI({ target: container, spec, render: renderReact18 });
+    
+    // Register custom preset
+    this.ctx.builders.structure.representation.registerPreset(EnhancedTubulinSplitPreset);
+    
     this.applyDefaultStyling();
   }
 
