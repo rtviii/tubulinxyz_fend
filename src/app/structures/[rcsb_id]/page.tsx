@@ -25,9 +25,9 @@ import {
 import { useGetMasterProfileMsaMasterGetQuery } from '@/store/tubxz_api';
 import { useChainAlignment } from '@/app/msalite/hooks/useChainAlignment';
 import { useNightingaleComponents } from '@/app/msalite/useNightingaleComponents';
-import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/app/msalite/components/ResizableMSAContainer';
 import { highlightResidueInInstance, clearHighlightInInstance } from '@/components/molstar/sync/structureSync';
-
+import { MSAViewerPanel } from '@/app/msalite/components/MSAViewerPanel';
+import { AnnotationData } from '@/app/msalite/components/AnnotationPanel';
 import { API_BASE_URL } from '@/config';
 import { PolymerComponent, LigandComponent, AlignedStructure } from '@/components/molstar/core/types';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
@@ -179,19 +179,17 @@ export default function StructureProfilePage() {
               <LoadingOverlay text={isLoading ? 'Loading structure...' : 'Initializing viewer...'} />
             )}
           </div>
-
-          {/* MSA Panel - only in monomer view */}
           {isMonomerView && activeChainId && (
             <div className="h-1/2 border-t border-gray-300 bg-white">
               <MonomerMSAPanel
-                pdbId={loadedStructure}
-                chainId={activeChainId}
-                family={getFamilyForChain(activeChainId)}
-                instance={instance}
-                masterSequences={masterSequences}
-                maxLength={masterData?.alignment_length ?? 0}
-                nglLoaded={nglLoaded}
-                profile={profile}  // Add this
+                pdbId           = {loadedStructure}
+                chainId         = {activeChainId}
+                family          = {getFamilyForChain(activeChainId)}
+                instance        = {instance}
+                masterSequences = {masterSequences}
+                maxLength       = {masterData?.alignment_length ?? 0}
+                nglLoaded       = {nglLoaded}
+                profile         = {profile}
               />
             </div>
           )}
@@ -205,13 +203,7 @@ export default function StructureProfilePage() {
 // Monomer MSA Panel
 // ============================================================
 
-// In src/app/structures/[rcsb_id]/page.tsx
-// Replace the MonomerMSAPanel component with this:
 
-import { MSAViewerPanel } from '@/app/msalite/components/MSAViewerPanel';
-import { AnnotationData } from '@/app/msalite/components/AnnotationPanel';
-
-// ... existing code ...
 
 function MonomerMSAPanel({
   pdbId,
