@@ -1,4 +1,4 @@
-// src/app/msalite/ResizableMSAContainer.tsx
+// src/app/msalite/components/ResizableMSAContainer.tsx
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
@@ -35,6 +35,14 @@ const DEFAULTS = {
   maxMsaHeight: 800,
 };
 
+// Estimate label width from longest name
+function calculateLabelWidth(sequences: SequenceData[]): number {
+  if (sequences.length === 0) return 80;
+  const longest = Math.max(...sequences.map(s => s.name.length));
+  // ~7px per char + padding
+  return Math.max(80, Math.min(200, longest * 7 + 16));
+}
+
 export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, ResizableMSAContainerProps>(
   function ResizableMSAContainer(props, ref) {
     const {
@@ -51,11 +59,14 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     } = props;
 
     const outerRef = useRef<HTMLDivElement>(null);
+    const labelsRef = useRef<HTMLDivElement>(null);
     const msaRef = useRef<any>(null);
     const navRef = useRef<any>(null);
 
     const [availableWidth, setAvailableWidth] = useState(0);
     const [isInitialized, setIsInitialized] = useState(false);
+
+    const labelWidth = calculateLabelWidth(sequences);
 
     useEffect(() => {
       const el = outerRef.current;
@@ -70,9 +81,11 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       return () => observer.disconnect();
     }, []);
 
+    // Width available for MSA (excluding labels)
+    const msaAvailableWidth = Math.max(0, availableWidth - labelWidth);
     const minContentWidth = maxLength * minTileWidth;
-    const contentWidth = Math.max(availableWidth, minContentWidth);
-    const needsScroll = availableWidth > 0 && contentWidth > availableWidth;
+    const contentWidth = Math.max(msaAvailableWidth, minContentWidth);
+    const needsScroll = msaAvailableWidth > 0 && contentWidth > msaAvailableWidth;
     const msaHeight = Math.min(sequences.length * rowHeight, maxMsaHeight);
 
     // Get the inner sequence viewer component
@@ -82,7 +95,6 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       return msa.renderRoot?.querySelector('msa-sequence-viewer') ?? null;
     }, []);
 
-    // Invalidate cache and redraw - this is the key fix
     const triggerRedraw = useCallback(() => {
       const seqViewer = getSequenceViewer();
       if (seqViewer && typeof seqViewer.invalidateAndRedraw === 'function') {
@@ -129,12 +141,10 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
 
         const seqViewer = getSequenceViewer();
         if (seqViewer) {
-          const labelWidth = msa.labelWidth || 0;
-          const seqViewerWidth = contentWidth - labelWidth;
-          seqViewer.setAttribute('width', String(seqViewerWidth));
-          seqViewer.width = seqViewerWidth;
-          seqViewer.style.width = `${seqViewerWidth}px`;
-          seqViewer.style.minWidth = `${seqViewerWidth}px`;
+          seqViewer.setAttribute('width', String(contentWidth));
+          seqViewer.width = contentWidth;
+          seqViewer.style.width = `${contentWidth}px`;
+          seqViewer.style.minWidth = `${contentWidth}px`;
 
           if (typeof seqViewer.invalidateAndRedraw === 'function') {
             seqViewer.invalidateAndRedraw();
@@ -156,7 +166,6 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
 
       msa.setAttribute('color-scheme', scheme);
 
-      // Wait for Lit to process the attribute change, then invalidate cache and redraw
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const seqViewer = getSequenceViewer();
@@ -205,6 +214,47 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
         requestAnimationFrame(() => triggerRedraw());
       });
     }, [colorScheme, isInitialized, triggerRedraw]);
+
+    // Sync vertical scroll between labels and MSA
+    useEffect(() => {
+      const msa = msaRef.current;
+      const labels = labelsRef.current;
+      if (!msa || !labels || !isInitialized) return;
+
+      // Find the scrollable element inside MSA
+      const findScrollContainer = (): HTMLElement | null => {
+        // Try common patterns for the scroll container
+        const seqViewer = msa.renderRoot?.querySelector('msa-sequence-viewer');
+        if (seqViewer?.renderRoot) {
+          const scrollable = seqViewer.renderRoot.querySelector('[style*="overflow"]')
+            || seqViewer.renderRoot.querySelector('.scroll-container')
+            || seqViewer.renderRoot.firstElementChild;
+          if (scrollable) return scrollable as HTMLElement;
+        }
+        return msa.renderRoot?.querySelector('[style*="overflow"]') as HTMLElement;
+      };
+
+      let scrollContainer = findScrollContainer();
+
+      // Retry after a delay if not found
+      if (!scrollContainer) {
+        const retryTimer = setTimeout(() => {
+          scrollContainer = findScrollContainer();
+          if (scrollContainer) attachListener(scrollContainer);
+        }, 500);
+        return () => clearTimeout(retryTimer);
+      }
+
+      const attachListener = (container: HTMLElement) => {
+        const handleScroll = () => {
+          labels.scrollTop = container.scrollTop;
+        };
+        container.addEventListener('scroll', handleScroll);
+        return () => container.removeEventListener('scroll', handleScroll);
+      };
+
+      return attachListener(scrollContainer);
+    }, [isInitialized]);
 
     // Event handlers
     useEffect(() => {
@@ -255,38 +305,67 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     }
 
     return (
-      <div
-        ref={outerRef}
-        className="w-full h-full"
-        style={{
-          overflowX: needsScroll ? 'auto' : 'hidden',
-          overflowY: 'hidden',
-        }}
-      >
-        <div style={{ width: contentWidth, minWidth: contentWidth }}>
-          <nightingale-manager style={{ display: 'block', width: contentWidth, minWidth: contentWidth }}>
-            <nightingale-navigation
-              ref={navRef}
-              height={navHeight}
-              length={maxLength}
-              display-start="1"
-              display-end={maxLength}
-              highlight-color="#EB3BFF22"
-              style={{ display: 'block' }}
-            />
-            <nightingale-msa
-              ref={msaRef}
-              height={msaHeight}
-              length={maxLength}
-              display-start="1"
-              display-end={maxLength}
-              color-scheme={colorScheme}
-              label-width="0"
-              highlight-event="onmouseover"
-              highlight-color="#00FF0044"
-              style={{ display: 'block' }}
-            />
-          </nightingale-manager>
+      <div ref={outerRef} className="w-full h-full flex">
+        {/* Labels column */}
+        <div
+          className="flex-shrink-0 flex flex-col"
+          style={{ width: labelWidth }}
+        >
+          {/* Spacer for nav height */}
+          <div style={{ height: navHeight, flexShrink: 0 }} />
+
+          {/* Labels container - syncs with MSA scroll */}
+          <div
+            ref={labelsRef}
+            className="overflow-hidden"
+            style={{ height: msaHeight }}
+          >
+            {sequences.map((seq, idx) => (
+              <div
+                key={seq.id}
+                className="truncate text-xs font-mono px-1 flex items-center"
+                style={{ height: rowHeight }}
+                title={seq.name}
+              >
+                {seq.name}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* MSA column */}
+        <div
+          className="flex-1 min-w-0"
+          style={{
+            overflowX: needsScroll ? 'auto' : 'hidden',
+            overflowY: 'hidden',
+          }}
+        >
+          <div style={{ width: contentWidth, minWidth: contentWidth }}>
+            <nightingale-manager style={{ display: 'block', width: contentWidth, minWidth: contentWidth }}>
+              <nightingale-navigation
+                ref={navRef}
+                height={navHeight}
+                length={maxLength}
+                display-start="1"
+                display-end={maxLength}
+                highlight-color="#EB3BFF22"
+                style={{ display: 'block' }}
+              />
+              <nightingale-msa
+                ref={msaRef}
+                height={msaHeight}
+                length={maxLength}
+                display-start="1"
+                display-end={maxLength}
+                color-scheme={colorScheme}
+                label-width="0"
+                highlight-event="onmouseover"
+                highlight-color="#00FF0044"
+                style={{ display: 'block' }}
+              />
+            </nightingale-manager>
+          </div>
         </div>
       </div>
     );
