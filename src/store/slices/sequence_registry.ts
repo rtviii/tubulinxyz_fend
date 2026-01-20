@@ -1,3 +1,4 @@
+// src/store/slices/sequence_registry.ts
 import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
 import { RootState } from '../store';
 
@@ -15,6 +16,7 @@ export interface MsaSequence {
   rowIndex: number;
   originType: SequenceOriginType;
   chainRef?: ChainRef;
+  family?: string;  // e.g., "tubulin_alpha", "tubulin_beta", "map_tau"
 }
 
 export type PositionMapping = Record<number, number>;
@@ -41,10 +43,11 @@ export const sequenceRegistrySlice = createSlice({
       sequence: string;
       originType: SequenceOriginType;
       chainRef?: ChainRef;
+      family?: string;
     }>) => {
-      const { id, name, sequence, originType, chainRef } = action.payload;
+      const { id, name, sequence, originType, chainRef, family } = action.payload;
       const existingRowIndex = state.sequences[id]?.rowIndex;
-      
+
       state.sequences[id] = {
         id,
         name,
@@ -52,32 +55,33 @@ export const sequenceRegistrySlice = createSlice({
         rowIndex: existingRowIndex ?? state.nextRowIndex,
         originType,
         chainRef,
+        family,
       };
-      
+
       if (existingRowIndex === undefined) {
         state.nextRowIndex += 1;
       }
     },
-    
+
     setPositionMapping: (state, action: PayloadAction<{
       sequenceId: string;
       mapping: PositionMapping;
     }>) => {
       state.positionMappings[action.payload.sequenceId] = action.payload.mapping;
     },
-    
+
     removeSequence: (state, action: PayloadAction<string>) => {
       const id = action.payload;
       delete state.sequences[id];
       delete state.positionMappings[id];
-      
+
       const sorted = Object.values(state.sequences).sort((a, b) => a.rowIndex - b.rowIndex);
       sorted.forEach((seq, idx) => {
         state.sequences[seq.id].rowIndex = idx;
       });
       state.nextRowIndex = sorted.length;
     },
-    
+
     clearPdbSequences: (state) => {
       Object.keys(state.sequences).forEach(id => {
         if (state.sequences[id].originType === 'pdb') {
@@ -85,14 +89,14 @@ export const sequenceRegistrySlice = createSlice({
           delete state.positionMappings[id];
         }
       });
-      
+
       const sorted = Object.values(state.sequences).sort((a, b) => a.rowIndex - b.rowIndex);
       sorted.forEach((seq, idx) => {
         state.sequences[seq.id].rowIndex = idx;
       });
       state.nextRowIndex = sorted.length;
     },
-    
+
     clearAllSequences: () => initialState,
   },
 });
@@ -130,7 +134,7 @@ export const selectAddedSequenceGroups = createSelector(
     const added = sequences.filter(s => s.originType !== 'master');
     const pdbGroups: Record<string, MsaSequence[]> = {};
     const customSeqs: MsaSequence[] = [];
-    
+
     added.forEach(seq => {
       if (seq.originType === 'pdb' && seq.chainRef) {
         const pdbId = seq.chainRef.pdbId;
@@ -140,17 +144,17 @@ export const selectAddedSequenceGroups = createSelector(
         customSeqs.push(seq);
       }
     });
-    
+
     const groups: { title: string; sequences: MsaSequence[] }[] = [];
-    
+
     Object.keys(pdbGroups).sort().forEach(pdbId => {
       groups.push({ title: `Structure: ${pdbId}`, sequences: pdbGroups[pdbId] });
     });
-    
+
     if (customSeqs.length > 0) {
       groups.push({ title: 'Custom Sequences', sequences: customSeqs });
     }
-    
+
     return groups;
   }
 );
@@ -164,9 +168,9 @@ export const selectSequenceByChain = createSelector(
   [selectSequencesMap, (_state: RootState, pdbId: string, _chainId: string) => pdbId, (_state: RootState, _pdbId: string, chainId: string) => chainId],
   (sequences, pdbId, chainId) => {
     return Object.values(sequences).find(
-      s => s.originType === 'pdb' && 
-           s.chainRef?.pdbId === pdbId && 
-           s.chainRef?.chainId === chainId
+      s => s.originType === 'pdb' &&
+        s.chainRef?.pdbId === pdbId &&
+        s.chainRef?.chainId === chainId
     ) ?? null;
   }
 );
@@ -180,9 +184,9 @@ export const selectIsChainAligned = createSelector(
   [selectSequencesMap, (_state: RootState, pdbId: string, _chainId: string) => pdbId, (_state: RootState, _pdbId: string, chainId: string) => chainId],
   (sequences, pdbId, chainId) => {
     return Object.values(sequences).some(
-      s => s.originType === 'pdb' && 
-           s.chainRef?.pdbId === pdbId && 
-           s.chainRef?.chainId === chainId
+      s => s.originType === 'pdb' &&
+        s.chainRef?.pdbId === pdbId &&
+        s.chainRef?.chainId === chainId
     );
   }
 );

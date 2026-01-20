@@ -68,10 +68,23 @@ export default function MSALitePage() {
   const maxLength = masterData?.alignment_length ?? 0;
 
   // Combine master + added sequences for display
+
   const allSequences = [
-    ...masterSequences.map((seq) => ({ id: seq.id, name: seq.name, sequence: seq.sequence })),
+    ...masterSequences.map((seq) => ({
+      id: seq.id,
+      name: seq.name,
+      sequence: seq.sequence,
+      originType: seq.originType,
+      family: seq.family,
+    })),
     ...addedGroups.flatMap((group) =>
-      group.sequences.map((seq) => ({ id: seq.id, name: seq.name, sequence: seq.sequence }))
+      group.sequences.map((seq) => ({
+        id: seq.id,
+        name: seq.name,
+        sequence: seq.sequence,
+        originType: seq.originType,
+        family: seq.family,
+      }))
     ),
   ];
 

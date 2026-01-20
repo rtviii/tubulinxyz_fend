@@ -1,8 +1,9 @@
+// src/app/structures/[rcsb_id]/page.tsx
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { useAppSelector } from '@/store/store';
+import { useAppSelector, useAppDispatch } from '@/store/store';
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
 import {
   selectLoadedStructure,
@@ -14,10 +15,40 @@ import {
   selectAlignedStructuresForActiveChain,
 } from '@/components/molstar/state/selectors';
 import { createClassificationFromProfile } from '@/services/profile_service';
+import {
+  addSequence,
+  selectMasterSequences,
+  selectPdbSequences,
+  selectPositionMapping,
+  selectIsChainAligned,
+} from '@/store/slices/sequence_registry';
+import { useGetMasterProfileMsaMasterGetQuery } from '@/store/tubxz_api';
+import { useChainAlignment } from '@/app/msalite/hooks/useChainAlignment';
+import { useNightingaleComponents } from '@/app/msalite/useNightingaleComponents';
+import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/app/msalite/components/ResizableMSAContainer';
+import { highlightResidueInInstance, clearHighlightInInstance } from '@/components/molstar/sync/structureSync';
+
 import { API_BASE_URL } from '@/config';
-import { PolymerComponent, LigandComponent, AlignedStructure, ViewMode } from '@/components/molstar/core/types';
+import { PolymerComponent, LigandComponent, AlignedStructure } from '@/components/molstar/core/types';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import { Eye, EyeOff, Focus, ArrowLeft, Microscope, Plus, X, Loader2 } from 'lucide-react';
+
+// ============================================================
+// Types
+// ============================================================
+
+interface StructureProfile {
+  rcsb_id: string;
+  entities: Record<string, {
+    family?: string;
+    [key: string]: any;
+  }>;
+  polypeptides: Array<{
+    auth_asym_id: string;
+    entity_id: string;
+  }>;
+  [key: string]: any;
+}
 
 // ============================================================
 // Main Page
@@ -26,8 +57,8 @@ import { Eye, EyeOff, Focus, ArrowLeft, Microscope, Plus, X, Loader2 } from 'luc
 export default function StructureProfilePage() {
   const params = useParams();
   const pdbIdFromUrl = (params.rcsb_id as string)?.toUpperCase();
+  const dispatch = useAppDispatch();
 
-  // Single viewer instance
   const containerRef = useRef<HTMLDivElement>(null);
   const { instance, isInitialized } = useMolstarInstance(containerRef, 'structure');
 
@@ -39,9 +70,27 @@ export default function StructureProfilePage() {
   const activeChainId = useAppSelector((state) => selectActiveMonomerChainId(state, 'structure'));
   const alignedStructures = useAppSelector((state) => selectAlignedStructuresForActiveChain(state, 'structure'));
 
+  // Local state
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [profile, setProfile] = useState<StructureProfile | null>(null);
   const loadedFromUrlRef = useRef<string | null>(null);
+  const masterSequencesInitialized = useRef(false);
+
+  // MSA setup
+  const { areLoaded: nglLoaded } = useNightingaleComponents();
+  const { data: masterData } = useGetMasterProfileMsaMasterGetQuery();
+  const masterSequences = useAppSelector(selectMasterSequences);
+
+  // Initialize master sequences once
+  useEffect(() => {
+    if (!masterData?.sequences || masterSequencesInitialized.current) return;
+    masterData.sequences.forEach((seq: any) => {
+      const name = seq.id.split('|')[0];
+      dispatch(addSequence({ id: name, name, sequence: seq.sequence, originType: 'master' }));
+    });
+    masterSequencesInitialized.current = true;
+  }, [masterData, dispatch]);
 
   // Load structure on URL change
   useEffect(() => {
@@ -57,6 +106,8 @@ export default function StructureProfilePage() {
         if (!response.ok) throw new Error('Failed to fetch profile');
 
         const profileData = await response.json();
+        setProfile(profileData); // Store for MSA use
+
         const classification = createClassificationFromProfile(profileData);
 
         const success = await instance.loadStructure(pdbIdFromUrl, classification);
@@ -75,16 +126,25 @@ export default function StructureProfilePage() {
     loadStructure();
   }, [isInitialized, instance, pdbIdFromUrl]);
 
+  // Helper to get family for a chain
+  const getFamilyForChain = useCallback((chainId: string): string | undefined => {
+    if (!profile) return undefined;
+    const poly = profile.polypeptides.find(p => p.auth_asym_id === chainId);
+    if (!poly) return undefined;
+    return profile.entities[poly.entity_id]?.family;
+  }, [profile]);
+
+  const isMonomerView = viewMode === 'monomer';
+
   return (
     <div className="h-screen w-screen overflow-hidden bg-gray-100">
       <div className="flex h-full">
-        {/* Sidebar - slides between structure and monomer */}
+        {/* Sidebar */}
         <div className="relative w-80 h-full flex-shrink-0 overflow-hidden">
           <div
             className="flex h-full transition-transform duration-300 ease-in-out"
-            style={{ transform: viewMode === 'monomer' ? 'translateX(-100%)' : 'translateX(0)' }}
+            style={{ transform: isMonomerView ? 'translateX(-100%)' : 'translateX(0)' }}
           >
-            {/* Structure sidebar */}
             <div className="w-80 h-full flex-shrink-0">
               <StructureSidebar
                 loadedStructure={loadedStructure}
@@ -92,10 +152,9 @@ export default function StructureProfilePage() {
                 ligandComponents={ligandComponents}
                 instance={instance}
                 error={error}
+                profile={profile}
               />
             </div>
-
-            {/* Monomer sidebar */}
             <div className="w-80 h-full flex-shrink-0">
               <MonomerSidebar
                 activeChainId={activeChainId}
@@ -103,18 +162,184 @@ export default function StructureProfilePage() {
                 alignedStructures={alignedStructures}
                 instance={instance}
                 pdbId={loadedStructure}
+                profile={profile}
               />
             </div>
           </div>
         </div>
 
-        {/* Single Molstar canvas */}
-        <div className="flex-1 h-full relative">
-          <div ref={containerRef} className="w-full h-full" />
-          {(!isInitialized || isLoading) && (
-            <LoadingOverlay text={isLoading ? 'Loading structure...' : 'Initializing viewer...'} />
+        {/* Main content area */}
+        <div className="flex-1 h-full flex flex-col">
+          {/* Molstar viewer */}
+          <div
+            className={`relative transition-all duration-300 ${isMonomerView ? 'h-1/2' : 'h-full'}`}
+          >
+            <div ref={containerRef} className="w-full h-full" />
+            {(!isInitialized || isLoading) && (
+              <LoadingOverlay text={isLoading ? 'Loading structure...' : 'Initializing viewer...'} />
+            )}
+          </div>
+
+          {/* MSA Panel - only in monomer view */}
+          {isMonomerView && activeChainId && (
+            <div className="h-1/2 border-t border-gray-300 bg-white">
+              <MonomerMSAPanel
+                pdbId={loadedStructure}
+                chainId={activeChainId}
+                family={getFamilyForChain(activeChainId)}
+                instance={instance}
+                masterSequences={masterSequences}
+                maxLength={masterData?.alignment_length ?? 0}
+                nglLoaded={nglLoaded}
+              />
+            </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Monomer MSA Panel
+// ============================================================
+
+function MonomerMSAPanel({
+  pdbId,
+  chainId,
+  family,
+  instance,
+  masterSequences,
+  maxLength,
+  nglLoaded,
+}: {
+  pdbId: string | null;
+  chainId: string;
+  family?: string;
+  instance: MolstarInstance | null;
+  masterSequences: any[];
+  maxLength: number;
+  nglLoaded: boolean;
+}) {
+  const msaRef = useRef<ResizableMSAContainerHandle>(null);
+  const { alignChain, isAligning } = useChainAlignment();
+
+  const sequenceId = pdbId ? `${pdbId}_${chainId}` : null;
+  const isAligned = useAppSelector((state) =>
+    pdbId ? selectIsChainAligned(state, pdbId, chainId) : false
+  );
+  const pdbSequences = useAppSelector(selectPdbSequences);
+  const positionMapping = useAppSelector((state) =>
+    sequenceId ? selectPositionMapping(state, sequenceId) : null
+  );
+
+  // Auto-align when entering monomer view
+  useEffect(() => {
+    if (!instance || !pdbId || !chainId || isAligned || isAligning) return;
+
+    alignChain(pdbId, chainId, instance, family).catch(err => {
+      console.error('Auto-align failed:', err);
+    });
+  }, [instance, pdbId, chainId, family, isAligned, isAligning, alignChain]);
+
+  // Build sequences for display
+  const allSequences = [
+    ...masterSequences.map((seq) => ({
+      id: seq.id,
+      name: seq.name,
+      sequence: seq.sequence,
+      originType: seq.originType as 'master',
+    })),
+    ...pdbSequences.map((seq) => ({
+      id: seq.id,
+      name: seq.name,
+      sequence: seq.sequence,
+      originType: seq.originType as 'pdb',
+      family: seq.family,
+    })),
+  ];
+
+  // Handle MSA hover -> Molstar highlight
+  const handleResidueHover = useCallback((seqId: string, msaPosition: number) => {
+    if (!instance || !positionMapping) return;
+
+    // Only sync if hovering on the current chain's sequence
+    if (seqId !== sequenceId) return;
+
+    const authSeqId = positionMapping[msaPosition];
+    if (authSeqId !== undefined) {
+      highlightResidueInInstance(instance, chainId, authSeqId, true);
+    }
+  }, [instance, chainId, sequenceId, positionMapping]);
+
+  const handleResidueLeave = useCallback(() => {
+    clearHighlightInInstance(instance);
+  }, [instance]);
+
+  const handleResidueClick = useCallback((seqId: string, msaPosition: number) => {
+    if (!instance || !positionMapping) return;
+    if (seqId !== sequenceId) return;
+
+    const authSeqId = positionMapping[msaPosition];
+    if (authSeqId !== undefined) {
+      instance.focusResidue(chainId, authSeqId);
+    }
+  }, [instance, chainId, sequenceId, positionMapping]);
+
+  if (!nglLoaded || maxLength === 0) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2" />
+          <p className="text-sm text-gray-500">Loading MSA components...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isAligning) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2" />
+          <p className="text-sm text-gray-500">Aligning {pdbId}:{chainId}...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="flex-shrink-0 px-3 py-2 border-b bg-gray-50 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-gray-700">
+            Sequence Alignment
+          </span>
+          <span className="text-xs text-gray-500">
+            {allSequences.length} sequences, {maxLength} positions
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {isAligned && (
+            <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">
+              {pdbId}:{chainId} aligned
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* MSA */}
+      <div className="flex-1 min-h-0 p-2">
+        <ResizableMSAContainer
+          ref={msaRef}
+          sequences={allSequences}
+          maxLength={maxLength}
+          colorScheme="clustal2"
+          onResidueHover={handleResidueHover}
+          onResidueLeave={handleResidueLeave}
+          onResidueClick={handleResidueClick}
+        />
       </div>
     </div>
   );
@@ -130,13 +355,23 @@ function StructureSidebar({
   ligandComponents,
   instance,
   error,
+  profile,
 }: {
   loadedStructure: string | null;
   polymerComponents: PolymerComponent[];
   ligandComponents: LigandComponent[];
   instance: MolstarInstance | null;
   error: string | null;
+  profile: StructureProfile | null;
 }) {
+  // Helper to get family for chain
+  const getFamilyForChain = (chainId: string): string | undefined => {
+    if (!profile) return undefined;
+    const poly = profile.polypeptides.find(p => p.auth_asym_id === chainId);
+    if (!poly) return undefined;
+    return profile.entities[poly.entity_id]?.family;
+  };
+
   return (
     <div className="h-full bg-white border-r border-gray-200 p-4 overflow-y-auto">
       <h1 className="text-lg font-semibold mb-4">{loadedStructure ?? 'No Structure'}</h1>
@@ -147,7 +382,12 @@ function StructureSidebar({
         <h2 className="text-sm font-medium text-gray-700 mb-2">Chains</h2>
         <div className="space-y-1">
           {polymerComponents.map((chain) => (
-            <ChainRow key={chain.chainId} chain={chain} instance={instance} />
+            <ChainRow
+              key={chain.chainId}
+              chain={chain}
+              instance={instance}
+              family={getFamilyForChain(chain.chainId)}
+            />
           ))}
         </div>
       </section>
@@ -176,12 +416,14 @@ function MonomerSidebar({
   alignedStructures,
   instance,
   pdbId,
+  profile,
 }: {
   activeChainId: string | null;
   polymerComponents: PolymerComponent[];
   alignedStructures: AlignedStructure[];
   instance: MolstarInstance | null;
   pdbId: string | null;
+  profile: StructureProfile | null;
 }) {
   const [showAlignForm, setShowAlignForm] = useState(false);
 
@@ -195,6 +437,16 @@ function MonomerSidebar({
     }
   };
 
+  // Get family for active chain
+  const activeFamily = (() => {
+    if (!profile || !activeChainId) return undefined;
+    const poly = profile.polypeptides.find(p => p.auth_asym_id === activeChainId);
+    if (!poly) return undefined;
+    return profile.entities[poly.entity_id]?.family;
+  })();
+
+  const formattedFamily = activeFamily ? formatFamilyShort(activeFamily) : null;
+
   return (
     <div className="h-full bg-white border-r border-gray-200 p-4 overflow-y-auto">
       <button
@@ -205,7 +457,12 @@ function MonomerSidebar({
         Back to structure
       </button>
 
-      <h1 className="text-lg font-semibold mb-1">Chain {activeChainId}</h1>
+      <h1 className="text-lg font-semibold mb-1">
+        Chain {activeChainId}
+        {formattedFamily && (
+          <span className="ml-2 text-sm font-normal text-gray-500">({formattedFamily})</span>
+        )}
+      </h1>
       <p className="text-sm text-gray-500 mb-4">{pdbId}</p>
 
       {/* Chain switcher */}
@@ -263,7 +520,7 @@ function MonomerSidebar({
         </div>
       </section>
 
-      {/* Placeholder for annotations */}
+      {/* Annotations placeholder */}
       <section>
         <h2 className="text-sm font-medium text-gray-700 mb-2">Annotations</h2>
         <p className="text-xs text-gray-400">Coming soon...</p>
@@ -273,8 +530,136 @@ function MonomerSidebar({
 }
 
 // ============================================================
-// Align Structure Form
+// Helper Components (same as before)
 // ============================================================
+
+function formatFamilyShort(family: string): string {
+  const tubulinMatch = family.match(/^tubulin_(\w+)$/);
+  if (tubulinMatch) {
+    return tubulinMatch[1].charAt(0).toUpperCase() + tubulinMatch[1].slice(1);
+  }
+  const mapMatch = family.match(/^map_(\w+)/);
+  if (mapMatch) {
+    return mapMatch[1].toUpperCase();
+  }
+  return family;
+}
+
+function LoadingOverlay({ text }: { text: string }) {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-white/75">
+      <div className="text-center">
+        <div className="animate-spin h-8 w-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2" />
+        <p className="text-gray-600">{text}</p>
+      </div>
+    </div>
+  );
+}
+
+function ChainRow({
+  chain,
+  instance,
+  family,
+}: {
+  chain: PolymerComponent;
+  instance: MolstarInstance | null;
+  family?: string;
+}) {
+  const componentState = useAppSelector((state) => selectComponentState(state, 'structure', chain.chainId));
+
+  const handleOpenMonomer = () => {
+    instance?.enterMonomerView(chain.chainId);
+  };
+
+  const familyLabel = family ? formatFamilyShort(family) : null;
+
+  return (
+    <div
+      className={`flex items-center justify-between py-1 px-2 rounded text-sm cursor-pointer transition-colors ${componentState.hovered ? 'bg-blue-100' : 'hover:bg-gray-100'
+        }`}
+      onMouseEnter={() => instance?.highlightChain(chain.chainId, true)}
+      onMouseLeave={() => instance?.highlightChain(chain.chainId, false)}
+      onClick={() => instance?.focusChain(chain.chainId)}
+    >
+      <div className="flex items-center gap-2">
+        <span className="font-mono">{chain.chainId}</span>
+        {familyLabel && (
+          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+            {familyLabel}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenMonomer();
+          }}
+          className="p-1 text-gray-400 hover:text-blue-600"
+          title="Open monomer view"
+        >
+          <Microscope size={14} />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            instance?.focusChain(chain.chainId);
+          }}
+          className="p-1 text-gray-400 hover:text-gray-700"
+        >
+          <Focus size={14} />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            instance?.setChainVisibility(chain.chainId, !componentState.visible);
+          }}
+          className="p-1 text-gray-400 hover:text-gray-700"
+        >
+          {componentState.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function LigandRow({ ligand, instance }: { ligand: LigandComponent; instance: MolstarInstance | null }) {
+  const componentState = useAppSelector((state) => selectComponentState(state, 'structure', ligand.uniqueKey));
+
+  return (
+    <div
+      className={`flex items-center justify-between py-1 px-2 rounded text-sm cursor-pointer transition-colors ${componentState.hovered ? 'bg-blue-100' : 'hover:bg-gray-100'
+        }`}
+      onMouseEnter={() => instance?.highlightLigand(ligand.uniqueKey, true)}
+      onMouseLeave={() => instance?.highlightLigand(ligand.uniqueKey, false)}
+      onClick={() => instance?.focusLigand(ligand.uniqueKey)}
+    >
+      <span className="font-mono text-xs">
+        {ligand.compId} ({ligand.authAsymId}:{ligand.authSeqId})
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            instance?.focusLigand(ligand.uniqueKey);
+          }}
+          className="p-1 text-gray-400 hover:text-gray-700"
+        >
+          <Focus size={14} />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            instance?.setLigandVisibility(ligand.uniqueKey, !componentState.visible);
+          }}
+          className="p-1 text-gray-400 hover:text-gray-700"
+        >
+          {componentState.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function AlignStructureForm({
   targetChainId,
@@ -361,10 +746,6 @@ function AlignStructureForm({
   );
 }
 
-// ============================================================
-// Aligned Structure Row
-// ============================================================
-
 function AlignedStructureRow({
   aligned,
   instance,
@@ -402,115 +783,6 @@ function AlignedStructureRow({
           className="p-1 text-gray-400 hover:text-red-600"
         >
           <X size={14} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-// Shared Components
-// ============================================================
-
-function LoadingOverlay({ text }: { text: string }) {
-  return (
-    <div className="absolute inset-0 flex items-center justify-center bg-white/75">
-      <div className="text-center">
-        <div className="animate-spin h-8 w-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2" />
-        <p className="text-gray-600">{text}</p>
-      </div>
-    </div>
-  );
-}
-
-function ChainRow({
-  chain,
-  instance,
-}: {
-  chain: PolymerComponent;
-  instance: MolstarInstance | null;
-}) {
-  const componentState = useAppSelector((state) => selectComponentState(state, 'structure', chain.chainId));
-
-  const handleOpenMonomer = () => {
-    instance?.enterMonomerView(chain.chainId);
-  };
-
-  return (
-    <div
-      className={`flex items-center justify-between py-1 px-2 rounded text-sm cursor-pointer transition-colors ${componentState.hovered ? 'bg-blue-100' : 'hover:bg-gray-100'
-        }`}
-      onMouseEnter={() => instance?.highlightChain(chain.chainId, true)}
-      onMouseLeave={() => instance?.highlightChain(chain.chainId, false)}
-      onClick={() => instance?.focusChain(chain.chainId)}
-    >
-      <span className="font-mono">{chain.chainId}</span>
-      <div className="flex items-center gap-1">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            handleOpenMonomer();
-          }}
-          className="p-1 text-gray-400 hover:text-blue-600"
-          title="Open monomer view"
-        >
-          <Microscope size={14} />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            instance?.focusChain(chain.chainId);
-          }}
-          className="p-1 text-gray-400 hover:text-gray-700"
-        >
-          <Focus size={14} />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            instance?.setChainVisibility(chain.chainId, !componentState.visible);
-          }}
-          className="p-1 text-gray-400 hover:text-gray-700"
-        >
-          {componentState.visible ? <Eye size={14} /> : <EyeOff size={14} />}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function LigandRow({ ligand, instance }: { ligand: LigandComponent; instance: MolstarInstance | null }) {
-  const componentState = useAppSelector((state) => selectComponentState(state, 'structure', ligand.uniqueKey));
-
-  return (
-    <div
-      className={`flex items-center justify-between py-1 px-2 rounded text-sm cursor-pointer transition-colors ${componentState.hovered ? 'bg-blue-100' : 'hover:bg-gray-100'
-        }`}
-      onMouseEnter={() => instance?.highlightLigand(ligand.uniqueKey, true)}
-      onMouseLeave={() => instance?.highlightLigand(ligand.uniqueKey, false)}
-      onClick={() => instance?.focusLigand(ligand.uniqueKey)}
-    >
-      <span className="font-mono text-xs">
-        {ligand.compId} ({ligand.authAsymId}:{ligand.authSeqId})
-      </span>
-      <div className="flex items-center gap-1">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            instance?.focusLigand(ligand.uniqueKey);
-          }}
-          className="p-1 text-gray-400 hover:text-gray-700"
-        >
-          <Focus size={14} />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            instance?.setLigandVisibility(ligand.uniqueKey, !componentState.visible);
-          }}
-          className="p-1 text-gray-400 hover:text-gray-700"
-        >
-          {componentState.visible ? <Eye size={14} /> : <EyeOff size={14} />}
         </button>
       </div>
     </div>

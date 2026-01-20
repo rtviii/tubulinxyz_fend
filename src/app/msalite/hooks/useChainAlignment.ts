@@ -1,3 +1,4 @@
+// src/app/msalite/hooks/useChainAlignment.ts
 import { useCallback, useState } from 'react';
 import { useAppDispatch } from '@/store/store';
 import { addSequence, setPositionMapping, PositionMapping } from '@/store/slices/sequence_registry';
@@ -8,6 +9,24 @@ export interface AlignmentResult {
   sequenceId: string;
   alignedSequence: string;
   mapping: PositionMapping;
+}
+
+// "tubulin_alpha" -> "Alpha", "map_tau" -> "TAU"
+function formatFamily(family: string | undefined): string | undefined {
+  if (!family) return undefined;
+  
+  const tubulinMatch = family.match(/^tubulin_(\w+)$/);
+  if (tubulinMatch) {
+    const type = tubulinMatch[1];
+    return type.charAt(0).toUpperCase() + type.slice(1);
+  }
+  
+  const mapMatch = family.match(/^map_(\w+)/);
+  if (mapMatch) {
+    return mapMatch[1].toUpperCase();
+  }
+  
+  return family;
 }
 
 export function useChainAlignment() {
@@ -22,20 +41,19 @@ export function useChainAlignment() {
     async (
       pdbId: string,
       chainId: string,
-      instance: MolstarInstance  // Changed from MolstarService
+      instance: MolstarInstance,
+      family?: string
     ): Promise<AlignmentResult> => {
       setIsAligning(true);
       setCurrentChain(chainId);
       setError(null);
 
       try {
-        // Extract sequence from Molstar - use instance method directly
         const observed = instance.getObservedSequence(chainId);
         if (!observed) {
           throw new Error(`Failed to get observed sequence for ${pdbId}:${chainId}`);
         }
 
-        // Call backend alignment
         const result = await alignSequence({
           alignmentRequest: {
             sequence: observed.sequence,
@@ -45,7 +63,6 @@ export function useChainAlignment() {
           },
         }).unwrap();
 
-        // Build position mapping: msaPosition -> authSeqId
         const positionMapping: PositionMapping = {};
         result.mapping.forEach((msaPos: number, idx: number) => {
           if (msaPos !== -1) {
@@ -54,14 +71,20 @@ export function useChainAlignment() {
         });
 
         const sequenceId = `${pdbId}_${chainId}`;
+        const formattedFamily = formatFamily(family);
+        
+        // Build display name: "5JCO:A" or "5JCO:A (Alpha)"
+        const displayName = formattedFamily 
+          ? `${pdbId}:${chainId} (${formattedFamily})`
+          : `${pdbId}:${chainId}`;
 
-        // Register in Redux
         dispatch(addSequence({
           id: sequenceId,
-          name: sequenceId,
+          name: displayName,
           sequence: result.aligned_sequence,
           originType: 'pdb',
           chainRef: { pdbId, chainId },
+          family,
         }));
 
         dispatch(setPositionMapping({

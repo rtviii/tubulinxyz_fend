@@ -7,6 +7,8 @@ interface SequenceData {
   id: string;
   name: string;
   sequence: string;
+  family?: string;
+  originType?: 'master' | 'pdb' | 'custom';
 }
 
 interface ResizableMSAContainerProps {
@@ -35,12 +37,10 @@ const DEFAULTS = {
   maxMsaHeight: 800,
 };
 
-// Estimate label width from longest name
 function calculateLabelWidth(sequences: SequenceData[]): number {
-  if (sequences.length === 0) return 80;
+  if (sequences.length === 0) return 100;
   const longest = Math.max(...sequences.map(s => s.name.length));
-  // ~7px per char + padding
-  return Math.max(80, Math.min(200, longest * 7 + 16));
+  return Math.max(100, Math.min(220, longest * 7 + 24));
 }
 
 export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, ResizableMSAContainerProps>(
@@ -81,14 +81,12 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       return () => observer.disconnect();
     }, []);
 
-    // Width available for MSA (excluding labels)
     const msaAvailableWidth = Math.max(0, availableWidth - labelWidth);
     const minContentWidth = maxLength * minTileWidth;
     const contentWidth = Math.max(msaAvailableWidth, minContentWidth);
     const needsScroll = msaAvailableWidth > 0 && contentWidth > msaAvailableWidth;
     const msaHeight = Math.min(sequences.length * rowHeight, maxMsaHeight);
 
-    // Get the inner sequence viewer component
     const getSequenceViewer = useCallback((): any | null => {
       const msa = msaRef.current;
       if (!msa) return null;
@@ -120,12 +118,8 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
           svg.style.minWidth = `${contentWidth}px`;
         }
 
-        if (typeof nav.onDimensionsChange === 'function') {
-          nav.onDimensionsChange();
-        }
-        if (typeof nav.renderD3 === 'function') {
-          nav.renderD3();
-        }
+        if (typeof nav.onDimensionsChange === 'function') nav.onDimensionsChange();
+        if (typeof nav.renderD3 === 'function') nav.renderD3();
       }
 
       if (msa) {
@@ -135,9 +129,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
         msa.style.minWidth = `${contentWidth}px`;
         msa.style.maxWidth = `${contentWidth}px`;
 
-        if (typeof msa.onDimensionsChange === 'function') {
-          msa.onDimensionsChange();
-        }
+        if (typeof msa.onDimensionsChange === 'function') msa.onDimensionsChange();
 
         const seqViewer = getSequenceViewer();
         if (seqViewer) {
@@ -187,7 +179,6 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       requestAnimationFrame(() => syncWidths());
     }, [contentWidth, syncWidths]);
 
-    // Load data into MSA
     useEffect(() => {
       if (!msaRef.current || sequences.length === 0 || contentWidth === 0) return;
 
@@ -206,7 +197,6 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       return () => clearTimeout(timer);
     }, [sequences, contentWidth, syncWidths]);
 
-    // Handle color scheme prop changes
     useEffect(() => {
       if (!msaRef.current || !isInitialized) return;
       msaRef.current.setAttribute('color-scheme', colorScheme);
@@ -215,15 +205,13 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       });
     }, [colorScheme, isInitialized, triggerRedraw]);
 
-    // Sync vertical scroll between labels and MSA
+    // Sync vertical scroll
     useEffect(() => {
       const msa = msaRef.current;
       const labels = labelsRef.current;
       if (!msa || !labels || !isInitialized) return;
 
-      // Find the scrollable element inside MSA
       const findScrollContainer = (): HTMLElement | null => {
-        // Try common patterns for the scroll container
         const seqViewer = msa.renderRoot?.querySelector('msa-sequence-viewer');
         if (seqViewer?.renderRoot) {
           const scrollable = seqViewer.renderRoot.querySelector('[style*="overflow"]')
@@ -236,7 +224,6 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
 
       let scrollContainer = findScrollContainer();
 
-      // Retry after a delay if not found
       if (!scrollContainer) {
         const retryTimer = setTimeout(() => {
           scrollContainer = findScrollContainer();
@@ -256,7 +243,6 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       return attachListener(scrollContainer);
     }, [isInitialized]);
 
-    // Event handlers
     useEffect(() => {
       const msa = msaRef.current;
       if (!msa || !isInitialized) return;
@@ -308,27 +294,20 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       <div ref={outerRef} className="w-full h-full flex">
         {/* Labels column */}
         <div
-          className="flex-shrink-0 flex flex-col"
+          className="flex-shrink-0 flex flex-col border-r border-gray-200"
           style={{ width: labelWidth }}
         >
-          {/* Spacer for nav height */}
-          <div style={{ height: navHeight, flexShrink: 0 }} />
+          {/* Spacer for nav */}
+          <div style={{ height: navHeight, flexShrink: 0 }} className="border-b border-gray-100" />
 
-          {/* Labels container - syncs with MSA scroll */}
+          {/* Labels */}
           <div
             ref={labelsRef}
             className="overflow-hidden"
             style={{ height: msaHeight }}
           >
-            {sequences.map((seq, idx) => (
-              <div
-                key={seq.id}
-                className="truncate text-xs font-mono px-1 flex items-center"
-                style={{ height: rowHeight }}
-                title={seq.name}
-              >
-                {seq.name}
-              </div>
+            {sequences.map((seq) => (
+              <SequenceLabel key={seq.id} seq={seq} height={rowHeight} />
             ))}
           </div>
         </div>
@@ -371,3 +350,29 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     );
   }
 );
+
+// Separate label component for cleaner styling
+function SequenceLabel({ seq, height }: { seq: SequenceData; height: number }) {
+  const isMaster = seq.originType === 'master';
+  const isPdb = seq.originType === 'pdb';
+
+  return (
+    <div
+      className={`
+        flex items-center gap-1.5 px-2 text-xs font-mono
+        border-b border-gray-50 cursor-default select-none
+        ${isMaster ? 'bg-gray-50 text-gray-600' : 'bg-white text-gray-800'}
+        hover:bg-blue-50
+      `}
+      style={{ height }}
+      title={seq.name}
+    >
+      {isPdb && (
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+      )}
+      <span className="truncate">
+        {seq.name}
+      </span>
+    </div>
+  );
+}
