@@ -2,33 +2,34 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useMolstarService } from '@/components/molstar/molstar_service';
 import { MolstarNode } from '@/components/molstar/molstar_spec';
-import { useAppDispatch, useAppSelector } from '@/store/store';
-import { selectStructure, selectSelectedStructure, selectIsLoading, selectError, setLoading, setError } from '@/store/slices/tubulin_structures';
+import { useAppSelector } from '@/store/store';
 import React from 'react';
 import { EntitiesPanel } from '@/components/entities_panel';
 import { useParams } from 'next/navigation';
-import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 import { SubunitData } from '@/components/protofilament_grid';
 import { SequenceViewer } from '@/components/sequence_viewer';
 import { useMolstarSync } from '@/hooks/useMolstarSync';
-import { TubulinClassification } from '@/components/molstar/molstar_preset_computed_residues';
+import { TubulinClassification } from '@/components/molstar/colors/molstar_preset_computed_residues';
 import { createClassificationFromProfile } from '@/services/profile_service';
+import { API_BASE_URL } from '@/config';
 
 const SUGGESTED_PDB_IDS = ["6WVR", "8QV0", "3JAT", "6O2R", "4TV9", "6U0H", "8VRK", "6E7B", "5J2T", "6FKJ", "4O2B", "6DPU", "1SA0", "6BR1", "7SJ8", "2MZ7", "7SJ9", "6O2T"];
 
 function SettingsPanel({
   isMolstarReady,
+  currentStructure,
+  isLoading,
+  error,
   onStructureSelect,
   onBackendStructureSelect,
 }: {
   isMolstarReady: boolean;
+  currentStructure: string | null;
+  isLoading: boolean;
+  error: string | null;
   onStructureSelect: (pdbId: string) => void;
   onBackendStructureSelect: (filename: string) => void;
 }) {
-  const selectedStructure = useAppSelector(selectSelectedStructure);
-  const isLoading = useAppSelector(selectIsLoading);
-  const error = useAppSelector(selectError);
-
   const [customPdbId, setCustomPdbId] = useState('');
   const [suggestedPdbId, setSuggestedPdbId] = useState<string | null>(null);
 
@@ -124,7 +125,7 @@ function SettingsPanel({
             <button
               onClick={() => handleSelect(suggestedPdbId)}
               disabled={isInteractionDisabled}
-              className={`w-full text-left p-2 rounded-lg border transition-colors ${selectedStructure === suggestedPdbId ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-500' : 'bg-white border-gray-200 hover:bg-gray-100'} ${isInteractionDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`w-full text-left p-2 rounded-lg border transition-colors ${currentStructure === suggestedPdbId ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-500' : 'bg-white border-gray-200 hover:bg-gray-100'} ${isInteractionDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <span className="font-medium text-sm text-gray-900">{suggestedPdbId}</span>
               <p className="text-xs text-gray-400">Randomly selected example</p>
@@ -141,17 +142,22 @@ export default function TubulinViewerPage() {
   const molstarRef = useRef<HTMLDivElement>(null);
   const loadedPdbFromUrl = useRef<string | null>(null);
   const { isInitialized, service } = useMolstarService(molstarRef, 'main');
-  const dispatch = useAppDispatch();
-  const selectedStructure = useAppSelector(selectSelectedStructure);
+  
+  // Use molstarRefs.currentStructure instead of tubulin_structures slice
+  const currentStructure = useAppSelector(state => state.molstarRefs.currentStructure);
+  
+  // Local UI state for this page
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   useMolstarSync();
 
-  const params                                        = useParams();
+  const params = useParams();
   const [selectedGridSubunit, setSelectedGridSubunit] = useState<string | null>(null);
-  const [hoveredGridSubunit, setHoveredGridSubunit]   = useState<string | null>(null);
-  const [hoveredSubunitData, setHoveredSubunitData]   = useState<SubunitData | null>(null);
-  const [classificationMap, setClassificationMap]     = useState<TubulinClassification | null>(null);
+  const [hoveredGridSubunit, setHoveredGridSubunit] = useState<string | null>(null);
+  const [hoveredSubunitData, setHoveredSubunitData] = useState<SubunitData | null>(null);
+  const [classificationMap, setClassificationMap] = useState<TubulinClassification | null>(null);
 
-  // Centralized structure loading function that ensures proper cleanup
   const loadStructureWithCleanup = useCallback(async (
     pdbId: string,
     loadFunction: () => Promise<void>,
@@ -164,52 +170,45 @@ export default function TubulinViewerPage() {
 
     console.log(`Loading structure ${pdbId} from ${source}...`);
 
-    // ALWAYS clear current structure and reset state before loading new one
     try {
       await service.controller.clearCurrentStructure();
     } catch (clearError) {
       console.warn('Error during structure cleanup:', clearError);
     }
 
-    dispatch(selectStructure(pdbId));
-    dispatch(setLoading(true));
-    dispatch(setError(null));
+    setIsLoading(true);
+    setError(null);
 
     try {
       await loadFunction();
 
-      // Mark as loaded if from URL
       if (source === 'url') {
         loadedPdbFromUrl.current = pdbId;
       } else {
-        loadedPdbFromUrl.current = null; // Reset URL tracking for manual loads
+        loadedPdbFromUrl.current = null;
       }
 
-      console.log(`✅ Successfully loaded ${pdbId} from ${source}`);
+      console.log(`Successfully loaded ${pdbId} from ${source}`);
       return true;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      dispatch(setError(errorMessage));
-      console.error(`❌ Failed to load ${pdbId} from ${source}:`, error);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
+      setError(errorMessage);
+      console.error(`Failed to load ${pdbId} from ${source}:`, err);
       return false;
     } finally {
-      dispatch(setLoading(false));
+      setIsLoading(false);
     }
-  }, [service, dispatch]);
+  }, [service]);
 
-  // Load structure from URL with cleanup
   const loadStructureFromUrl = useCallback(async (pdbId: string) => {
     if (loadedPdbFromUrl.current === pdbId) return true;
 
     return await loadStructureWithCleanup(pdbId, async () => {
-      // FIX: You need to fetch the profile here too, otherwise initial 
-      // URL loads have no classification data!
-      const response = await fetch(`http://localhost:8000/structures/${pdbId}/profile`);
+      const response = await fetch(`${API_BASE_URL}/structures/${pdbId}/profile`);
       if (!response.ok) throw new Error("Failed to fetch profile");
       const profileData = await response.json();
       const map = createClassificationFromProfile(profileData);
 
-      // Update state so the rest of the UI knows about it
       setClassificationMap(map);
 
       await service!.controller.loadStructure(pdbId, map);
@@ -217,51 +216,38 @@ export default function TubulinViewerPage() {
     }, 'url');
   }, [loadStructureWithCleanup, service]);
 
-  // Effect to handle URL-based structure loading
   useEffect(() => {
     if (!isInitialized || !service?.controller) {
-      console.log('Molstar not initialized yet');
       return;
     }
 
     const pdbIdFromUrl = (params.rcsb_id as string)?.toUpperCase();
     if (!pdbIdFromUrl) {
-      console.log('No PDB ID in URL');
       return;
     }
 
-    // Only load if we haven't already loaded this structure
     if (loadedPdbFromUrl.current !== pdbIdFromUrl) {
-      console.log(`Triggering load for ${pdbIdFromUrl}`);
       loadStructureFromUrl(pdbIdFromUrl);
     }
   }, [isInitialized, service?.controller, params.rcsb_id, loadStructureFromUrl]);
 
-  // Manual structure selection with cleanup
-  // Inside TubulinViewerPage component in your page.tsx
   const handleStructureSelect = useCallback(async (pdbId: string) => {
     return await loadStructureWithCleanup(pdbId, async () => {
-      const response = await fetch(`http://localhost:8000/structures/${pdbId}/profile`);
+      const response = await fetch(`${API_BASE_URL}/structures/${pdbId}/profile`);
       if (!response.ok) throw new Error("Failed to fetch structure profile.");
 
       const profileData = await response.json();
       const map = createClassificationFromProfile(profileData);
 
-      // FIX: Update the state so the React cycle reflects this if needed elsewhere
       setClassificationMap(map);
 
-      // Pass the freshly created 'map' directly, don't rely on state 'classificationMap'
-      // because setState is asynchronous.
       await service!.controller.loadStructure(pdbId, map);
       await service!.viewer.representations.stylized_lighting();
     }, 'manual');
   }, [loadStructureWithCleanup, service]);
-  // Backend structure selection with cleanup
-  const handleBackendStructureSelect = useCallback(async (filename: string) => {
-    const pdbId = filename.split('_')[0].toUpperCase();
 
-    return await loadStructureWithCleanup(pdbId, async () => {
-      // const dummyClassificationMap = { A: TubulinClass.Alpha, B: TubulinClass.Beta };
+  const handleBackendStructureSelect = useCallback(async (filename: string) => {
+    return await loadStructureWithCleanup(filename.split('_')[0].toUpperCase(), async () => {
       await service!.controller.loadStructureFromBackend(filename, {});
       await service!.viewer.representations.stylized_lighting();
     }, 'backend');
@@ -269,33 +255,36 @@ export default function TubulinViewerPage() {
 
   const handleSubunitHover = useCallback((subunit: SubunitData | null) => {
     const controller = service?.controller;
-    if (!controller || !selectedStructure) return;
+    if (!controller || !currentStructure) return;
     if (hoveredSubunitData) {
-      controller.highlightChain(selectedStructure, hoveredSubunitData.auth_asym_id, false);
+      controller.highlightChain(currentStructure, hoveredSubunitData.auth_asym_id, false);
     }
     if (subunit) {
-      controller.highlightChain(selectedStructure, subunit.auth_asym_id, true);
+      controller.highlightChain(currentStructure, subunit.auth_asym_id, true);
       setHoveredGridSubunit(subunit.id);
       setHoveredSubunitData(subunit);
     } else {
       setHoveredGridSubunit(null);
       setHoveredSubunitData(null);
     }
-  }, [service, selectedStructure, hoveredSubunitData]);
+  }, [service, currentStructure, hoveredSubunitData]);
 
   const handleSubunitSelect = useCallback((subunit: SubunitData) => {
     setSelectedGridSubunit(subunit.id);
     const controller = service?.controller;
-    if (controller && selectedStructure) {
-      controller.focusChain(selectedStructure, subunit.auth_asym_id);
+    if (controller && currentStructure) {
+      controller.focusChain(currentStructure, subunit.auth_asym_id);
     }
-  }, [service, selectedStructure]);
+  }, [service, currentStructure]);
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-gray-100">
       <div className="flex flex-1 overflow-hidden">
         <SettingsPanel
           isMolstarReady={isInitialized}
+          currentStructure={currentStructure}
+          isLoading={isLoading}
+          error={error}
           onStructureSelect={handleStructureSelect}
           onBackendStructureSelect={handleBackendStructureSelect}
         />
@@ -310,7 +299,6 @@ export default function TubulinViewerPage() {
             </div>
           )}
         </div>
-        {/* Both panels side by side */}
         <div className="flex">
           <EntitiesPanel
             onSubunitHover={handleSubunitHover}

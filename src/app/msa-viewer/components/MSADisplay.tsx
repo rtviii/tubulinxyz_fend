@@ -1,28 +1,28 @@
 // src/app/msa-viewer/components/MSADisplay.tsx
 import { useEffect, useRef, useState } from 'react';
-import { 
-  SequenceData, 
-  AddedSequenceGroup, 
-  LabelClickHandler, 
-  ResidueClickHandler, 
-  ResidueHoverHandler, 
+import {
+  SequenceData,
+  AddedSequenceGroup,
+  LabelClickHandler,
+  ResidueClickHandler,
+  ResidueHoverHandler,
   ResidueLeaveHandler,
   MsaHighlight,
-  MsaHover 
+  MsaHover
 } from './msa-types';
 import { annotationData } from './msa-data';
 import { SingleSequenceTrack } from './tracks/SingleSequenceTrack';
 import { AnnotationTrack } from './tracks/AnnotationTrack';
 
 interface MSADisplayProps {
-  masterSequences    : SequenceData[];
+  masterSequences: SequenceData[];
   addedSequenceGroups: AddedSequenceGroup[];
-  maxLength          : number;
-  onLabelClick       : LabelClickHandler;
-  onResidueClick     : ResidueClickHandler;
-  onResidueHover     : ResidueHoverHandler;
-  onResidueLeave     : ResidueLeaveHandler;
-  activeAnnotations  : Set<string>;
+  maxLength: number;
+  onLabelClick: LabelClickHandler;
+  onResidueClick: ResidueClickHandler;
+  onResidueHover: ResidueHoverHandler;
+  onResidueLeave: ResidueLeaveHandler;
+  activeAnnotations: Set<string>;
   onZoomToPosition?: (position: number) => void;
 }
 
@@ -35,7 +35,7 @@ export function MSADisplay({
   onResidueHover,
   onResidueLeave,
   activeAnnotations,
-onZoomToPosition
+  onZoomToPosition
 }: MSADisplayProps) {
 
   const [activeSeq, setActiveSeq] = useState<MsaHighlight | null>(null);
@@ -60,14 +60,14 @@ onZoomToPosition
     return () => clearTimeout(timer);
   }, []);
 
- useEffect(() => {
+  useEffect(() => {
     if (onZoomToPosition && navigationRef.current) {
       // Expose zoom function
       (window as any).__msaZoomToPosition = (position: number) => {
         const windowSize = 20;
         const start = Math.max(1, position - Math.floor(windowSize / 2));
         const end = start + windowSize - 1;
-        
+
         if (navigationRef.current) {
           navigationRef.current.setAttribute('display-start', String(start));
           navigationRef.current.setAttribute('display-end', String(end));
@@ -106,7 +106,7 @@ onZoomToPosition
       const timer = setTimeout(() => {
         refreshAllComponents();
       }, 50);
-      
+
       return () => clearTimeout(timer);
     });
 
@@ -204,9 +204,9 @@ onZoomToPosition
 
   return (
     <div ref={containerRef} style={{ width: "100%", minWidth: 0 }}>
-      <nightingale-manager 
-        style={{ 
-          width: "100%", 
+      <nightingale-manager
+        style={{
+          width: "100%",
           display: "block"
         }}
       >

@@ -1,51 +1,57 @@
-// src/app/msa-viewer/components/PDBSequenceExtractor.tsx
-import { useCallback, useState } from 'react';
-import { useSequenceStructureRegistry } from '../hooks/useSequenceStructureSync';
+import { useState } from 'react';
 import { MolstarService } from '@/components/molstar/molstar_service';
-// import { createTubulinClassificationMap } from '@/services/gql_parser';
-import { fetchRcsbGraphQlData } from '@/services/rcsb_graphql_service';
 import { useSequenceAligner } from '../hooks/useSequenceAligner';
 import { ChainAnnotationSummary } from './ChainAnnotationSummary';
-import { useChainAnnotations } from '../hooks/useChainAnnotations';
+import { useAppSelector } from '@/store/store';
+import { selectIsChainAligned } from '@/store/slices/sequence_registry';
+import { useGetStructureProfileStructuresRcsbIdProfileGetQuery } from '@/store/tubxz_api';
 import { createClassificationFromProfile } from '@/services/profile_service';
 
 interface PDBSequenceExtractorProps {
   mainService: MolstarService | null;
-  registry: ReturnType<typeof useSequenceStructureRegistry>;
-  onMutationClick?: (pdbId: string, chainId: string, masterIndex: number) => void;
+  onChainAligned?: (pdbId: string, chainId: string) => void;
+}
+
+interface AvailableChain {
+  id: string;
+  len: number;
+  seq: string;
 }
 
 export function PDBSequenceExtractor({
   mainService,
-  registry,
-  onMutationClick
+  onChainAligned,
 }: PDBSequenceExtractorProps) {
-  const [pdbId, setPdbId] = useState("");
-  const [isLoadingStructure, setIsLoadingStructure] = useState(false);
-  const [availableChains, setAvailableChains] = useState<AvailableChain[]>([]);
+  const [pdbIdInput, setPdbIdInput] = useState("");
   const [loadedPdbId, setLoadedPdbId] = useState<string | null>(null);
+  const [availableChains, setAvailableChains] = useState<AvailableChain[]>([]);
+  const [isLoadingStructure, setIsLoadingStructure] = useState(false);
 
-  const { alignAndRegisterChain, isAligning, currentChain } = useSequenceAligner(registry);
-  const { cacheAnnotations, getAnnotations } = useChainAnnotations();
+  const { alignAndRegisterChain, isAligning, currentChain } = useSequenceAligner();
 
+  // Skip query until we have a loaded PDB ID
+  const { data: profileData } = useGetStructureProfileStructuresRcsbIdProfileGetQuery(
+    { rcsbId: loadedPdbId! },
+    { skip: !loadedPdbId }
+  );
 
   const handleLoadStructure = async () => {
-    if (!mainService || !pdbId.trim()) return;
+    if (!mainService || !pdbIdInput.trim()) return;
 
     setIsLoadingStructure(true);
     setAvailableChains([]);
     setLoadedPdbId(null);
 
     try {
-      const cleanId = pdbId.trim().toUpperCase();
+      const cleanId = pdbIdInput.trim().toUpperCase();
 
-      // Fetch profile from backend instead of GQL
+      // Fetch profile for classification
       const response = await fetch(`http://localhost:8000/structures/${cleanId}/profile`);
       if (!response.ok) {
         throw new Error(`Failed to fetch profile for ${cleanId}`);
       }
-      const profileData = await response.json();
-      const classification = createClassificationFromProfile(profileData);
+      const profile = await response.json();
+      const classification = createClassificationFromProfile(profile);
 
       await mainService.controller.loadStructure(cleanId, classification);
       await mainService.viewer.representations.stylized_lighting();
@@ -64,65 +70,27 @@ export function PDBSequenceExtractor({
         }
       }
 
-      registry.registerStructure(cleanId, chainIds, 'main');
       setAvailableChains(chainsData);
       setLoadedPdbId(cleanId);
 
     } catch (err: any) {
       console.error("Structure load failed:", err);
-      alert(`Failed to load ${pdbId}: ${err.message}`);
+      alert(`Failed to load ${pdbIdInput}: ${err.message}`);
     } finally {
       setIsLoadingStructure(false);
     }
   };
 
-
   const handleAlignClick = async (chainId: string) => {
     if (!mainService || !loadedPdbId) return;
 
     try {
-      const annotations = getAnnotations(loadedPdbId, chainId);
-
-      await alignAndRegisterChain(
-        loadedPdbId,
-        chainId,
-        mainService,
-        annotations?.mutations || [],
-        annotations?.modifications || []
-      );
-
-      // Keep ligands visible when isolating
+      await alignAndRegisterChain(loadedPdbId, chainId, mainService);
       await mainService.controller.isolateChain(loadedPdbId, chainId, true);
-
-      // Trigger selection for the ligand panel
-      if (onMutationClick) {
-        onMutationClick(loadedPdbId, chainId, 1);
-      }
-
-      console.log(`Isolated chain ${chainId} in structure ${loadedPdbId} (ligands visible)`);
+      onChainAligned?.(loadedPdbId, chainId);
     } catch (err: any) {
       alert(`Alignment failed: ${err.message}`);
     }
-  };
-
-  const handleAnnotationsLoaded = useCallback((chainId: string, data: any) => {
-    if (loadedPdbId) {
-      cacheAnnotations(loadedPdbId, chainId, data);
-    }
-  }, [loadedPdbId, cacheAnnotations]);
-
-  const handleMutationClick = useCallback((chainId: string, masterIndex: number) => {
-    console.log('🟡 handleMutationClick in PDBSequenceExtractor', { loadedPdbId, chainId, masterIndex });
-    if (loadedPdbId && onMutationClick) {
-      console.log('🟢 Calling parent onMutationClick');
-      onMutationClick(loadedPdbId, chainId, masterIndex);
-    } else {
-      console.log('🔴 Missing:', { loadedPdbId, hasCallback: !!onMutationClick });
-    }
-  }, [loadedPdbId, onMutationClick]);
-
-  const isChainAligned = (chainId: string) => {
-    return loadedPdbId && registry.getSequenceByChain(loadedPdbId, chainId) !== null;
   };
 
   return (
@@ -131,17 +99,16 @@ export function PDBSequenceExtractor({
         <h3 className="text-sm font-semibold text-gray-700 mb-3">Load Structure</h3>
         <div className="flex gap-2">
           <input
-            value={pdbId}
-            onChange={e => setPdbId(e.target.value)}
+            value={pdbIdInput}
+            onChange={e => setPdbIdInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleLoadStructure()}
             className="flex-1 border border-gray-300 rounded-md p-2 font-mono uppercase text-sm outline-none"
             placeholder="PDB ID (e.g., 5JCO)"
             disabled={isLoadingStructure}
           />
-
           <button
             onClick={handleLoadStructure}
-            disabled={isLoadingStructure || !mainService || !pdbId.trim()}
+            disabled={isLoadingStructure || !mainService || !pdbIdInput.trim()}
             className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             {isLoadingStructure ? "..." : "Load"}
@@ -159,51 +126,16 @@ export function PDBSequenceExtractor({
           </div>
 
           <div className="flex-1 overflow-y-auto p-2 space-y-2">
-            {availableChains.map(chain => {
-              const aligned = isChainAligned(chain.id);
-              const processing = isAligning && currentChain === chain.id;
-
-              return (
-                <div
-                  key={chain.id}
-                  className={`p-2 rounded-md border transition-all
-                     ${aligned
-                      ? 'bg-green-50 border-green-200'
-                      : 'bg-white border-gray-200 hover:border-blue-300'
-                    }`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-baseline gap-2">
-                      <span className={`font-mono font-bold text-base ${aligned ? 'text-green-700' : 'text-gray-700'}`}>
-                        Chain {chain.id}
-                      </span>
-                      <span className="text-xs text-gray-500">{chain.len} residues</span>
-                    </div>
-
-                    <button
-                      onClick={() => handleAlignClick(chain.id)}
-                      disabled={aligned || isAligning}
-                      className={`text-xs px-3 py-1 rounded-md font-medium transition-all shadow-sm
-                         ${aligned
-                          ? 'bg-white text-green-700 border border-green-200 cursor-default'
-                          : processing
-                            ? 'bg-blue-100 text-blue-700 cursor-wait'
-                            : 'bg-gray-800 text-white hover:bg-black'
-                        }`}
-                    >
-                      {aligned ? "Aligned" : processing ? "..." : "Align"}
-                    </button>
-                  </div>
-
-                  <ChainAnnotationSummary
-                    rcsb_id={loadedPdbId}
-                    auth_asym_id={chain.id}
-                    onAnnotationsLoaded={(data) => handleAnnotationsLoaded(chain.id, data)}
-                    onMutationClick={(masterIndex) => handleMutationClick(chain.id, masterIndex)}
-                  />
-                </div>
-              );
-            })}
+            {availableChains.map(chain => (
+              <ChainRow
+                key={chain.id}
+                pdbId={loadedPdbId}
+                chain={chain}
+                isAligning={isAligning}
+                currentChain={currentChain}
+                onAlignClick={handleAlignClick}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -211,8 +143,56 @@ export function PDBSequenceExtractor({
   );
 }
 
-interface AvailableChain {
-  id: string;
-  len: number;
-  seq: string;
+// Extracted to use hooks properly
+function ChainRow({
+  pdbId,
+  chain,
+  isAligning,
+  currentChain,
+  onAlignClick,
+}: {
+  pdbId: string;
+  chain: AvailableChain;
+  isAligning: boolean;
+  currentChain: string | null;
+  onAlignClick: (chainId: string) => void;
+}) {
+  const isAligned = useAppSelector(state => selectIsChainAligned(state, pdbId, chain.id));
+  const processing = isAligning && currentChain === chain.id;
+
+  return (
+    <div
+      className={`p-2 rounded-md border transition-all ${isAligned
+          ? 'bg-green-50 border-green-200'
+          : 'bg-white border-gray-200 hover:border-blue-300'
+        }`}
+    >
+      <div className="flex justify-between items-start mb-2">
+        <div className="flex items-baseline gap-2">
+          <span className={`font-mono font-bold text-base ${isAligned ? 'text-green-700' : 'text-gray-700'}`}>
+            Chain {chain.id}
+          </span>
+          <span className="text-xs text-gray-500">{chain.len} residues</span>
+        </div>
+
+        <button
+          onClick={() => onAlignClick(chain.id)}
+          disabled={isAligned || isAligning}
+          className={`text-xs px-3 py-1 rounded-md font-medium transition-all shadow-sm ${isAligned
+              ? 'bg-white text-green-700 border border-green-200 cursor-default'
+              : processing
+                ? 'bg-blue-100 text-blue-700 cursor-wait'
+                : 'bg-gray-800 text-white hover:bg-black'
+            }`}
+        >
+          {isAligned ? "Aligned" : processing ? "..." : "Align"}
+        </button>
+      </div>
+
+      <ChainAnnotationSummary
+        rcsb_id={pdbId}
+        auth_asym_id={chain.id}
+      />
+    </div>
+  );
 }

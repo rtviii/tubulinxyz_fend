@@ -126,46 +126,6 @@ export class LigandQueryBuilder {
 }
 
 /**
- * Query executor that compiles and runs queries
- */
-// export class QueryExecutor {
-//   constructor(private structure: Structure) {}
-
-//   /**
-//    * Execute a query and return the selection
-//    */
-//   execute(query: Expression): StructureSelection.Query.Result {
-//     const compiled = compile(query);
-//     return compiled(new QueryContext(this.structure));
-//   }
-
-//   /**
-//    * Execute a query and convert to Loci
-//    */
-//   executeToLoci(query: Expression): StructureElement.Loci {
-//     const selection = this.execute(query);
-//     return StructureSelection.toLociWithSourceUnits(selection);
-//   }
-
-//   /**
-//    * Check if a query returns any results
-//    */
-//   hasResults(query: Expression): boolean {
-//     const selection = this.execute(query);
-//     return !StructureSelection.isEmpty(selection);
-//   }
-
-//   /**
-//    * Get the number of atoms selected by a query
-//    */
-//   countAtoms(query: Expression): number {
-//     const selection = this.execute(query);
-//     const structure = StructureSelection.unionStructure(selection);
-//     return structure.elementCount;
-//   }
-// }
-
-/**
  * Common query patterns
  */
 export const QueryPatterns = {

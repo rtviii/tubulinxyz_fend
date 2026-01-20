@@ -29,7 +29,6 @@ export function SequenceViewer() {
 
     const [currentSelection, setCurrentSelection] = useState<SequenceSelection | null>(null);
     const [hoveredResidue, setHoveredResidue] = useState<number | null>(null);
-
     // Create annotation tracks for alpha tubulin chains
     const createAnnotationTracks = useCallback(() => {
         if (!selectedSequence) return [];

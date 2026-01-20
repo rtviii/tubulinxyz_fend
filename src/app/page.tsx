@@ -2,7 +2,6 @@
 import React, { useState, useMemo } from 'react';
 import { Search, ChevronRight, Filter, X } from 'lucide-react';
 import Link from 'next/link'; // Import next/link
-import structuresData from '../tubulin_structs_summary.json'; // Import the JSON data
 
 // Define the type for a single structure based on the user's example
 interface StructureData {
@@ -36,8 +35,8 @@ interface StructureData {
   type: string;
 }
 
-// Cast the imported data to our type
-const allStructures: StructureData[] = structuresData as StructureData[];
+// // Cast the imported data to our type
+// const allStructures: StructureData[] = structuresData as StructureData[];
 
 // --- Thumbnail Lists ---
 const dimerThumbnails = ['/thumbnails/1JJF.png', '/thumbnails/6E7B.png'];
@@ -168,9 +167,7 @@ const HomePage = () => {
 
   // Filter logic
   const displayedStructures = useMemo(() => {
-    let filtered = allStructures;
-
-    // Apply Supergroup Filter (deterministic 1/3rd)
+    let filtered = []
     if (selectedSupergroup) {
       // We'll use group 0 for this example
       filtered = filtered.filter(s => getDeterministicGroup(s.identifier) === 0);

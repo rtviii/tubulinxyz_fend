@@ -2,7 +2,6 @@ import { MolstarViewer } from './molstar_viewer';
 import { AppDispatch, RootState } from '@/store/store';
 import { setStructureRef, addComponents, clearStructure, clearAll, PolymerComponent, LigandComponent } from '@/store/slices/molstar_refs';
 import { initializePolymer, clearPolymersForStructure, clearAllPolymers, setPolymerVisibility, setPolymerHovered } from '@/store/slices/polymer_states';
-import { setError } from '@/store/slices/tubulin_structures';
 import { QueryContext, Structure, StructureProperties, StructureSelection } from 'molstar/lib/mol-model/structure';
 import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder';
 import { StateSelection } from 'molstar/lib/mol-state';
@@ -16,11 +15,11 @@ import { interactionTypeLabel } from 'molstar/lib/mol-model-props/computed/inter
 import { SyncRuntimeContext } from 'molstar/lib/mol-task/execution/synchronous';
 import { AssetManager } from 'molstar/lib/mol-util/assets';
 import { Loci } from 'molstar/lib/mol-model/structure/structure/element/element';
-import { AMINO_ACIDS_3_TO_1_CODE } from './preset-helpers';
+import { AMINO_ACIDS_3_TO_1_CODE } from './colors/preset-helpers';
 import { SequenceData } from '@/store/slices/sequence_viewer';
 import { setResidueHover, setResidueSelection } from '@/store/slices/sequence_structure_sync';
 import { StructureFocusRepresentation } from 'molstar/lib/mol-plugin/behavior/dynamic/selection/structure-focus-representation';
-import { PresetObjects, TubulinClassification } from './molstar_preset_computed_residues';
+import { PresetObjects, TubulinClassification } from './colors/molstar_preset_computed_residues';
 
 
 export interface InteractionInfo {
@@ -715,7 +714,7 @@ listAvailableLigands(pdbId: string): string[] {
             return true;
         } catch (error) {
             console.error('Error loading structure:', error);
-            this.dispatch(setError(error instanceof Error ? error.message : 'Unknown error'));
+            // this.dispatch(setError(error instanceof Error ? error.message : 'Unknown error'));
             return false;
         }
     }
