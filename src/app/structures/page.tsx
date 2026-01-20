@@ -14,7 +14,7 @@ import {
 } from "@/store/slices/slice_structures";
 
 import { StructureFiltersComponent } from "./structure_filters";
-import { getLigandColor } from "@/lib/tubulin-colors";
+import { getLigandColor } from "@/components/molstar/colors/tubulin-colors";
 
 // --- Debounce Hook ---
 function useDebounce<T>(value: T, delay: number): T {

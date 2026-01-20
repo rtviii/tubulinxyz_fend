@@ -4,7 +4,6 @@ export const addTagTypes = [
   "Polymers",
   "Ligands",
   "MSA Alignment",
-  "Grid",
   "Annotations",
   "Health",
 ] as const;
@@ -166,13 +165,6 @@ const injectedRtkApi = api
       >({
         query: () => ({ url: `/msa/master` }),
         providesTags: ["MSA Alignment"],
-      }),
-      getGridGridPdbIdGet: build.query<
-        GetGridGridPdbIdGetApiResponse,
-        GetGridGridPdbIdGetApiArg
-      >({
-        query: (queryArg) => ({ url: `/grid/${queryArg.pdbId}` }),
-        providesTags: ["Grid"],
       }),
       getMutationsAtPositionEndpointAnnotationsMutationsFamilyPositionGet:
         build.query<
@@ -371,11 +363,6 @@ export type AlignSequenceMsaSequencePostApiArg = {
 export type GetMasterProfileMsaMasterGetApiResponse =
   /** status 200 Successful Response */ any;
 export type GetMasterProfileMsaMasterGetApiArg = void;
-export type GetGridGridPdbIdGetApiResponse =
-  /** status 200 Successful Response */ GridData;
-export type GetGridGridPdbIdGetApiArg = {
-  pdbId: string;
-};
 export type GetMutationsAtPositionEndpointAnnotationsMutationsFamilyPositionGetApiResponse =
   /** status 200 Successful Response */ {
     [key: string]: any;
@@ -794,20 +781,6 @@ export type AlignmentRequest = {
   /** The PDB auth_seq_ids corresponding 1:1 to the sequence characters. */
   auth_seq_ids?: number[] | null;
 };
-export type SubunitData = {
-  id: string;
-  auth_asym_id: string;
-  protofilament: number;
-  subunitIndex: number;
-  monomerType: string;
-};
-export type GridData = {
-  subunits: SubunitData[];
-  structure_type: string;
-  metadata: {
-    [key: string]: any;
-  };
-};
 export const {
   useGetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetQuery,
   useListStructuresStructuresGetQuery,
@@ -821,7 +794,6 @@ export const {
   useLigandOptionsLigandsOptionsGetQuery,
   useAlignSequenceMsaSequencePostMutation,
   useGetMasterProfileMsaMasterGetQuery,
-  useGetGridGridPdbIdGetQuery,
   useGetMutationsAtPositionEndpointAnnotationsMutationsFamilyPositionGetQuery,
   useGetInteractionsAtPositionEndpointAnnotationsInteractionsFamilyPositionGetQuery,
   useGetNeighborhoodsAtPositionEndpointAnnotationsNeighborhoodsFamilyPositionGetQuery,
