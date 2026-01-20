@@ -2,7 +2,8 @@
 "use client";
 
 import React from "react";
-import { Input, Select, TreeSelect, Tag } from "antd";
+import { Input, Select, TreeSelect, Tag, Tooltip } from "antd"; // Added Tooltip import
+import { Info } from "lucide-react"; // Added Info icon
 import {
     CollapsibleTrigger,
     CollapsibleContent,
@@ -24,7 +25,6 @@ import {
 import { set_polymers_filter as set_poly_filter_real } from "@/store/slices/slice_polymers";
 import { getHexColor } from "@/components/molstar/colors/tubulin-color-theme";
 
-// --- Custom Tag Renderer (Strict & High Contrast) ---
 const tagRender = (props: any) => {
     const { label, value, closable, onClose } = props;
     const color = getHexColor(value);
@@ -34,19 +34,19 @@ const tagRender = (props: any) => {
             closable={closable}
             onClose={onClose}
             style={{
-                marginRight: 4,
-                marginTop: 2,
-                marginBottom: 2,
-                borderRadius: '2px', // Sharp corners
+                marginRight    : 4,
+                marginTop      : 2,
+                marginBottom   : 2,
+                borderRadius   : '2px',                
                 backgroundColor: color,
-                border: `1px solid rgba(0,0,0,0.2)`, // Visible edge
-                fontWeight: 700,
-                color: '#fff',
-                fontSize: '10px',
-                textTransform: 'uppercase',
-                padding: '0px 6px',
-                display: 'inline-flex',
-                alignItems: 'center'
+                border         : `1px solid rgba(0,0,0,0.2)`,   
+                fontWeight     : 700,
+                color          : '#fff',
+                fontSize       : '10px',
+                textTransform  : 'uppercase',
+                padding        : '0px 6px',
+                display        : 'inline-flex',
+                alignItems     : 'center'
             }}
         >
             {label}
@@ -94,9 +94,15 @@ export const StructureFiltersComponent = ({ update_state }: { update_state: "str
                 <CollapsibleTrigger className="w-full px-3 py-2 flex items-center justify-between border-b border-gray-200 bg-gray-50">
                     <div className="flex items-center gap-2">
                         <span className="font-bold text-gray-900 text-xs uppercase tracking-tighter">Filters</span>
-                        <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.1 rounded-sm font-bold">
-                            {total_count}
-                        </span>
+                        <Tooltip 
+                            title="Total count of unique PDB structures. Note: Multi-species complexes are counted once here but appear in multiple organism facets."
+                            placement="right"
+                        >
+                            <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.1 rounded-sm font-bold cursor-help flex items-center gap-1">
+                                {total_count}
+                                <Info className="h-2.5 w-2.5 opacity-80" />
+                            </span>
+                        </Tooltip>
                     </div>
                     <ChevronDown className="h-3 w-3 text-gray-500" />
                 </CollapsibleTrigger>
@@ -217,4 +223,3 @@ export const StructureFiltersComponent = ({ update_state }: { update_state: "str
         </div>
     );
 };
-
