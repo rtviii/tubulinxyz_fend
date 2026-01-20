@@ -32,6 +32,7 @@ import {
 import { Structure } from 'molstar/lib/mol-model/structure';
 import { StructureElement } from 'molstar/lib/mol-model/structure';
 import { Loci } from 'molstar/lib/mol-model/loci';
+import { MonomerPresetResult } from '../colors/preset_monomer';
 
 /**
  * MolstarInstance - orchestrates viewer operations with Redux state.
@@ -111,6 +112,47 @@ export class MolstarInstance {
     }
   }
 
+  async loadMonomerChain(pdbId: string, chainId: string): Promise<MonomerPresetResult | null> {
+    try {
+      await this.clearCurrentStructure();
+
+      const url = `https://models.rcsb.org/${pdbId.toUpperCase()}.bcif`;
+      const structureRef = await this.viewer.loadFromUrl(url, true, pdbId.toUpperCase());
+
+      if (!this.viewer.ctx) throw new Error('Viewer not initialized');
+
+      const result = await this.viewer.ctx.builders.structure.representation.applyPreset(
+        structureRef,
+        'monomer-single-chain',
+        { chainId }
+      ) as MonomerPresetResult;
+
+      if (!result.chainRef) {
+        throw new Error(`Chain ${chainId} not found`);
+      }
+
+      this.dispatch(setLoadedStructure({
+        instanceId: this.id,
+        pdbId: pdbId.toUpperCase(),
+        structureRef: structureRef.ref,
+      }));
+
+      this.dispatch(registerComponents({
+        instanceId: this.id,
+        components: [{
+          type: 'polymer',
+          pdbId: pdbId.toUpperCase(),
+          ref: result.chainRef,
+          chainId,
+        }],
+      }));
+
+      return result;
+    } catch (error) {
+      console.error(`[${this.id}] Failed to load monomer chain:`, error);
+      return null;
+    }
+  }
   private extractComponentsFromPreset(pdbId: string, presetResult: any): Component[] {
     const components: Component[] = [];
 

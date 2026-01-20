@@ -4,7 +4,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/store';
 import { useGetMasterProfileMsaMasterGetQuery } from '@/store/tubxz_api';
 import { addSequence, selectMasterSequences, selectAddedSequenceGroups, removeSequence } from '@/store/slices/sequence_registry';
-import { useNightingaleComponents } from '../msa-viewer/hooks/useNightingaleComponents';
+import { useNightingaleComponents } from './useNightingaleComponents';
 
 // New imports
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';

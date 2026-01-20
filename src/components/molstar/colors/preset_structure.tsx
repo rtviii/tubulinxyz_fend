@@ -120,7 +120,7 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
     display: {
         name: 'Tubulin superfamily (vibrant discovery)',
         group: 'TubulinXYZ',
-        description: 'Vibrant protein families and neon ligands.'
+        description: 'protein families and luminescent ligands.'
     },
     params: () => ({
         ...StructureRepresentationPresetProvider.CommonParams,
