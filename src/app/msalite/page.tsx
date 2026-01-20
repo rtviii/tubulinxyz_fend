@@ -8,7 +8,6 @@ import { addSequence, selectMasterSequences, selectAddedSequenceGroups, removeSe
 import { useNightingaleComponents } from '../msa-viewer/hooks/useNightingaleComponents';
 import { useMolstarService } from '@/components/molstar/molstar_service';
 import { MolstarNode } from '@/components/molstar/molstar_spec';
-
 import { ResizableMSAContainer, ResizableMSAContainerHandle } from './components/ResizableMSAContainer';
 import { ChainAligner } from './components/ChainAligner';
 import { clearColorConfig } from './services/msaColorService';
@@ -32,9 +31,9 @@ const BUILTIN_SCHEMES = [
 ];
 
 export default function MSALitePage() {
-  const dispatch = useAppDispatch();
-  const msaRef = useRef<ResizableMSAContainerHandle>(null);
-  const molstarNodeRef = useRef<HTMLDivElement>(null);
+  const dispatch                   = useAppDispatch();
+  const msaRef                     = useRef<ResizableMSAContainerHandle>(null);
+  const molstarNodeRef             = useRef<HTMLDivElement>(null);
   const masterSequencesInitialized = useRef(false);
 
   const [colorScheme, setColorScheme] = useState('clustal2');

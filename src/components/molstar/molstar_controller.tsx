@@ -19,7 +19,7 @@ import { AMINO_ACIDS_3_TO_1_CODE } from './colors/preset-helpers';
 import { SequenceData } from '@/store/slices/sequence_viewer';
 import { setResidueHover, setResidueSelection } from '@/store/slices/sequence_structure_sync';
 import { StructureFocusRepresentation } from 'molstar/lib/mol-plugin/behavior/dynamic/selection/structure-focus-representation';
-import { PresetObjects, TubulinClassification } from './colors/molstar_preset_computed_residues';
+import { PresetObjects, TubulinClassification } from './colors/molstar_preset';
 
 
 export interface InteractionInfo {

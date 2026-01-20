@@ -6,10 +6,10 @@ import { useAppSelector } from '@/store/store';
 import React from 'react';
 import { EntitiesPanel } from '@/components/entities_panel';
 import { useParams } from 'next/navigation';
-import { SubunitData } from '@/components/protofilament_grid';
-import { SequenceViewer } from '@/components/sequence_viewer';
+// import { SubunitData } from '@/components/protofilament_grid';
+// import { SequenceViewer } from '@/components/sequence_viewer';
 import { useMolstarSync } from '@/hooks/useMolstarSync';
-import { TubulinClassification } from '@/components/molstar/colors/molstar_preset_computed_residues';
+import { TubulinClassification } from '@/components/molstar/colors/molstar_preset';
 import { createClassificationFromProfile } from '@/services/profile_service';
 import { API_BASE_URL } from '@/config';
 
@@ -155,7 +155,7 @@ export default function TubulinViewerPage() {
   const params = useParams();
   const [selectedGridSubunit, setSelectedGridSubunit] = useState<string | null>(null);
   const [hoveredGridSubunit, setHoveredGridSubunit] = useState<string | null>(null);
-  const [hoveredSubunitData, setHoveredSubunitData] = useState<SubunitData | null>(null);
+  // const [hoveredSubunitData, setHoveredSubunitData] = useState<SubunitData | null>(null);
   const [classificationMap, setClassificationMap] = useState<TubulinClassification | null>(null);
 
   const loadStructureWithCleanup = useCallback(async (
@@ -253,29 +253,6 @@ export default function TubulinViewerPage() {
     }, 'backend');
   }, [loadStructureWithCleanup, service]);
 
-  const handleSubunitHover = useCallback((subunit: SubunitData | null) => {
-    const controller = service?.controller;
-    if (!controller || !currentStructure) return;
-    if (hoveredSubunitData) {
-      controller.highlightChain(currentStructure, hoveredSubunitData.auth_asym_id, false);
-    }
-    if (subunit) {
-      controller.highlightChain(currentStructure, subunit.auth_asym_id, true);
-      setHoveredGridSubunit(subunit.id);
-      setHoveredSubunitData(subunit);
-    } else {
-      setHoveredGridSubunit(null);
-      setHoveredSubunitData(null);
-    }
-  }, [service, currentStructure, hoveredSubunitData]);
-
-  const handleSubunitSelect = useCallback((subunit: SubunitData) => {
-    setSelectedGridSubunit(subunit.id);
-    const controller = service?.controller;
-    if (controller && currentStructure) {
-      controller.focusChain(currentStructure, subunit.auth_asym_id);
-    }
-  }, [service, currentStructure]);
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-gray-100">
@@ -301,15 +278,12 @@ export default function TubulinViewerPage() {
         </div>
         <div className="flex">
           <EntitiesPanel
-            onSubunitHover={handleSubunitHover}
-            onSubunitSelect={handleSubunitSelect}
+            onSubunitHover={()=>{}}
+            onSubunitSelect={()=>{}}
             hoveredSubunitId={hoveredGridSubunit}
             selectedSubunitId={selectedGridSubunit}
           />
         </div>
-      </div>
-      <div className="flex-shrink-0 h-[250px] border-t bg-white shadow-inner">
-        <SequenceViewer />
       </div>
     </div>
   );

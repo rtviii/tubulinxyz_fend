@@ -3,7 +3,7 @@ import pngjs from 'pngjs';
 import jpegjs from 'jpeg-js';
 import { HeadlessPluginContext } from 'molstar/lib/mol-plugin/headless-plugin-context';
 import { DefaultPluginSpec } from 'molstar/lib/mol-plugin/spec';
-import { EnhancedTubulinSplitPreset } from '../src/components/molstar/colors/molstar_preset_computed_residues';
+import { EnhancedTubulinSplitPreset } from '../src/components/molstar/colors/molstar_preset';
 import * as fs from 'fs';
 import * as path from 'path';
 import { STYLIZED_POSTPROCESSING } from '@/components/molstar/rendering/postprocessing-config';
