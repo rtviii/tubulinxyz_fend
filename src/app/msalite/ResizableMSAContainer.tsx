@@ -10,13 +10,13 @@ interface SequenceData {
 }
 
 interface ResizableMSAContainerProps {
-  sequences      : SequenceData[];
-  maxLength      : number;
-  colorScheme   ?: string;
-  minTileWidth  ?: number;
-  rowHeight     ?: number;
-  navHeight     ?: number;
-  maxMsaHeight  ?: number;
+  sequences: SequenceData[];
+  maxLength: number;
+  colorScheme?: string;
+  minTileWidth?: number;
+  rowHeight?: number;
+  navHeight?: number;
+  maxMsaHeight?: number;
   onResidueHover?: (seqId: string, position: number) => void;
   onResidueLeave?: () => void;
   onResidueClick?: (seqId: string, position: number) => void;
@@ -24,7 +24,9 @@ interface ResizableMSAContainerProps {
 
 export interface ResizableMSAContainerHandle {
   redraw: () => void;
+  jumpToRange: (start: number, end: number) => void;
 }
+
 
 const DEFAULTS = {
   minTileWidth: 1,
@@ -86,7 +88,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
         nav.style.width = `${contentWidth}px`;
         nav.style.minWidth = `${contentWidth}px`;
         nav.style.maxWidth = `${contentWidth}px`;
-        
+
         // 4. Also force the SVG inside shadow DOM
         const svg = nav.renderRoot?.querySelector('svg');
         if (svg) {
@@ -94,7 +96,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
           svg.style.width = `${contentWidth}px`;
           svg.style.minWidth = `${contentWidth}px`;
         }
-        
+
         // 5. Update D3 scale and re-render
         if (typeof nav.onDimensionsChange === 'function') {
           nav.onDimensionsChange();
@@ -110,7 +112,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
         msa.style.width = `${contentWidth}px`;
         msa.style.minWidth = `${contentWidth}px`;
         msa.style.maxWidth = `${contentWidth}px`;
-        
+
         if (typeof msa.onDimensionsChange === 'function') {
           msa.onDimensionsChange();
         }
@@ -134,7 +136,18 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       syncWidths();
     }, [syncWidths]);
 
-    useImperativeHandle(ref, () => ({ redraw: triggerRedraw }), [triggerRedraw]);
+    const jumpToRange = useCallback((start: number, end: number) => {
+      const nav = navRef.current;
+      if (nav && typeof nav.locate === 'function') {
+        nav.locate(start, end);
+      }
+    }, []);
+
+    useImperativeHandle(ref, () => ({
+      redraw: triggerRedraw,
+      jumpToRange,
+    }), [triggerRedraw, jumpToRange]);
+
 
     useLayoutEffect(() => {
       if (contentWidth === 0) return;

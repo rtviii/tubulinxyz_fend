@@ -30,6 +30,9 @@ export default function MSALitePage() {
   const { data: masterData, isLoading: loadingMaster } = useGetMasterProfileMsaMasterGetQuery();
   const masterSequences = useAppSelector(selectMasterSequences);
 
+  const [customStart, setCustomStart] = useState(100);
+  const [customEnd, setCustomEnd] = useState(150);
+
   // Initialize master sequences
   useEffect(() => {
     if (!masterData?.sequences || masterSequencesInitialized.current) return;
@@ -169,6 +172,72 @@ export default function MSALitePage() {
               <div>Min width needed: {maxLength * 4}px</div>
               <div>Panel width setting: {panelWidth}%</div>
             </div>
+
+            <div className="mt-3 pt-3 border-t">
+              <div className="text-sm font-medium text-gray-700 mb-2">Jump to Range</div>
+
+              {/* Preset buttons */}
+              <div className="flex flex-wrap gap-2 mb-3">
+                <button
+                  onClick={() => msaRef.current?.jumpToRange(1, 50)}
+                  className="px-2 py-1 bg-blue-100 hover:bg-blue-200 rounded text-xs"
+                >
+                  1-50
+                </button>
+                <button
+                  onClick={() => msaRef.current?.jumpToRange(100, 150)}
+                  className="px-2 py-1 bg-blue-100 hover:bg-blue-200 rounded text-xs"
+                >
+                  100-150
+                </button>
+                <button
+                  onClick={() => msaRef.current?.jumpToRange(200, 220)}
+                  className="px-2 py-1 bg-blue-100 hover:bg-blue-200 rounded text-xs"
+                >
+                  200-220
+                </button>
+                <button
+                  onClick={() => msaRef.current?.jumpToRange(300, 400)}
+                  className="px-2 py-1 bg-blue-100 hover:bg-blue-200 rounded text-xs"
+                >
+                  300-400
+                </button>
+                <button
+                  onClick={() => msaRef.current?.jumpToRange(1, maxLength)}
+                  className="px-2 py-1 bg-green-100 hover:bg-green-200 rounded text-xs"
+                >
+                  Full ({maxLength})
+                </button>
+              </div>
+
+              {/* Custom range inputs */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={customStart}
+                  onChange={(e) => setCustomStart(Number(e.target.value))}
+                  min={1}
+                  max={maxLength}
+                  className="w-16 px-1 py-0.5 border rounded text-xs"
+                />
+                <span className="text-xs">to</span>
+                <input
+                  type="number"
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(Number(e.target.value))}
+                  min={1}
+                  max={maxLength}
+                  className="w-16 px-1 py-0.5 border rounded text-xs"
+                />
+                <button
+                  onClick={() => msaRef.current?.jumpToRange(customStart, customEnd)}
+                  className="px-2 py-1 bg-purple-100 hover:bg-purple-200 rounded text-xs"
+                >
+                  Go
+                </button>
+              </div>
+            </div>
+
             <button
               onClick={() => msaRef.current?.redraw()}
               className="mt-3 px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs"
