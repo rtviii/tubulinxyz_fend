@@ -6,18 +6,19 @@ import { useAppDispatch, useAppSelector } from '@/store/store';
 import { useGetMasterProfileMsaMasterGetQuery } from '@/store/tubxz_api';
 import { addSequence, selectMasterSequences } from '@/store/slices/sequence_registry';
 import { useNightingaleComponents } from '../msa-viewer/hooks/useNightingaleComponents';
-import { ResizableMSAContainer, ResizableMSAContainerHandle } from './ResizableMSAContainer';
+
+import { ResizableMSAContainer, ResizableMSAContainerHandle } from './components/ResizableMSAContainer';
+import { clearColorConfig, RowHighlight } from './services/msaColorService';
 import {
-  applyGradient,
-  applyBands,
-  applyRowHighlights,
-  applySingleRowHighlight,
-  applyCombined,
-  clearColorConfig,
-  generateRandomRowHighlights,
-  PRESETS,
-  RowHighlight,
-} from './services/msaColorService';
+  exampleGradient,
+  exampleBands,
+  exampleConservedRegions,
+  exampleSingleRow,
+  exampleMultipleRows,
+  exampleRandomHighlights,
+  exampleCombined,
+  exampleBindingSites,
+} from './examples/coloringExamples';
 
 const BUILTIN_SCHEMES = [
   { id: 'clustal2', name: 'Clustal' },
@@ -38,7 +39,7 @@ export default function MSALitePage() {
   const [panelWidth, setPanelWidth] = useState(70);
   const [customStart, setCustomStart] = useState(100);
   const [customEnd, setCustomEnd] = useState(150);
-  const [activeCustomMode, setActiveCustomMode] = useState<string | null>(null);
+  const [activeMode, setActiveMode] = useState<string | null>(null);
 
   const { areLoaded: componentsLoaded } = useNightingaleComponents();
   const { data: masterData, isLoading: loadingMaster } = useGetMasterProfileMsaMasterGetQuery();
@@ -60,80 +61,21 @@ export default function MSALitePage() {
     setEventLog((prev) => [...prev.slice(-19), `${new Date().toLocaleTimeString()}: ${msg}`]);
   }, []);
 
-  const handleResidueHover = useCallback((seqId: string, position: number) => {
-    log(`Hover: ${seqId} @ ${position}`);
-  }, [log]);
-
-  const handleResidueClick = useCallback((seqId: string, position: number) => {
-    log(`Click: ${seqId} @ ${position}`);
-  }, [log]);
-
-  const handleResidueLeave = useCallback(() => { }, []);
-
-  // Apply custom scheme helper
+  // Apply custom coloring helper
   const applyCustom = useCallback((mode: string, setupFn: () => void) => {
     setupFn();
     msaRef.current?.setColorScheme('custom-position');
     msaRef.current?.redraw();
-    setActiveCustomMode(mode);
+    setActiveMode(mode);
     setColorScheme('custom-position');
     log(`Applied: ${mode}`);
   }, [log]);
 
-  // Whole-MSA handlers
-  const handleGradient = useCallback(() => applyCustom('gradient', () => applyGradient(maxLength)), [applyCustom, maxLength]);
-  const handleBands = useCallback(() => applyCustom('bands', () => applyBands(maxLength)), [applyCustom, maxLength]);
-  const handleConserved = useCallback(() => applyCustom('conserved', () => PRESETS.conservedRegions(maxLength)), [applyCustom, maxLength]);
-  const handleBindingSites = useCallback(() => applyCustom('binding-sites', () => PRESETS.bindingSites()), [applyCustom]);
-
-  // Per-sequence handlers
-  const handleSingleRow = useCallback((row: number, start: number, end: number, color: string) => {
-    applyCustom(`row-${row}`, () => applySingleRowHighlight(row, start, end, color));
-  }, [applyCustom]);
-
-  const handleMultiRow = useCallback(() => {
-    const highlights: RowHighlight[] = [
-      { rowIndex: 0, start: 20, end: 60, color: '#ff6b6b' },
-      { rowIndex: 1, start: 80, end: 130, color: '#4ecdc4' },
-      { rowIndex: 2, start: 150, end: 200, color: '#45b7d1' },
-      { rowIndex: 3, start: 250, end: 300, color: '#96ceb4' },
-      { rowIndex: 4, start: 350, end: 400, color: '#ffeaa7' },
-    ];
-    applyCustom('multi-row', () => applyRowHighlights(highlights));
-  }, [applyCustom]);
-
-  const handleRandomHighlights = useCallback(() => {
-    const highlights = generateRandomRowHighlights(sequences.length, maxLength, 6);
-    applyCustom('random', () => applyRowHighlights(highlights));
-  }, [applyCustom, sequences.length, maxLength]);
-
-  const handlePerSeqDemo = useCallback(() => {
-    applyCustom('per-seq-demo', () => PRESETS.perSequenceDemo(sequences.length));
-  }, [applyCustom, sequences.length]);
-
-  // Combined
-  const handleCombined = useCallback(() => {
-    const highlights: RowHighlight[] = [
-      { rowIndex: 1, start: 50, end: 100, color: '#ff0000' },
-      { rowIndex: 3, start: 200, end: 250, color: '#00ff00' },
-    ];
-    applyCustom('combined', () => applyCombined(maxLength, 'bands', highlights));
-  }, [applyCustom, maxLength]);
-
-  // Clear
-  const handleClear = useCallback(() => {
-    clearColorConfig();
-    msaRef.current?.setColorScheme('clustal2');
-    msaRef.current?.redraw();
-    setActiveCustomMode(null);
-    setColorScheme('clustal2');
-    log('Cleared custom coloring');
-  }, [log]);
-
-  const handleBuiltinChange = useCallback((scheme: string) => {
+  // Clear and switch to builtin
+  const switchToBuiltin = useCallback((scheme: string) => {
     clearColorConfig();
     setColorScheme(scheme);
-    setActiveCustomMode(null);
+    setActiveMode(null);
     msaRef.current?.setColorScheme(scheme);
     msaRef.current?.redraw();
     log(`Builtin: ${scheme}`);
@@ -145,16 +87,16 @@ export default function MSALitePage() {
     <div className="h-screen flex flex-col bg-gray-100 p-4 gap-4">
       {/* Header */}
       <div className="flex items-center justify-between bg-white rounded-lg shadow px-4 py-2">
-        <h1 className="text-lg font-semibold text-gray-800">MSA Coloring Playground</h1>
+        <h1 className="text-lg font-semibold text-gray-800">MSA Playground</h1>
         <div className="flex items-center gap-4">
           <label className="text-sm text-gray-600">
             Builtin:
             <select
-              value={activeCustomMode ? '' : colorScheme}
-              onChange={(e) => e.target.value && handleBuiltinChange(e.target.value)}
+              value={activeMode ? '' : colorScheme}
+              onChange={(e) => e.target.value && switchToBuiltin(e.target.value)}
               className="ml-2 border rounded px-2 py-1 text-sm"
             >
-              {activeCustomMode && <option value="">-- custom --</option>}
+              {activeMode && <option value="">-- custom --</option>}
               {BUILTIN_SCHEMES.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
@@ -173,7 +115,7 @@ export default function MSALitePage() {
         <div className="bg-white rounded-lg shadow flex flex-col min-w-0" style={{ width: `${panelWidth}%` }}>
           <div className="px-3 py-2 border-b text-sm text-gray-600 flex justify-between">
             <span>{isReady ? `${sequences.length} seq, ${maxLength} col` : 'Loading...'}</span>
-            {activeCustomMode && <span className="text-purple-600 font-medium">{activeCustomMode}</span>}
+            {activeMode && <span className="text-purple-600 font-medium">{activeMode}</span>}
           </div>
           <div className="flex-1 p-2 min-h-0">
             {isReady ? (
@@ -182,9 +124,9 @@ export default function MSALitePage() {
                 sequences={sequences}
                 maxLength={maxLength}
                 colorScheme={colorScheme}
-                onResidueHover={handleResidueHover}
-                onResidueLeave={handleResidueLeave}
-                onResidueClick={handleResidueClick}
+                onResidueHover={(id, pos) => log(`Hover: ${id} @ ${pos}`)}
+                onResidueLeave={() => {}}
+                onResidueClick={(id, pos) => log(`Click: ${id} @ ${pos}`)}
               />
             ) : (
               <div className="h-full flex items-center justify-center">
@@ -196,16 +138,15 @@ export default function MSALitePage() {
 
         {/* Controls */}
         <div className="flex-1 flex flex-col gap-3 min-w-0 overflow-y-auto">
-
-          {/* Jump */}
+          
+          {/* Jump to Range */}
           <div className="bg-white rounded-lg shadow p-3">
             <div className="text-sm font-medium text-gray-700 mb-2">Jump to Range</div>
             <div className="flex flex-wrap gap-2 mb-2">
-              {[[1, 50], [100, 150], [200, 250], [1, maxLength]].map(([s, e]) => (
-                <button key={`${s}-${e}`} onClick={() => msaRef.current?.jumpToRange(s, e)} className={`px-2 py-1 rounded text-xs ${e === maxLength ? 'bg-green-100 hover:bg-green-200' : 'bg-blue-100 hover:bg-blue-200'}`}>
-                  {e === maxLength ? 'Full' : `${s}-${e}`}
-                </button>
+              {[[1,50], [100,150], [200,250]].map(([s,e]) => (
+                <button key={`${s}-${e}`} onClick={() => msaRef.current?.jumpToRange(s, e)} className="px-2 py-1 bg-blue-100 hover:bg-blue-200 rounded text-xs">{s}-{e}</button>
               ))}
+              <button onClick={() => msaRef.current?.jumpToRange(1, maxLength)} className="px-2 py-1 bg-green-100 hover:bg-green-200 rounded text-xs">Full</button>
             </div>
             <div className="flex items-center gap-2">
               <input type="number" value={customStart} onChange={(e) => setCustomStart(Number(e.target.value))} className="w-16 px-1 py-0.5 border rounded text-xs" />
@@ -215,51 +156,39 @@ export default function MSALitePage() {
             </div>
           </div>
 
-          {/* Whole-MSA */}
+          {/* Example: Whole-MSA */}
           <div className="bg-white rounded-lg shadow p-3">
-            <div className="text-sm font-medium text-gray-700 mb-2">Whole-MSA Coloring</div>
+            <div className="text-sm font-medium text-gray-700 mb-1">Examples: Whole-MSA</div>
+            <div className="text-xs text-gray-500 mb-2">Column-based coloring</div>
             <div className="flex flex-wrap gap-2">
-              {[
-                { id: 'gradient', fn: handleGradient, label: 'Gradient' },
-                { id: 'bands', fn: handleBands, label: 'Bands' },
-                { id: 'conserved', fn: handleConserved, label: 'Conserved' },
-                { id: 'binding-sites', fn: handleBindingSites, label: 'Binding Sites' },
-              ].map(({ id, fn, label }) => (
-                <button key={id} onClick={fn} className={`px-2 py-1 rounded text-xs ${activeCustomMode === id ? 'bg-purple-200 ring-2 ring-purple-400' : 'bg-purple-100 hover:bg-purple-200'}`}>{label}</button>
-              ))}
+              <button onClick={() => applyCustom('gradient', () => exampleGradient(maxLength))} className={`px-2 py-1 rounded text-xs ${activeMode === 'gradient' ? 'bg-purple-200 ring-2 ring-purple-400' : 'bg-purple-100 hover:bg-purple-200'}`}>Gradient</button>
+              <button onClick={() => applyCustom('bands', () => exampleBands(maxLength))} className={`px-2 py-1 rounded text-xs ${activeMode === 'bands' ? 'bg-purple-200 ring-2 ring-purple-400' : 'bg-purple-100 hover:bg-purple-200'}`}>Bands</button>
+              <button onClick={() => applyCustom('conserved', () => exampleConservedRegions(maxLength))} className={`px-2 py-1 rounded text-xs ${activeMode === 'conserved' ? 'bg-purple-200 ring-2 ring-purple-400' : 'bg-purple-100 hover:bg-purple-200'}`}>Conserved</button>
+              <button onClick={() => applyCustom('binding', () => exampleBindingSites())} className={`px-2 py-1 rounded text-xs ${activeMode === 'binding' ? 'bg-purple-200 ring-2 ring-purple-400' : 'bg-purple-100 hover:bg-purple-200'}`}>Binding Sites</button>
             </div>
           </div>
 
-          {/* Per-Sequence */}
+          {/* Example: Per-Sequence */}
           <div className="bg-white rounded-lg shadow p-3">
-            <div className="text-sm font-medium text-gray-700 mb-2">Per-Sequence Highlights</div>
-            <div className="text-xs text-gray-500 mb-2">Single row:</div>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {[
-                { row: 0, s: 20, e: 80, c: '#ff6b6b', bg: 'red' },
-                { row: 1, s: 100, e: 180, c: '#4ecdc4', bg: 'teal' },
-                { row: 2, s: 200, e: 280, c: '#45b7d1', bg: 'sky' },
-              ].map(({ row, s, e, c, bg }) => (
-                <button key={row} onClick={() => handleSingleRow(row, s, e, c)} className={`px-2 py-1 bg-${bg}-100 hover:bg-${bg}-200 rounded text-xs`}>Seq {row}: {s}-{e}</button>
-              ))}
+            <div className="text-sm font-medium text-gray-700 mb-1">Examples: Per-Sequence</div>
+            <div className="text-xs text-gray-500 mb-2">Row-specific highlights</div>
+            <div className="flex flex-wrap gap-2 mb-2">
+              <button onClick={() => applyCustom('row-0', () => exampleSingleRow(0, 20, 80, '#ff6b6b'))} className="px-2 py-1 bg-red-100 hover:bg-red-200 rounded text-xs">Seq 0</button>
+              <button onClick={() => applyCustom('row-1', () => exampleSingleRow(1, 100, 180, '#4ecdc4'))} className="px-2 py-1 bg-teal-100 hover:bg-teal-200 rounded text-xs">Seq 1</button>
+              <button onClick={() => applyCustom('row-2', () => exampleSingleRow(2, 200, 280, '#45b7d1'))} className="px-2 py-1 bg-sky-100 hover:bg-sky-200 rounded text-xs">Seq 2</button>
             </div>
-            <div className="text-xs text-gray-500 mb-2">Multiple rows:</div>
             <div className="flex flex-wrap gap-2">
-              <button onClick={handleMultiRow} className={`px-2 py-1 rounded text-xs ${activeCustomMode === 'multi-row' ? 'bg-amber-200 ring-2 ring-amber-400' : 'bg-amber-100 hover:bg-amber-200'}`}>Fixed Multi</button>
-              <button onClick={handleRandomHighlights} className="px-2 py-1 bg-amber-100 hover:bg-amber-200 rounded text-xs">Random</button>
-              <button onClick={handlePerSeqDemo} className={`px-2 py-1 rounded text-xs ${activeCustomMode === 'per-seq-demo' ? 'bg-amber-200 ring-2 ring-amber-400' : 'bg-amber-100 hover:bg-amber-200'}`}>Diagonal</button>
+              <button onClick={() => applyCustom('multi', () => exampleMultipleRows(sequences.length))} className={`px-2 py-1 rounded text-xs ${activeMode === 'multi' ? 'bg-amber-200 ring-2 ring-amber-400' : 'bg-amber-100 hover:bg-amber-200'}`}>Diagonal</button>
+              <button onClick={() => { const h = exampleRandomHighlights(sequences.length, maxLength, 5); setActiveMode('random'); setColorScheme('custom-position'); log(`Random: ${h.length} highlights`); }} className="px-2 py-1 bg-amber-100 hover:bg-amber-200 rounded text-xs">Random</button>
+              <button onClick={() => applyCustom('combined', () => exampleCombined(maxLength))} className={`px-2 py-1 rounded text-xs ${activeMode === 'combined' ? 'bg-green-200 ring-2 ring-green-400' : 'bg-green-100 hover:bg-green-200'}`}>Combined</button>
             </div>
           </div>
 
-          {/* Combined */}
+          {/* Reset */}
           <div className="bg-white rounded-lg shadow p-3">
-            <div className="text-sm font-medium text-gray-700 mb-2">Combined</div>
-            <button onClick={handleCombined} className={`px-2 py-1 rounded text-xs ${activeCustomMode === 'combined' ? 'bg-green-200 ring-2 ring-green-400' : 'bg-green-100 hover:bg-green-200'}`}>Bands + Row Overrides</button>
-          </div>
-
-          {/* Clear */}
-          <div className="bg-white rounded-lg shadow p-3">
-            <button onClick={handleClear} className="w-full px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm font-medium">Reset to Builtin</button>
+            <button onClick={() => switchToBuiltin('clustal2')} className="w-full px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm font-medium">
+              Reset to Clustal
+            </button>
           </div>
 
           {/* Log */}

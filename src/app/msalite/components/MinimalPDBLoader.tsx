@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { MolstarService } from '@/components/molstar/molstar_service';
-import { useSequenceAligner } from '../msa-viewer/hooks/useSequenceAligner';
+import { useSequenceAligner } from '../../msa-viewer/hooks/useSequenceAligner';
 import { createClassificationFromProfile } from '@/services/profile_service';
 
 interface MinimalPDBLoaderProps {
