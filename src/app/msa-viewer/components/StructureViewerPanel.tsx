@@ -1,4 +1,4 @@
-import { MolstarNode } from "@/components/molstar/molstar_spec";
+import { MolstarNode } from "@/components/molstar/spec";
 import { useAppSelector } from "@/store/store";
 
 interface StructureViewerPanelProps {

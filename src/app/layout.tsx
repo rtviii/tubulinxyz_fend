@@ -4,13 +4,14 @@ import { Provider } from 'react-redux';
 import { makeStore, AppStore } from '@/store/store';
 import { MolstarProvider } from '@/components/molstar/molstar_service';
 import './globals.css';
+import { MolstarInstanceManagerProvider } from '@/components/molstar/services/MolstarInstanceManager';
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const storeRef = useRef<AppStore>();
+  const storeRef = useRef<AppStore | null>(null)
 
   if (!storeRef.current) {
     // Create the store instance only once
@@ -21,9 +22,9 @@ export default function RootLayout({
     <html lang="en">
       <body className="bg-white">
         <Provider store={storeRef.current}>
-          <MolstarProvider>
+          <MolstarInstanceManagerProvider>
             {children}
-          </MolstarProvider>
+          </MolstarInstanceManagerProvider>
         </Provider>
       </body>
     </html>

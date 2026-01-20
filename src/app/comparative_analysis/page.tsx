@@ -1,7 +1,7 @@
 'use client'
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useMolstarService } from '@/components/molstar/molstar_service';
-import { MolstarNode } from '@/components/molstar/molstar_spec';
+import { MolstarNode } from '@/components/molstar/spec';
 import { useAppDispatch, useAppSelector } from '@/store/store';
 import { selectStructure, selectSelectedStructure, selectIsLoading, selectError, setLoading, setError } from '@/store/slices/tubulin_structures';
 import React from 'react';

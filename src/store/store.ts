@@ -3,9 +3,10 @@ import { TypedUseSelectorHook, useDispatch, useSelector, useStore } from 'react-
 
 import { tubxz_api } from './tubxz_api';
 
-import molstarRefsReducer from './slices/molstar_refs';
-import polymerStatesReducer from './slices/polymer_states';
-import nonPolymerStatesReducer from './slices/nonpolymer_states';
+// New consolidated slice
+import molstarInstancesReducer from '@/components/molstar/state/molstarInstancesSlice';
+
+// Keep other slices as needed
 import sequenceViewerReducer from './slices/sequence_viewer';
 import sequenceStructureSyncReducer from './slices/sequence_structure_sync';
 import interactionReducer from './slices/interaction_slice';
@@ -16,9 +17,10 @@ import sequenceRegistryReducer from './slices/sequence_registry';
 export const makeStore = () => {
   return configureStore({
     reducer: {
-      molstarRefs: molstarRefsReducer,
-      polymerStates: polymerStatesReducer,
-      nonPolymerStates: nonPolymerStatesReducer,
+      // New consolidated Molstar state
+      molstarInstances: molstarInstancesReducer,
+
+      // Other slices
       sequenceViewer: sequenceViewerReducer,
       sequenceStructureSync: sequenceStructureSyncReducer,
       interaction: interactionReducer,

@@ -7,7 +7,7 @@ import { useGetMasterProfileMsaMasterGetQuery } from '@/store/tubxz_api';
 import { addSequence, selectMasterSequences, selectAddedSequenceGroups, removeSequence } from '@/store/slices/sequence_registry';
 import { useNightingaleComponents } from '../msa-viewer/hooks/useNightingaleComponents';
 import { useMolstarService } from '@/components/molstar/molstar_service';
-import { MolstarNode } from '@/components/molstar/molstar_spec';
+import { MolstarNode } from '@/components/molstar/spec';
 import { ResizableMSAContainer, ResizableMSAContainerHandle } from './components/ResizableMSAContainer';
 import { ChainAligner } from './components/ChainAligner';
 import { clearColorConfig } from './services/msaColorService';

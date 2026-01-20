@@ -4,7 +4,7 @@ import { renderReact18 } from 'molstar/lib/mol-plugin-ui/react18';
 import { PluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
 import { PluginCommands } from 'molstar/lib/mol-plugin/commands';
 import { Color } from 'molstar/lib/mol-util/color';
-import { ribxzSpec } from './molstar_spec';
+import { ribxzSpec } from './spec';
 import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state';
 import { StateSelection } from 'molstar/lib/mol-state';
 import { Structure } from 'molstar/lib/mol-model/structure';
