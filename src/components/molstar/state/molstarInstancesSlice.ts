@@ -1,10 +1,11 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import {
   MolstarInstanceId,
+  ViewMode,
   Component,
-  PolymerComponent,
-  LigandComponent,
   ComponentUIState,
+  AlignedStructure,
+  MonomerChainState,
 } from '../core/types';
 
 // ============================================================
@@ -17,6 +18,13 @@ interface MolstarInstanceState {
   components: Record<string, Component>;
   componentStates: Record<string, ComponentUIState>;
   activeColorscheme: string | null;
+
+  // View mode
+  viewMode: ViewMode;
+  activeMonomerChainId: string | null;
+
+  // Per-chain monomer state
+  monomerChainStates: Record<string, MonomerChainState>;
 }
 
 interface MolstarInstancesState {
@@ -33,13 +41,20 @@ const createEmptyInstanceState = (): MolstarInstanceState => ({
   components: {},
   componentStates: {},
   activeColorscheme: null,
+  viewMode: 'structure',
+  activeMonomerChainId: null,
+  monomerChainStates: {},
+});
+
+const createEmptyMonomerChainState = (): MonomerChainState => ({
+  alignedStructures: {},
 });
 
 const initialState: MolstarInstancesState = {
   instances: {
     structure: createEmptyInstanceState(),
     monomer: createEmptyInstanceState(),
-    msalite: createEmptyInstanceState(),  // <-- Add this
+    msalite: createEmptyInstanceState(),
   },
 };
 
@@ -91,6 +106,11 @@ export const molstarInstancesSlice = createSlice({
         const key = getComponentKey(component);
         instance.components[key] = component;
         instance.componentStates[key] = { visible: true, hovered: false };
+
+        // Initialize monomer chain state for polymers
+        if (component.type === 'polymer' && !instance.monomerChainStates[key]) {
+          instance.monomerChainStates[key] = createEmptyMonomerChainState();
+        }
       }
     },
 
@@ -138,6 +158,70 @@ export const molstarInstancesSlice = createSlice({
       state.instances[instanceId].activeColorscheme = colorschemeId;
     },
 
+    // --- View Mode ---
+    setViewMode: (
+      state,
+      action: PayloadAction<{
+        instanceId: MolstarInstanceId;
+        viewMode: ViewMode;
+        activeChainId?: string | null;
+      }>
+    ) => {
+      const { instanceId, viewMode, activeChainId } = action.payload;
+      state.instances[instanceId].viewMode = viewMode;
+      state.instances[instanceId].activeMonomerChainId = activeChainId ?? null;
+    },
+
+    // --- Aligned Structures ---
+    addAlignedStructure: (
+      state,
+      action: PayloadAction<{
+        instanceId: MolstarInstanceId;
+        targetChainId: string;
+        alignedStructure: AlignedStructure;
+      }>
+    ) => {
+      const { instanceId, targetChainId, alignedStructure } = action.payload;
+      const instance = state.instances[instanceId];
+
+      if (!instance.monomerChainStates[targetChainId]) {
+        instance.monomerChainStates[targetChainId] = createEmptyMonomerChainState();
+      }
+
+      instance.monomerChainStates[targetChainId].alignedStructures[alignedStructure.id] = alignedStructure;
+    },
+
+    removeAlignedStructure: (
+      state,
+      action: PayloadAction<{
+        instanceId: MolstarInstanceId;
+        targetChainId: string;
+        alignedStructureId: string;
+      }>
+    ) => {
+      const { instanceId, targetChainId, alignedStructureId } = action.payload;
+      const chainState = state.instances[instanceId].monomerChainStates[targetChainId];
+      if (chainState) {
+        delete chainState.alignedStructures[alignedStructureId];
+      }
+    },
+
+    setAlignedStructureVisibility: (
+      state,
+      action: PayloadAction<{
+        instanceId: MolstarInstanceId;
+        targetChainId: string;
+        alignedStructureId: string;
+        visible: boolean;
+      }>
+    ) => {
+      const { instanceId, targetChainId, alignedStructureId, visible } = action.payload;
+      const aligned = state.instances[instanceId].monomerChainStates[targetChainId]?.alignedStructures[alignedStructureId];
+      if (aligned) {
+        aligned.visible = visible;
+      }
+    },
+
     // --- Cleanup ---
     clearInstance: (state, action: PayloadAction<MolstarInstanceId>) => {
       state.instances[action.payload] = createEmptyInstanceState();
@@ -153,6 +237,10 @@ export const {
   setComponentVisibility,
   setComponentHovered,
   setActiveColorscheme,
+  setViewMode,
+  addAlignedStructure,
+  removeAlignedStructure,
+  setAlignedStructureVisibility,
   clearInstance,
   clearAllInstances,
 } = molstarInstancesSlice.actions;

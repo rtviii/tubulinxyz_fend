@@ -4,8 +4,13 @@ import { Color } from 'molstar/lib/mol-util/color';
 // Instance Types
 // ============================================================
 
-// Add 'msalite' to the union type
 export type MolstarInstanceId = 'structure' | 'monomer' | 'msalite';
+
+// ============================================================
+// View Mode
+// ============================================================
+
+export type ViewMode = 'structure' | 'monomer';
 
 // ============================================================
 // Component Types
@@ -45,6 +50,26 @@ export function isLigandComponent(c: Component): c is LigandComponent {
 export interface ComponentUIState {
   visible: boolean;
   hovered: boolean;
+}
+
+// ============================================================
+// Aligned Structure Types
+// ============================================================
+
+export interface AlignedStructure {
+  id: string;                  // unique key, e.g. "1TUB_A_aligned_to_B"
+  sourcePdbId: string;         // e.g. "1TUB"
+  sourceChainId: string;       // e.g. "A"
+  targetChainId: string;       // which monomer chain this is aligned to
+  parentRef: string;           // ref to full structure (for cleanup)
+  chainComponentRef: string;   // ref to chain component (for visibility/transform)
+  visible: boolean;
+  rmsd: number | null;         // alignment quality
+}
+
+export interface MonomerChainState {
+  alignedStructures: Record<string, AlignedStructure>;
+  // Future: annotation visibility, custom colorings, etc.
 }
 
 // ============================================================

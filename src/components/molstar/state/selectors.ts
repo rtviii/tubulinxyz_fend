@@ -2,12 +2,15 @@ import { createSelector } from '@reduxjs/toolkit';
 import { RootState } from '@/store/store';
 import {
   MolstarInstanceId,
+  ViewMode,
   Component,
   PolymerComponent,
   LigandComponent,
   isPolymerComponent,
   isLigandComponent,
   ComponentUIState,
+  MonomerChainState,
+  AlignedStructure,
 } from '../core/types';
 
 // ============================================================
@@ -36,6 +39,16 @@ export const selectStructureRef = createSelector(
 export const selectActiveColorscheme = createSelector(
   [selectInstance],
   (instance) => instance?.activeColorscheme ?? null
+);
+
+export const selectViewMode = createSelector(
+  [selectInstance],
+  (instance): ViewMode => instance?.viewMode ?? 'structure'
+);
+
+export const selectActiveMonomerChainId = createSelector(
+  [selectInstance],
+  (instance) => instance?.activeMonomerChainId ?? null
 );
 
 // ============================================================
@@ -82,17 +95,43 @@ export const selectVisibleComponents = createSelector(
 );
 
 // ============================================================
+// Monomer Chain State Selectors
+// ============================================================
+
+export const selectMonomerChainState = createSelector(
+  [selectInstance, (_state: RootState, _instanceId: MolstarInstanceId, chainId: string) => chainId],
+  (instance, chainId): MonomerChainState | null => instance?.monomerChainStates[chainId] ?? null
+);
+
+export const selectAlignedStructures = createSelector(
+  [selectMonomerChainState],
+  (chainState): AlignedStructure[] => chainState ? Object.values(chainState.alignedStructures) : []
+);
+
+export const selectAlignedStructuresForActiveChain = createSelector(
+  [selectInstance],
+  (instance): AlignedStructure[] => {
+    if (!instance || !instance.activeMonomerChainId) return [];
+    const chainState = instance.monomerChainStates[instance.activeMonomerChainId];
+    return chainState ? Object.values(chainState.alignedStructures) : [];
+  }
+);
+
+// ============================================================
 // Convenience Hooks Factory
 // ============================================================
 
-// These are designed to be used with useMemo in components
 export const makeSelectorsForInstance = (instanceId: MolstarInstanceId) => ({
   selectLoadedStructure: (state: RootState) => selectLoadedStructure(state, instanceId),
   selectStructureRef: (state: RootState) => selectStructureRef(state, instanceId),
   selectActiveColorscheme: (state: RootState) => selectActiveColorscheme(state, instanceId),
+  selectViewMode: (state: RootState) => selectViewMode(state, instanceId),
+  selectActiveMonomerChainId: (state: RootState) => selectActiveMonomerChainId(state, instanceId),
   selectAllComponents: (state: RootState) => selectAllComponents(state, instanceId),
   selectPolymerComponents: (state: RootState) => selectPolymerComponents(state, instanceId),
   selectLigandComponents: (state: RootState) => selectLigandComponents(state, instanceId),
   selectComponentByKey: (state: RootState, key: string) => selectComponentByKey(state, instanceId, key),
   selectComponentState: (state: RootState, key: string) => selectComponentState(state, instanceId, key),
+  selectMonomerChainState: (state: RootState, chainId: string) => selectMonomerChainState(state, instanceId, chainId),
+  selectAlignedStructuresForActiveChain: (state: RootState) => selectAlignedStructuresForActiveChain(state, instanceId),
 });
