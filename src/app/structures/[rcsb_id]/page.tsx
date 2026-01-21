@@ -347,13 +347,19 @@ function MonomerSidebar({
   onToggleMutations: (enabled: boolean) => void;
   onClearAll: () => void;
 }) {
-  const [showAlignForm, setShowAlignForm] = useState(false);
+const [showAlignForm, setShowAlignForm] = useState(false);
+  const { alignChain } = useChainAlignment(); // Access the alignment hook
 
   const handleBack = () => instance?.exitMonomerView();
   const handleChainSwitch = (chainId: string) => {
     if (chainId !== activeChainId) instance?.switchMonomerChain(chainId);
   };
-
+const getFamilyForChain = (chainId: string): string | undefined => {
+    if (!profile) return undefined;
+    const poly = profile.polypeptides.find(p => p.auth_asym_id === chainId);
+    if (!poly) return undefined;
+    return profile.entities[poly.entity_id]?.family;
+  };
   const activeFamily = (() => {
     if (!profile || !activeChainId) return undefined;
     const poly = profile.polypeptides.find(p => p.auth_asym_id === activeChainId);
@@ -409,11 +415,13 @@ function MonomerSidebar({
               <Plus size={14} />
             </button>
           </div>
-          {showAlignForm && activeChainId && (
+{showAlignForm && activeChainId && (
             <AlignStructureForm
               targetChainId={activeChainId}
               instance={instance}
               onClose={() => setShowAlignForm(false)}
+              alignChain={alignChain}
+              targetFamily={getFamilyForChain(activeChainId)}
             />
           )}
           <div className="space-y-1 mt-2">
@@ -640,7 +648,19 @@ function LigandRow({ ligand, instance }: { ligand: LigandComponent; instance: Mo
   );
 }
 
-function AlignStructureForm({ targetChainId, instance, onClose }: { targetChainId: string; instance: MolstarInstance | null; onClose: () => void; }) {
+function AlignStructureForm({ 
+    targetChainId, 
+    instance, 
+    onClose, 
+    alignChain, 
+    targetFamily 
+}: { 
+    targetChainId: string; 
+    instance: MolstarInstance | null; 
+    onClose: () => void;
+    alignChain: (pdbId: string, chainId: string, inst: MolstarInstance, family?: string) => Promise<any>;
+    targetFamily?: string;
+}) {
   const [sourcePdbId, setSourcePdbId] = useState('');
   const [sourceChainId, setSourceChainId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -648,26 +668,67 @@ function AlignStructureForm({ targetChainId, instance, onClose }: { targetChainI
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!instance || !sourcePdbId.trim() || !sourceChainId.trim()) return;
-    setLoading(true); setError(null);
+    const pdbId = sourcePdbId.trim().toUpperCase();
+    const chainId = sourceChainId.trim().toUpperCase();
+
+    if (!instance || !pdbId || !chainId) return;
+    
+    setLoading(true); 
+    setError(null);
+
     try {
-      const result = await instance.loadAlignedStructure(targetChainId, sourcePdbId.trim().toUpperCase(), sourceChainId.trim().toUpperCase());
-      if (result) onClose(); else setError('Failed to load or align structure');
-    } catch (err) { setError(err instanceof Error ? err.message : 'Unknown error'); } finally { setLoading(false); }
+      // 1. Structural Alignment (Molstar side)
+      // This performs the 3D superposition relative to the targetChainId
+      const structuralResult = await instance.loadAlignedStructure(targetChainId, pdbId, chainId);
+      
+      if (structuralResult) {
+        // 2. Sequence Alignment (MSA side)
+        // This triggers the backend call you mentioned to fetch gapped sequence/mapping
+        // We pass the targetFamily so the backend knows which Master sequence to use
+        await alignChain(pdbId, chainId, instance, targetFamily);
+        onClose(); 
+      } else {
+        setError('Failed to load or align structure in 3D');
+      }
+    } catch (err) { 
+        setError(err instanceof Error ? err.message : 'Unknown error during alignment'); 
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   return (
     <form onSubmit={handleSubmit} className="p-2 bg-gray-50 rounded space-y-2">
       <div className="flex gap-2">
-        <input type="text" placeholder="PDB ID" value={sourcePdbId} onChange={(e) => setSourcePdbId(e.target.value)} className="flex-1 px-2 py-1 text-xs border rounded" disabled={loading} />
-        <input type="text" placeholder="Chain" value={sourceChainId} onChange={(e) => setSourceChainId(e.target.value)} className="w-16 px-2 py-1 text-xs border rounded" disabled={loading} />
+        <input 
+            type="text" 
+            placeholder="PDB ID" 
+            value={sourcePdbId} 
+            onChange={(e) => setSourcePdbId(e.target.value)} 
+            className="flex-1 px-2 py-1 text-xs border rounded" 
+            disabled={loading} 
+        />
+        <input 
+            type="text" 
+            placeholder="Chain" 
+            value={sourceChainId} 
+            onChange={(e) => setSourceChainId(e.target.value)} 
+            className="w-16 px-2 py-1 text-xs border rounded" 
+            disabled={loading} 
+        />
       </div>
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-[10px] text-red-500 leading-tight">{error}</p>}
       <div className="flex gap-2">
-        <button type="submit" disabled={loading || !sourcePdbId.trim() || !sourceChainId.trim()} className="flex-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1">
-          {loading && <Loader2 size={12} className="animate-spin" />} Align
+        <button 
+            type="submit" 
+            disabled={loading || !sourcePdbId.trim() || !sourceChainId.trim()} 
+            className="flex-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1"
+        >
+          {loading ? <Loader2 size={12} className="animate-spin" /> : 'Align'}
         </button>
-        <button type="button" onClick={onClose} disabled={loading} className="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300">Cancel</button>
+        <button type="button" onClick={onClose} disabled={loading} className="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300">
+            Cancel
+        </button>
       </div>
     </form>
   );
