@@ -33,7 +33,7 @@ import {
 import { useGetMasterProfileMsaMasterGetQuery } from '@/store/tubxz_api';
 import { useChainAlignment } from '@/hooks/useChainAlignment';
 import { useNightingaleComponents } from '@/hooks/useNightingaleComponents';
-import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/app/msalite/components/ResizableMSAContainer';
+// import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/app/msalite/components/ResizableMSAContainer';
 import { MSAToolbar } from '@/app/msalite/components/MSAToolbar';
 import { BindingSitePanel, TUBULIN_BINDING_SITES } from '@/app/structures/[rcsb_id]/BindingSitePanel';
 import { API_BASE_URL } from '@/config';
@@ -48,6 +48,7 @@ import { useSync, useSyncHandlers } from '@/hooks/useSync';
 import { useBindingSites } from '@/hooks/useBindingSites';
 import { BindingSite } from '@/lib/types/sync';
 import { AnnotationData, AnnotationPanel } from '@/app/msalite/components/AnnotationPanel';
+import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/app/msalite/ResizableMSAContainer';
 
 // Convert the old format to the new format
 const BINDING_SITES: BindingSite[] = TUBULIN_BINDING_SITES.map(site => ({
