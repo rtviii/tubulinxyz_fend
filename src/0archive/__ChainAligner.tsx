@@ -3,7 +3,7 @@
 
 import { useState, useCallback } from 'react';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
-import { useChainAlignment } from '../../../hooks/useChainAlignment';
+import { useChainAlignment } from '../hooks/useChainAlignment';
 import { useAppSelector } from '@/store/store';
 import { selectIsChainAligned } from '@/store/slices/sequence_registry';
 
@@ -20,13 +20,12 @@ interface ChainInfo {
 }
 
 export function ChainAligner({ molstarInstance, onLog }: ChainAlignerProps) {
-  const [pdbInput, setPdbInput] = useState('');
+  const [pdbInput, setPdbInput]       = useState('');
   const [loadedPdbId, setLoadedPdbId] = useState<string | null>(null);
-  const [chains, setChains] = useState<ChainInfo[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [chains, setChains]           = useState<ChainInfo[]>([]);
+  const [isLoading, setIsLoading]     = useState(false);
 
   const { alignChain, isAligning, currentChain, error } = useChainAlignment();
-
   const log = useCallback((msg: string) => {
     onLog?.(msg);
     console.log(`[ChainAligner] ${msg}`);
@@ -36,6 +35,7 @@ export function ChainAligner({ molstarInstance, onLog }: ChainAlignerProps) {
     if (!molstarInstance || !pdbInput.trim()) return;
 
     const pdbId = pdbInput.trim().toUpperCase();
+
     setIsLoading(true);
     setChains([]);
     setLoadedPdbId(null);
@@ -43,16 +43,14 @@ export function ChainAligner({ molstarInstance, onLog }: ChainAlignerProps) {
     try {
       log(`Loading ${pdbId}...`);
 
-      // Fetch profile for classification AND family info
       let classification: Record<string, string> = {};
-      let familyMap: Record<string, string> = {};  // chainId -> family
+      let familyMap:      Record<string, string> = {};
 
       try {
+
         const response = await fetch(`http://localhost:8000/structures/${pdbId}/profile`);
         if (response.ok) {
           const profile = await response.json();
-
-          // Build classification and family maps from profile
           if (profile.polypeptides && profile.entities) {
             for (const poly of profile.polypeptides) {
               const entity = profile.entities[poly.entity_id];
@@ -64,7 +62,6 @@ export function ChainAligner({ molstarInstance, onLog }: ChainAlignerProps) {
           }
         }
       } catch {
-        // Profile fetch is optional
       }
 
       await molstarInstance.loadStructure(pdbId, classification);
@@ -189,10 +186,10 @@ function ChainRow({
         onClick={onAlign}
         disabled={isAligned || isAligning}
         className={`px-2 py-0.5 rounded text-xs ${isAligned
-            ? 'bg-green-200 text-green-800 cursor-default'
-            : isAligning
-              ? 'bg-blue-100 text-blue-700'
-              : 'bg-gray-800 text-white hover:bg-black'
+          ? 'bg-green-200 text-green-800 cursor-default'
+          : isAligning
+            ? 'bg-blue-100 text-blue-700'
+            : 'bg-gray-800 text-white hover:bg-black'
           }`}
       >
         {isAligned ? 'Done' : isAligning ? '...' : 'Align'}

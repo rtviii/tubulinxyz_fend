@@ -73,7 +73,8 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       if (!el) return;
 
       const observer = new ResizeObserver((entries) => {
-        const width = entries[0]?.contentRect.width;
+        // Use contentBoxSize for precise sub-pixel measurements during zoom
+        const width = entries[0]?.contentBoxSize?.[0]?.inlineSize ?? entries[0]?.contentRect.width;
         if (width > 0) setAvailableWidth(width);
       });
 
@@ -93,60 +94,32 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       return msa.renderRoot?.querySelector('msa-sequence-viewer') ?? null;
     }, []);
 
-const triggerRedraw = useCallback(() => {
-  const seqViewer = getSequenceViewer();
-  console.log('[ResizableMSA] triggerRedraw called, seqViewer:', !!seqViewer);
-  
-  if (seqViewer) {
-    // Try multiple methods
-    if (typeof seqViewer.requestUpdate === 'function') {
-      console.log('[ResizableMSA] Calling requestUpdate');
-      seqViewer.requestUpdate();
-    }
-    if (typeof seqViewer.draw === 'function') {
-      console.log('[ResizableMSA] Calling draw');
-      seqViewer.draw();
-    }
-  }
-}, [getSequenceViewer]);
+    const triggerRedraw = useCallback(() => {
+      const seqViewer = getSequenceViewer();
+      if (seqViewer) {
+        if (typeof seqViewer.requestUpdate === 'function') seqViewer.requestUpdate();
+        if (typeof seqViewer.draw === 'function') seqViewer.draw();
+      }
+    }, [getSequenceViewer]);
+
     const syncWidths = useCallback(() => {
       const nav = navRef.current;
       const msa = msaRef.current;
 
+      // Update Nightingale attributes to match calculated contentWidth
       if (nav) {
         nav.setAttribute('width', String(contentWidth));
-        nav.width = contentWidth;
-        nav.style.width = `${contentWidth}px`;
-        nav.style.minWidth = `${contentWidth}px`;
-        nav.style.maxWidth = `${contentWidth}px`;
-
-        const svg = nav.renderRoot?.querySelector('svg');
-        if (svg) {
-          svg.setAttribute('width', String(contentWidth));
-          svg.style.width = `${contentWidth}px`;
-          svg.style.minWidth = `${contentWidth}px`;
-        }
-
         if (typeof nav.onDimensionsChange === 'function') nav.onDimensionsChange();
         if (typeof nav.renderD3 === 'function') nav.renderD3();
       }
 
       if (msa) {
         msa.setAttribute('width', String(contentWidth));
-        msa.width = contentWidth;
-        msa.style.width = `${contentWidth}px`;
-        msa.style.minWidth = `${contentWidth}px`;
-        msa.style.maxWidth = `${contentWidth}px`;
-
         if (typeof msa.onDimensionsChange === 'function') msa.onDimensionsChange();
 
         const seqViewer = getSequenceViewer();
         if (seqViewer) {
           seqViewer.setAttribute('width', String(contentWidth));
-          seqViewer.width = contentWidth;
-          seqViewer.style.width = `${contentWidth}px`;
-          seqViewer.style.minWidth = `${contentWidth}px`;
-
           if (typeof seqViewer.invalidateAndRedraw === 'function') {
             seqViewer.invalidateAndRedraw();
           }
@@ -163,12 +136,10 @@ const triggerRedraw = useCallback(() => {
 
     const setColorScheme = useCallback((scheme: string) => {
       const msa = msaRef.current;
-      console.log('[ResizableMSA] setColorScheme called with:', scheme, 'msa:', !!msa);
       if (!msa) return;
 
       msa.setAttribute('color-scheme', scheme);
 
-      // Force cache invalidation for custom scheme
       if (scheme === 'custom-position') {
         const seqViewer = getSequenceViewer();
         if (seqViewer?.residueTileCache) {
@@ -176,13 +147,10 @@ const triggerRedraw = useCallback(() => {
         }
       }
 
-      // Give the attribute time to propagate, then redraw
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const seqViewer = getSequenceViewer();
-          console.log('[ResizableMSA] Inside RAF, seqViewer:', !!seqViewer);
           if (seqViewer && typeof seqViewer.invalidateAndRedraw === 'function') {
-            console.log('[ResizableMSA] Calling invalidateAndRedraw from setColorScheme');
             seqViewer.invalidateAndRedraw();
           }
         });
@@ -196,9 +164,9 @@ const triggerRedraw = useCallback(() => {
     }), [triggerRedraw, jumpToRange, setColorScheme]);
 
     useLayoutEffect(() => {
-      if (contentWidth === 0) return;
-      requestAnimationFrame(() => syncWidths());
-    }, [contentWidth, syncWidths]);
+      if (availableWidth === 0) return;
+      syncWidths();
+    }, [availableWidth, syncWidths]);
 
     useEffect(() => {
       if (!msaRef.current || sequences.length === 0 || contentWidth === 0) return;
@@ -226,7 +194,6 @@ const triggerRedraw = useCallback(() => {
       });
     }, [colorScheme, isInitialized, triggerRedraw]);
 
-    // Sync vertical scroll
     useEffect(() => {
       const msa = msaRef.current;
       const labels = labelsRef.current;
@@ -245,14 +212,6 @@ const triggerRedraw = useCallback(() => {
 
       let scrollContainer = findScrollContainer();
 
-      if (!scrollContainer) {
-        const retryTimer = setTimeout(() => {
-          scrollContainer = findScrollContainer();
-          if (scrollContainer) attachListener(scrollContainer);
-        }, 500);
-        return () => clearTimeout(retryTimer);
-      }
-
       const attachListener = (container: HTMLElement) => {
         const handleScroll = () => {
           labels.scrollTop = container.scrollTop;
@@ -260,6 +219,14 @@ const triggerRedraw = useCallback(() => {
         container.addEventListener('scroll', handleScroll);
         return () => container.removeEventListener('scroll', handleScroll);
       };
+
+      if (!scrollContainer) {
+        const retryTimer = setTimeout(() => {
+          scrollContainer = findScrollContainer();
+          if (scrollContainer) attachListener(scrollContainer);
+        }, 500);
+        return () => clearTimeout(retryTimer);
+      }
 
       return attachListener(scrollContainer);
     }, [isInitialized]);
@@ -312,16 +279,13 @@ const triggerRedraw = useCallback(() => {
     }
 
     return (
-      <div ref={outerRef} className="w-full h-full flex">
+      <div ref={outerRef} className="w-full h-full flex overflow-hidden">
         {/* Labels column */}
         <div
-          className="flex-shrink-0 flex flex-col border-r border-gray-200"
+          className="flex-shrink-0 flex flex-col border-r border-gray-200 bg-white"
           style={{ width: labelWidth }}
         >
-          {/* Spacer for nav */}
           <div style={{ height: navHeight, flexShrink: 0 }} className="border-b border-gray-100" />
-
-          {/* Labels */}
           <div
             ref={labelsRef}
             className="overflow-hidden"
@@ -335,14 +299,14 @@ const triggerRedraw = useCallback(() => {
 
         {/* MSA column */}
         <div
-          className="flex-1 min-w-0"
+          className="flex-1 min-w-0 bg-white"
           style={{
             overflowX: needsScroll ? 'auto' : 'hidden',
             overflowY: 'hidden',
           }}
         >
-          <div style={{ width: contentWidth, minWidth: contentWidth }}>
-            <nightingale-manager style={{ display: 'block', width: contentWidth, minWidth: contentWidth }}>
+          <div style={{ width: contentWidth }}>
+            <nightingale-manager style={{ display: 'block', width: '100%' }}>
               <nightingale-navigation
                 ref={navRef}
                 height={navHeight}
@@ -372,7 +336,6 @@ const triggerRedraw = useCallback(() => {
   }
 );
 
-// Separate label component for cleaner styling
 function SequenceLabel({ seq, height }: { seq: SequenceData; height: number }) {
   const isMaster = seq.originType === 'master';
   const isPdb = seq.originType === 'pdb';

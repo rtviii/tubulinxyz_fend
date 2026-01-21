@@ -103,6 +103,20 @@ export default function StructureProfilePageRefactored() {
   const masterSequences = useAppSelector(selectMasterSequences);
   const pdbSequences = useAppSelector(selectPdbSequences);
 
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !instance) return;
+
+    const observer = new ResizeObserver(() => {
+      // Trigger Molstar's internal resize logic
+      requestAnimationFrame(() => {
+        instance.viewer.handleResize();
+      });
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [instance]);
   // Initialize master sequences once
   useEffect(() => {
     if (!masterData?.sequences || masterSequencesInitialized.current) return;
@@ -193,10 +207,10 @@ export default function StructureProfilePageRefactored() {
         </div>
 
         {/* Main content area */}
-        <div className="flex-1 h-full flex flex-col">
-          {/* Molstar viewer */}
+        <div className="flex-1 h-full flex flex-col min-w-0 overflow-hidden">
+          {/* Molstar viewer: Added min-h-0 to allow shrinking */}
           <div
-            className={`relative transition-all duration-300 ${isMonomerView ? 'h-1/2' : 'h-full'}`}
+            className={`relative transition-all duration-300 min-h-0 ${isMonomerView ? 'h-1/2' : 'h-full'}`}
           >
             <div ref={containerRef} className="w-full h-full" />
             {(!isInitialized || isLoading) && (
@@ -204,9 +218,9 @@ export default function StructureProfilePageRefactored() {
             )}
           </div>
 
-          {/* MSA Panel (only in monomer view) */}
+          {/* MSA Panel: Added min-h-0 and flex-col for stable layout */}
           {isMonomerView && activeChainId && (
-            <div className="h-1/2 border-t border-gray-300 bg-white">
+            <div className="h-1/2 border-t border-gray-300 bg-white min-h-0 flex flex-col overflow-hidden">
               <MonomerMSAPanelRefactored
                 pdbId={loadedStructure}
                 chainId={activeChainId}
@@ -223,7 +237,7 @@ export default function StructureProfilePageRefactored() {
         </div>
       </div>
     </div>
-  );
+  );;
 }
 
 // ============================================================
@@ -355,8 +369,8 @@ function MonomerSidebar({
               key={chain.chainId}
               onClick={() => handleChainSwitch(chain.chainId)}
               className={`px-2 py-1 text-xs font-mono rounded ${chain.chainId === activeChainId
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
             >
               {chain.chainId}

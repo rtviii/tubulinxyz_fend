@@ -30,14 +30,17 @@ export class MolstarViewer {
     return this.initPromise;
   }
 
+  handleResize() {
+    this.ctx?.canvas3d?.handleResize();
+  }
   private async doInit(container: HTMLElement, spec: PluginUISpec): Promise<void> {
     this.ctx = await createPluginUI({ target: container, spec, render: renderReact18 });
-    
+
     // Register custom preset
     this.ctx.builders.structure.representation.registerPreset(EnhancedTubulinSplitPreset);
     this.ctx.builders.structure.representation.registerPreset(MonomerPreset); // <-- add
-  
-    
+
+
     this.applyDefaultStyling();
   }
 

@@ -19,8 +19,7 @@ import {
 
 import { useAppDispatch, useAppSelector } from "@/store/store";
 import {
-    set_structures_filter,
-    update_grouped_by_deposition,
+    set_structures_filter
 } from "@/store/slices/slice_structures";
 import { set_polymers_filter as set_poly_filter_real } from "@/store/slices/slice_polymers";
 import { getHexColor } from "@/components/molstar/colors/tubulin-color-theme";
@@ -28,7 +27,6 @@ import { getHexColor } from "@/components/molstar/colors/tubulin-color-theme";
 const tagRender = (props: any) => {
     const { label, value, closable, onClose } = props;
     const color = getHexColor(value);
-
     return (
         <Tag
             closable={closable}
@@ -64,10 +62,10 @@ const FilterSection = ({ label, children }: { label: string; children: React.Rea
 );
 
 export const StructureFiltersComponent = ({ update_state }: { update_state: "structures" | "polymers" }) => {
-    const dispatch = useAppDispatch();
+    const dispatch                 = useAppDispatch();
     const { data: sourceTaxaTree } = useGetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetQuery({ taxType: "source" });
-    const { data: familiesData } = useGetFamiliesStructuresFamiliesGetQuery();
-    const { data: facets } = useGetFacetsStructuresFacetsGetQuery();
+    const { data: familiesData }   = useGetFamiliesStructuresFamiliesGetQuery();
+    const { data: facets }         = useGetFacetsStructuresFacetsGetQuery();
 
     const filters = useAppSelector((state) => (update_state === "structures" ? state.structures_page.filters : state.polymers_page.filters));
     const total_count = useAppSelector((state) => (update_state === "structures" ? state.structures_page?.total_count : state.polymers_page?.total_count) || 0);
