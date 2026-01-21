@@ -1,8 +1,6 @@
-
 // src/app/msalite/components/BindingSitePanel.tsx
 'use client';
 
-import { useState, useCallback } from 'react';
 import { MapPin, Eye, EyeOff, Focus } from 'lucide-react';
 
 // ============================================================
