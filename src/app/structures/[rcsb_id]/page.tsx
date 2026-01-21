@@ -1,4 +1,7 @@
-// src/app/structures/[rcsb_id]/page.tsx
+// src/app/structures/[rcsb_id]/page_FULL_refactored.tsx
+// COMPLETE REFACTORED VERSION using the new SyncDispatcher pattern
+// This is the full 800-line implementation with all UI components
+
 'use client';
 
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
@@ -25,13 +28,28 @@ import {
 import { useGetMasterProfileMsaMasterGetQuery } from '@/store/tubxz_api';
 import { useChainAlignment } from '@/app/msalite/hooks/useChainAlignment';
 import { useNightingaleComponents } from '@/app/msalite/useNightingaleComponents';
-import { highlightResidueInInstance, clearHighlightInInstance } from '@/components/molstar/sync/structureSync';
-import { MSAViewerPanel } from '@/app/msalite/components/MSAViewerPanel';
-import { AnnotationData } from '@/app/msalite/components/AnnotationPanel';
+import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/app/msalite/components/ResizableMSAContainer';
+import { MSAToolbar } from '@/app/msalite/components/MSAToolbar';
+import { BindingSitePanel, TUBULIN_BINDING_SITES } from '@/app/msalite/components/BindingSitePanel';
 import { API_BASE_URL } from '@/config';
 import { PolymerComponent, LigandComponent, AlignedStructure } from '@/components/molstar/core/types';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import { Eye, EyeOff, Focus, ArrowLeft, Microscope, Plus, X, Loader2 } from 'lucide-react';
+
+// ============================================================
+// NEW: Import the refactored sync system
+// ============================================================
+import { useSync, useSyncHandlers } from '@/hooks/useSync';
+import { useBindingSites } from '@/hooks/useBindingSites';
+import { BindingSite } from '@/lib/types/sync';
+
+// Convert the old format to the new format
+const BINDING_SITES: BindingSite[] = TUBULIN_BINDING_SITES.map(site => ({
+  id: site.id,
+  name: site.name,
+  color: site.color,
+  msaRegions: site.regions,
+}));
 
 // ============================================================
 // Types
@@ -51,15 +69,17 @@ interface StructureProfile {
 }
 
 // ============================================================
-// Main Page
+// Main Page Component
 // ============================================================
 
-export default function StructureProfilePage() {
+export default function StructureProfilePageRefactored() {
   const params = useParams();
   const pdbIdFromUrl = (params.rcsb_id as string)?.toUpperCase();
   const dispatch = useAppDispatch();
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const msaRef = useRef<ResizableMSAContainerHandle>(null);
+
   const { instance, isInitialized } = useMolstarInstance(containerRef, 'structure');
 
   // Redux state
@@ -81,6 +101,7 @@ export default function StructureProfilePage() {
   const { areLoaded: nglLoaded } = useNightingaleComponents();
   const { data: masterData } = useGetMasterProfileMsaMasterGetQuery();
   const masterSequences = useAppSelector(selectMasterSequences);
+  const pdbSequences = useAppSelector(selectPdbSequences);
 
   // Initialize master sequences once
   useEffect(() => {
@@ -106,7 +127,7 @@ export default function StructureProfilePage() {
         if (!response.ok) throw new Error('Failed to fetch profile');
 
         const profileData = await response.json();
-        setProfile(profileData); // Store for MSA use
+        setProfile(profileData);
 
         const classification = createClassificationFromProfile(profileData);
 
@@ -124,7 +145,7 @@ export default function StructureProfilePage() {
     };
 
     loadStructure();
-  }, [isInitialized, instance, pdbIdFromUrl]);
+  }, [isInitialized, instance, pdbIdFromUrl, dispatch]);
 
   // Helper to get family for a chain
   const getFamilyForChain = useCallback((chainId: string): string | undefined => {
@@ -145,6 +166,7 @@ export default function StructureProfilePage() {
             className="flex h-full transition-transform duration-300 ease-in-out"
             style={{ transform: isMonomerView ? 'translateX(-100%)' : 'translateX(0)' }}
           >
+            {/* Structure sidebar */}
             <div className="w-80 h-full flex-shrink-0">
               <StructureSidebar
                 loadedStructure={loadedStructure}
@@ -155,6 +177,8 @@ export default function StructureProfilePage() {
                 profile={profile}
               />
             </div>
+
+            {/* Monomer sidebar */}
             <div className="w-80 h-full flex-shrink-0">
               <MonomerSidebar
                 activeChainId={activeChainId}
@@ -179,251 +203,23 @@ export default function StructureProfilePage() {
               <LoadingOverlay text={isLoading ? 'Loading structure...' : 'Initializing viewer...'} />
             )}
           </div>
+
+          {/* MSA Panel (only in monomer view) */}
           {isMonomerView && activeChainId && (
             <div className="h-1/2 border-t border-gray-300 bg-white">
-              <MonomerMSAPanel
+              <MonomerMSAPanelRefactored
                 pdbId={loadedStructure}
                 chainId={activeChainId}
                 family={getFamilyForChain(activeChainId)}
                 instance={instance}
                 masterSequences={masterSequences}
+                pdbSequences={pdbSequences}
                 maxLength={masterData?.alignment_length ?? 0}
                 nglLoaded={nglLoaded}
-                profile={profile}
+                msaRef={msaRef}
               />
             </div>
           )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-// Monomer MSA Panel
-// ============================================================
-
-
-
-
-// Make sure these are at the top of src/app/structures/[rcsb_id]/page.tsx
-import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/app/msalite/components/ResizableMSAContainer';
-import { MSAToolbar } from '@/app/msalite/components/MSAToolbar';
-import { BindingSitePanel, TUBULIN_BINDING_SITES } from '@/app/msalite/components/BindingSitePanel';
-import { useBindingSiteSync } from '@/app/msalite/hooks/useBindingSiteSync';
-
-function MonomerMSAPanel({
-  pdbId,
-  chainId,
-  family,
-  instance,
-  masterSequences,
-  maxLength,
-  nglLoaded,
-  profile,
-}: {
-  pdbId: string | null;
-  chainId: string;
-  family?: string;
-  instance: MolstarInstance | null;
-  masterSequences: any[];
-  maxLength: number;
-  nglLoaded: boolean;
-  profile: StructureProfile | null;
-}) {
-  const msaRef = useRef<ResizableMSAContainerHandle>(null);
-  const [colorScheme, setColorScheme] = useState('clustal2');
-  const { alignChain, isAligning } = useChainAlignment();
-  const sequenceId = pdbId ? `${pdbId}_${chainId}` : null;
-  const isAligned = useAppSelector((state) =>
-    pdbId ? selectIsChainAligned(state, pdbId, chainId) : false
-  );
-  const pdbSequences = useAppSelector(selectPdbSequences);
-  const positionMapping = useAppSelector((state) =>
-    sequenceId ? selectPositionMapping(state, sequenceId) : null
-  );
-
-  // Auto-align when entering monomer view
-  useEffect(() => {
-    if (!instance || !pdbId || !chainId || isAligned || isAligning) return;
-
-    alignChain(pdbId, chainId, instance, family).catch(err => {
-      console.error('Auto-align failed:', err);
-    });
-  }, [instance, pdbId, chainId, family, isAligned, isAligning, alignChain]);
-
-  // MSA redraw callback
-const triggerMsaRedraw = useCallback(() => {
-  console.log('[MonomerMSAPanel] triggerMsaRedraw called');
-  
-  const msa = msaRef.current;
-  if (msa) {
-    console.log('[MonomerMSAPanel] MSA element:', msa);
-    // Try to access the actual DOM element
-    console.log('[MonomerMSAPanel] Checking actual DOM attribute...');
-  }
-  
-  msaRef.current?.setColorScheme('custom-position');
-  msaRef.current?.redraw();
-  setColorScheme('custom-position');
-}, []);
-
-  // Binding site sync
-  const { activeSites, toggleSite, focusSite, clearAll } = useBindingSiteSync({
-    sites: TUBULIN_BINDING_SITES,
-    chainId,
-    positionMapping,
-    molstarInstance: instance,
-    onMsaRedraw: triggerMsaRedraw,
-  });
-
-  // Build sequences for display
-  const allSequences = useMemo(() => [
-    ...masterSequences.map((seq) => ({
-      id: seq.id,
-      name: seq.name,
-      sequence: seq.sequence,
-      originType: seq.originType as 'master',
-    })),
-    ...pdbSequences.map((seq) => ({
-      id: seq.id,
-      name: seq.name,
-      sequence: seq.sequence,
-      originType: seq.originType as 'pdb',
-      family: seq.family,
-    })),
-  ], [masterSequences, pdbSequences]);
-
-  const handleResidueHover = useCallback((seqId: string, msaPosition: number) => {
-    if (!instance || !positionMapping) return;
-    if (seqId !== sequenceId) return;
-
-    const authSeqId = positionMapping[msaPosition];
-    if (authSeqId !== undefined) {
-      highlightResidueInInstance(instance, chainId, authSeqId, true);
-    }
-  }, [instance, chainId, sequenceId, positionMapping]);
-
-  const handleResidueLeave = useCallback(() => {
-    clearHighlightInInstance(instance);
-  }, [instance]);
-
-  const handleResidueClick = useCallback((seqId: string, msaPosition: number) => {
-    if (!instance || !positionMapping) return;
-    if (seqId !== sequenceId) return;
-
-    const authSeqId = positionMapping[msaPosition];
-    if (authSeqId !== undefined) {
-      instance.focusResidue(chainId, authSeqId);
-    }
-  }, [instance, chainId, sequenceId, positionMapping]);
-
-  const handleJumpToRange = useCallback((start: number, end: number) => {
-    msaRef.current?.jumpToRange(start, end);
-
-    if (instance && positionMapping) {
-      const startAuth = positionMapping[start];
-      const endAuth = positionMapping[end];
-      if (startAuth !== undefined && endAuth !== undefined) {
-        instance.focusResidueRange(chainId, startAuth, endAuth);
-      }
-    }
-  }, [instance, chainId, positionMapping]);
-
-  const handleSchemeChange = useCallback((scheme: string) => {
-    clearAll();
-    setColorScheme(scheme);
-    msaRef.current?.setColorScheme(scheme);
-    msaRef.current?.redraw();
-  }, [clearAll]);
-
-  const handleReset = useCallback(() => {
-    clearAll();
-    setColorScheme('clustal2');
-    msaRef.current?.setColorScheme('clustal2');
-    msaRef.current?.redraw();
-  }, [clearAll]);
-
-  if (!nglLoaded || maxLength === 0) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2" />
-          <p className="text-sm text-gray-500">Loading MSA components...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (isAligning) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2" />
-          <p className="text-sm text-gray-500">Aligning {pdbId}:{chainId}...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-full flex flex-col bg-white">
-      {/* Header */}
-      <div className="flex-shrink-0 px-3 py-2 border-b bg-gray-50 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-700">
-            {pdbId}:{chainId} Alignment
-          </span>
-          <span className="text-xs text-gray-500">
-            {allSequences.length} seq, {maxLength} pos
-          </span>
-        </div>
-        {activeSites.size > 0 && (
-          <button
-            onClick={handleReset}
-            className="text-xs text-gray-500 hover:text-gray-700"
-          >
-            Clear coloring
-          </button>
-        )}
-      </div>
-
-      {/* Toolbar */}
-      <div className="flex-shrink-0 px-3 py-1.5 border-b bg-gray-50/50">
-        <MSAToolbar
-          currentScheme={colorScheme}
-          maxLength={maxLength}
-          onSchemeChange={handleSchemeChange}
-          onJumpToRange={handleJumpToRange}
-          onReset={handleReset}
-          compact={true}
-        />
-      </div>
-
-      {/* Main content: MSA + Binding sites panel */}
-      <div className="flex-1 min-h-0 flex">
-        {/* MSA viewer */}
-        <div className="flex-1 min-w-0 p-2">
-          <ResizableMSAContainer
-            ref={msaRef}
-            sequences={allSequences}
-            maxLength={maxLength}
-            colorScheme={colorScheme}
-            onResidueHover={handleResidueHover}
-            onResidueLeave={handleResidueLeave}
-            onResidueClick={handleResidueClick}
-          />
-        </div>
-
-        {/* Binding sites panel */}
-        <div className="w-48 flex-shrink-0 border-l bg-gray-50 p-2 overflow-y-auto">
-          <div className="text-xs font-medium text-gray-600 mb-2">Binding Sites</div>
-          <BindingSitePanel
-            sites={TUBULIN_BINDING_SITES}
-            activeSites={activeSites}
-            onSiteToggle={toggleSite}
-            onSiteFocus={focusSite}
-          />
         </div>
       </div>
     </div>
@@ -559,8 +355,8 @@ function MonomerSidebar({
               key={chain.chainId}
               onClick={() => handleChainSwitch(chain.chainId)}
               className={`px-2 py-1 text-xs font-mono rounded ${chain.chainId === activeChainId
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
             >
               {chain.chainId}
@@ -615,7 +411,196 @@ function MonomerSidebar({
 }
 
 // ============================================================
-// Helper Components (same as before)
+// REFACTORED Monomer MSA Panel using SyncDispatcher
+// ============================================================
+
+function MonomerMSAPanelRefactored({
+  pdbId,
+  chainId,
+  family,
+  instance,
+  masterSequences,
+  pdbSequences,
+  maxLength,
+  nglLoaded,
+  msaRef,
+}: {
+  pdbId: string | null;
+  chainId: string;
+  family?: string;
+  instance: MolstarInstance | null;
+  masterSequences: any[];
+  pdbSequences: any[];
+  maxLength: number;
+  nglLoaded: boolean;
+  msaRef: React.RefObject<ResizableMSAContainerHandle>;
+}) {
+  const { alignChain, isAligning } = useChainAlignment();
+  const sequenceId = pdbId ? `${pdbId}_${chainId}` : null;
+
+  const isAligned = useAppSelector((state) =>
+    pdbId ? selectIsChainAligned(state, pdbId, chainId) : false
+  );
+
+  const positionMapping = useAppSelector((state) =>
+    sequenceId ? selectPositionMapping(state, sequenceId) : null
+  );
+
+  // ============================================================
+  // NEW: Initialize the sync dispatcher
+  // ============================================================
+  const dispatcher = useSync(
+    msaRef,
+    instance,
+    chainId,
+    positionMapping
+  );
+
+  // ============================================================
+  // NEW: Use the binding sites hook with the dispatcher
+  // ============================================================
+  const { activeSites, toggleSite, focusSite, clearAll } = useBindingSites(
+    dispatcher,
+    BINDING_SITES
+  );
+
+  // ============================================================
+  // NEW: Use sync handlers for hover/click
+  // ============================================================
+  const { handleResidueHover, handleResidueLeave, handleResidueClick } = useSyncHandlers(
+    dispatcher,
+    chainId,
+    positionMapping
+  );
+
+  // Auto-align when entering monomer view
+  useEffect(() => {
+    if (!instance || !pdbId || !chainId || isAligned || isAligning) return;
+
+    alignChain(pdbId, chainId, instance, family).catch(err => {
+      console.error('Auto-align failed:', err);
+    });
+  }, [instance, pdbId, chainId, family, isAligned, isAligning, alignChain]);
+
+  // Build sequences for display
+  const allSequences = useMemo(() => [
+    ...masterSequences.map((seq) => ({
+      id: seq.id,
+      name: seq.name,
+      sequence: seq.sequence,
+      originType: seq.originType as 'master',
+    })),
+    ...pdbSequences.map((seq) => ({
+      id: seq.id,
+      name: seq.name,
+      sequence: seq.sequence,
+      originType: seq.originType as 'pdb',
+      family: seq.family,
+    })),
+  ], [masterSequences, pdbSequences]);
+
+  const handleJumpToRange = useCallback((start: number, end: number) => {
+    dispatcher?.dispatch({ type: 'JUMP_TO_RANGE', start, end });
+  }, [dispatcher]);
+
+  const handleSchemeChange = useCallback((scheme: string) => {
+    clearAll(); // Clear any active binding sites
+    dispatcher?.setColorScheme(scheme);
+  }, [dispatcher, clearAll]);
+
+  const handleReset = useCallback(() => {
+    clearAll();
+    dispatcher?.setColorScheme('clustal2');
+  }, [dispatcher, clearAll]);
+
+  if (!nglLoaded || maxLength === 0) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2" />
+          <p className="text-sm text-gray-500">Loading MSA components...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isAligning) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2" />
+          <p className="text-sm text-gray-500">Aligning {pdbId}:{chainId}...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col bg-white">
+      {/* Header */}
+      <div className="flex-shrink-0 px-3 py-2 border-b bg-gray-50 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-gray-700">
+            {pdbId}:{chainId} Alignment
+          </span>
+          <span className="text-xs text-gray-500">
+            {allSequences.length} seq, {maxLength} pos
+          </span>
+        </div>
+        {activeSites.size > 0 && (
+          <button
+            onClick={handleReset}
+            className="text-xs text-gray-500 hover:text-gray-700"
+          >
+            Clear coloring
+          </button>
+        )}
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex-shrink-0 px-3 py-1.5 border-b bg-gray-50/50">
+        <MSAToolbar
+          currentScheme={dispatcher?.getCurrentColorScheme() || 'clustal2'}
+          maxLength={maxLength}
+          onSchemeChange={handleSchemeChange}
+          onJumpToRange={handleJumpToRange}
+          onReset={handleReset}
+          compact={true}
+        />
+      </div>
+
+      {/* Main content: MSA + Binding sites panel */}
+      <div className="flex-1 min-h-0 flex">
+        {/* MSA viewer */}
+        <div className="flex-1 min-w-0 p-2">
+          <ResizableMSAContainer
+            ref={msaRef}
+            sequences={allSequences}
+            maxLength={maxLength}
+            colorScheme={dispatcher?.getCurrentColorScheme() || 'clustal2'}
+            onResidueHover={handleResidueHover}
+            onResidueLeave={handleResidueLeave}
+            onResidueClick={handleResidueClick}
+          />
+        </div>
+
+        {/* Binding sites panel */}
+        <div className="w-48 flex-shrink-0 border-l bg-gray-50 p-2 overflow-y-auto">
+          <div className="text-xs font-medium text-gray-600 mb-2">Binding Sites</div>
+          <BindingSitePanel
+            sites={TUBULIN_BINDING_SITES}
+            activeSites={activeSites}
+            onSiteToggle={toggleSite}
+            onSiteFocus={focusSite}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Helper Components
 // ============================================================
 
 function formatFamilyShort(family: string): string {

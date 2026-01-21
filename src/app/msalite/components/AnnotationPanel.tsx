@@ -9,18 +9,18 @@ import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
 // ============================================================
 
 export interface MutationAnnotation {
-    masterIndex: number;
-    fromResidue: string;
-    toResidue: string;
-    phenotype?: string;
-    source?: string;
+    masterIndex : number;
+    fromResidue : string;
+    toResidue   : string;
+    phenotype  ?: string;
+    source     ?: string;
 }
 
 export interface BindingSite {
-    id: string;
-    name: string;
-    positions: number[];
-    color?: string;
+    id        : string;
+    name      : string;
+    positions : number[];
+    color    ?: string;
 }
 
 export interface AnnotationData {
