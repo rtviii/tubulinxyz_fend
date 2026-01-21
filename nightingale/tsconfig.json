@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "es2019",
+    "module": "ES2020",
+    "moduleResolution": "node",
+    "noEmitOnError": true,
+    "declaration": true,
+    "declarationMap": true,
+    "lib": ["es2019", "dom"],
+    "strict": true,
+    "noImplicitOverride": true,
+    "esModuleInterop": false,
+    "allowSyntheticDefaultImports": true,
+    "allowJs": true, // Required by ts-jest to transform lit
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "sourceMap": true,
+    "inlineSources": true,
+    "resolveJsonModule": true,
+    "useDefineForClassFields": false
+  }
+}

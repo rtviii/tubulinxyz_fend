@@ -1,26 +1,29 @@
 {
-  "name"      : "tubulin-structure-viewer",
-  "version"   : "0.1.0",
-  "private"   : true,
+  "name": "tubulin-structure-viewer",
+  "version": "0.1.0",
+  "private": true,
   "workspaces": [
     "nightingale/packages/*"
   ],
   "scripts": {
     "codegen": "npx @rtk-query/codegen-openapi openapi-config.ts",
+    "postinstall": "cd nightingale && yarn install && yarn build",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "render": "tsx scripts/bulk-render.ts",
     "render:list": "tsx scripts/bulk-render.ts --list",
-    "build:nightingale": "npm run build -w nightingale"
+    "setup": "yarn install && cd nightingale && yarn install && yarn build && cd ..",
+    "clean": "rm -rf node_modules .next && cd nightingale && yarn clean && cd ..",
+    "rebuild-ngl": "cd nightingale && yarn build && cd .. && yarn install"
   },
   "dependencies": {
-    "@nightingale-elements/nightingale-manager"   : "*",
-    "@nightingale-elements/nightingale-msa"       : "*",
-    "@nightingale-elements/nightingale-navigation": "*",
-    "@nightingale-elements/nightingale-sequence"  : "*",
-    "@nightingale-elements/nightingale-track"     : "*",
+    "@nightingale-elements/nightingale-manager"   : "file:./nightingale/packages/nightingale-manager",
+    "@nightingale-elements/nightingale-msa"       : "file:./nightingale/packages/nightingale-msa",
+    "@nightingale-elements/nightingale-navigation": "file:./nightingale/packages/nightingale-navigation",
+    "@nightingale-elements/nightingale-sequence"  : "file:./nightingale/packages/nightingale-sequence",
+    "@nightingale-elements/nightingale-track"     : "file:./nightingale/packages/nightingale-track",
     "@radix-ui/react-collapsible"                 : "^1.1.12",
     "@radix-ui/react-slot"                        : "^1.2.4",
     "@reduxjs/toolkit"                            : "^2.11.0",
@@ -31,7 +34,7 @@
     "class-variance-authority"                    : "^0.7.1",
     "clsx"                                        : "^2.1.1",
     "lucide-react"                                : "^0.525.0",
-    "molstar"                                     : "^4.17.0",
+    "molstar"                                     : "^5.6.0",
     "next"                                        : "15.1.9",
     "react"                                       : "^18.2.0",
     "react-beautiful-dnd"                         : "^13.1.1",
@@ -49,13 +52,13 @@
   },
   "devDependencies": {
     "@rtk-query/codegen-openapi": "^2.1.0",
-    "autoprefixer"              : "^10.4.0",
-    "eslint"                    : "^8.0.0",
-    "eslint-config-next"        : "14.0.0",
-    "gl"                        : "^8.1.6",
-    "jpeg-js"                   : "^0.4.4",
-    "pngjs"                     : "^7.0.0",
-    "postcss"                   : "^8.4.0",
-    "tailwindcss"               : "^3.3.0"
+    "autoprefixer": "^10.4.0",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "14.0.0",
+    "gl": "^8.1.6",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.3.0"
   }
 }

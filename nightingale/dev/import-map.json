@@ -1,0 +1,12 @@
+{
+  "imports": {
+    "@nightingale-elements/nightingale-new-core": "../../nightingale-new-core/src/index.ts",
+    "@nightingale-elements/nightingale-manager": "../../nightingale-manager/src/index.ts",
+    "@nightingale-elements/nightingale-sequence": "../../nightingale-sequence/src/index.ts",
+    "@nightingale-elements/nightingale-track": "../../nightingale-track/src/index.ts",
+    "@nightingale-elements/nightingale-interpro-track": "../../nightingale-interpro-track/src/index.ts",
+    "@nightingale-elements/nightingale-colored-sequence": "../../nightingale-colored-sequence/src/index.ts",
+    "@nightingale-elements/nightingale-linegraph-track": "../../nightingale-linegraph-track/src/index.ts",
+    "@nightingale-elements/nightingale-structure": "../../nightingale-structure/src/index.ts"
+  }
+}

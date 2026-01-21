@@ -1,4 +1,4 @@
-import { TubulinClassification } from "@/components/molstar/colors/molstar_preset";
+import { TubulinClassification } from "@/components/molstar/colors/preset_structure";
 
 /**
  * Maps the backend TubulinStructure profile to a Molstar-compatible classification map.
