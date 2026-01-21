@@ -222,42 +222,51 @@ function MonomerMSAPanel({
   nglLoaded,
   profile,
 }: {
-  pdbId           : string | null;
-  chainId         : string;
-  family         ?: string;
-  instance        : MolstarInstance | null;
-  masterSequences : any[];
-  maxLength       : number;
-  nglLoaded       : boolean;
-  profile         : StructureProfile | null;
+  pdbId: string | null;
+  chainId: string;
+  family?: string;
+  instance: MolstarInstance | null;
+  masterSequences: any[];
+  maxLength: number;
+  nglLoaded: boolean;
+  profile: StructureProfile | null;
 }) {
-  const msaRef                        = useRef<ResizableMSAContainerHandle>(null);
+  const msaRef = useRef<ResizableMSAContainerHandle>(null);
   const [colorScheme, setColorScheme] = useState('clustal2');
-  const { alignChain, isAligning }    = useChainAlignment();
-  const sequenceId                    = pdbId ? `${pdbId}_${chainId}` : null;
-  const isAligned                     = useAppSelector((state) => 
+  const { alignChain, isAligning } = useChainAlignment();
+  const sequenceId = pdbId ? `${pdbId}_${chainId}` : null;
+  const isAligned = useAppSelector((state) =>
     pdbId ? selectIsChainAligned(state, pdbId, chainId) : false
   );
-  const pdbSequences    = useAppSelector(selectPdbSequences);
-  const positionMapping = useAppSelector((state) => 
+  const pdbSequences = useAppSelector(selectPdbSequences);
+  const positionMapping = useAppSelector((state) =>
     sequenceId ? selectPositionMapping(state, sequenceId) : null
   );
 
   // Auto-align when entering monomer view
   useEffect(() => {
     if (!instance || !pdbId || !chainId || isAligned || isAligning) return;
-    
+
     alignChain(pdbId, chainId, instance, family).catch(err => {
       console.error('Auto-align failed:', err);
     });
   }, [instance, pdbId, chainId, family, isAligned, isAligning, alignChain]);
 
   // MSA redraw callback
-  const triggerMsaRedraw = useCallback(() => {
-    msaRef.current?.setColorScheme('custom-position');
-    msaRef.current?.redraw();
-    setColorScheme('custom-position');
-  }, []);
+const triggerMsaRedraw = useCallback(() => {
+  console.log('[MonomerMSAPanel] triggerMsaRedraw called');
+  
+  const msa = msaRef.current;
+  if (msa) {
+    console.log('[MonomerMSAPanel] MSA element:', msa);
+    // Try to access the actual DOM element
+    console.log('[MonomerMSAPanel] Checking actual DOM attribute...');
+  }
+  
+  msaRef.current?.setColorScheme('custom-position');
+  msaRef.current?.redraw();
+  setColorScheme('custom-position');
+}, []);
 
   // Binding site sync
   const { activeSites, toggleSite, focusSite, clearAll } = useBindingSiteSync({
@@ -270,25 +279,25 @@ function MonomerMSAPanel({
 
   // Build sequences for display
   const allSequences = useMemo(() => [
-    ...masterSequences.map((seq) => ({ 
-      id        : seq.id,
-      name      : seq.name,
-      sequence  : seq.sequence,
+    ...masterSequences.map((seq) => ({
+      id: seq.id,
+      name: seq.name,
+      sequence: seq.sequence,
       originType: seq.originType as 'master',
     })),
-    ...pdbSequences.map((seq) => ({ 
-      id        : seq.id,
-      name      : seq.name,
-      sequence  : seq.sequence,
+    ...pdbSequences.map((seq) => ({
+      id: seq.id,
+      name: seq.name,
+      sequence: seq.sequence,
       originType: seq.originType as 'pdb',
-      family    : seq.family,
+      family: seq.family,
     })),
   ], [masterSequences, pdbSequences]);
 
   const handleResidueHover = useCallback((seqId: string, msaPosition: number) => {
     if (!instance || !positionMapping) return;
     if (seqId !== sequenceId) return;
-    
+
     const authSeqId = positionMapping[msaPosition];
     if (authSeqId !== undefined) {
       highlightResidueInInstance(instance, chainId, authSeqId, true);
@@ -302,7 +311,7 @@ function MonomerMSAPanel({
   const handleResidueClick = useCallback((seqId: string, msaPosition: number) => {
     if (!instance || !positionMapping) return;
     if (seqId !== sequenceId) return;
-    
+
     const authSeqId = positionMapping[msaPosition];
     if (authSeqId !== undefined) {
       instance.focusResidue(chainId, authSeqId);
@@ -311,7 +320,7 @@ function MonomerMSAPanel({
 
   const handleJumpToRange = useCallback((start: number, end: number) => {
     msaRef.current?.jumpToRange(start, end);
-    
+
     if (instance && positionMapping) {
       const startAuth = positionMapping[start];
       const endAuth = positionMapping[end];

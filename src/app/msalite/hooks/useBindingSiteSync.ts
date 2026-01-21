@@ -42,8 +42,11 @@ export function useBindingSiteSync({
   // In useBindingSiteSync.ts, update the applyColoring callback:
 
   const applyColoring = useCallback((enabledSiteIds: Set<string>) => {
+    console.log('[useBindingSiteSync] applyColoring called, enabled sites:', Array.from(enabledSiteIds));
+
     // If nothing enabled, clear everything
     if (enabledSiteIds.size === 0) {
+      console.log('[useBindingSiteSync] Clearing all coloring');
       clearColorConfig();
       molstarInstance?.restoreDefaultColors();
       onMsaRedraw();
@@ -66,7 +69,7 @@ export function useBindingSiteSync({
       const colorInt = parseInt(colorHex.replace('#', ''), 16);
       const positions = expandRegionsToPositions(site.regions);
 
-      console.log(`[useBindingSiteSync] Site ${siteId}: ${positions.length} MSA positions`);
+      console.log(`[useBindingSiteSync] Site ${siteId}: ${positions.length} MSA positions, color: ${colorHex}`);
 
       for (const msaPos of positions) {
         // MSA coloring
@@ -86,16 +89,19 @@ export function useBindingSiteSync({
       }
     }
 
+    console.log(`[useBindingSiteSync] MSA columnColors: ${columnColors.size} positions`);
     console.log(`[useBindingSiteSync] Molstar colorings: ${molstarColorings.length} residues`);
 
     // Apply to MSA
     if (columnColors.size > 0) {
       applyCombinedColoring(columnColors, [], '#f8f8f8');
+      console.log('[useBindingSiteSync] Applied MSA coloring, calling onMsaRedraw');
     }
     onMsaRedraw();
 
     // Apply to Molstar
     if (molstarInstance && molstarColorings.length > 0) {
+      console.log('[useBindingSiteSync] Applying Molstar colorscheme');
       molstarInstance.applyColorscheme('binding-sites', molstarColorings);
     }
   }, [sitesById, chainId, positionMapping, molstarInstance, onMsaRedraw]);

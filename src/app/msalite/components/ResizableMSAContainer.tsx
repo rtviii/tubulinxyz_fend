@@ -93,13 +93,22 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       return msa.renderRoot?.querySelector('msa-sequence-viewer') ?? null;
     }, []);
 
-    const triggerRedraw = useCallback(() => {
-      const seqViewer = getSequenceViewer();
-      if (seqViewer && typeof seqViewer.invalidateAndRedraw === 'function') {
-        seqViewer.invalidateAndRedraw();
-      }
-    }, [getSequenceViewer]);
-
+const triggerRedraw = useCallback(() => {
+  const seqViewer = getSequenceViewer();
+  console.log('[ResizableMSA] triggerRedraw called, seqViewer:', !!seqViewer);
+  
+  if (seqViewer) {
+    // Try multiple methods
+    if (typeof seqViewer.requestUpdate === 'function') {
+      console.log('[ResizableMSA] Calling requestUpdate');
+      seqViewer.requestUpdate();
+    }
+    if (typeof seqViewer.draw === 'function') {
+      console.log('[ResizableMSA] Calling draw');
+      seqViewer.draw();
+    }
+  }
+}, [getSequenceViewer]);
     const syncWidths = useCallback(() => {
       const nav = navRef.current;
       const msa = msaRef.current;
@@ -154,14 +163,26 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
 
     const setColorScheme = useCallback((scheme: string) => {
       const msa = msaRef.current;
+      console.log('[ResizableMSA] setColorScheme called with:', scheme, 'msa:', !!msa);
       if (!msa) return;
 
       msa.setAttribute('color-scheme', scheme);
 
+      // Force cache invalidation for custom scheme
+      if (scheme === 'custom-position') {
+        const seqViewer = getSequenceViewer();
+        if (seqViewer?.residueTileCache) {
+          seqViewer.residueTileCache.invalidate();
+        }
+      }
+
+      // Give the attribute time to propagate, then redraw
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const seqViewer = getSequenceViewer();
+          console.log('[ResizableMSA] Inside RAF, seqViewer:', !!seqViewer);
           if (seqViewer && typeof seqViewer.invalidateAndRedraw === 'function') {
+            console.log('[ResizableMSA] Calling invalidateAndRedraw from setColorScheme');
             seqViewer.invalidateAndRedraw();
           }
         });

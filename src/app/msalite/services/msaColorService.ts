@@ -10,8 +10,8 @@
 // ============================================================
 
 export interface CustomColorConfig {
-  positionColors: Map<number, string>;
-  cellColors?: Map<string, string>;  // key: "rowIndex-position"
+  positionColors: Record<number, string>;  // Changed from Map
+  cellColors?: Record<string, string>;     // Changed from Map
   defaultColor: string;
 }
 
@@ -49,7 +49,38 @@ declare global {
 // ============================================================
 
 export function applyColorConfig(config: CustomColorConfig): void {
+  console.log('[msaColorService] applyColorConfig called with:', {
+    positionColorsSize: Object.keys(config.positionColors).length,
+    defaultColor: config.defaultColor,
+  });
   window.__nightingaleCustomColors = config;
+}
+
+export function applyCombinedColoring(
+  columnColors: Map<number, string>,
+  rowHighlights: RowHighlight[],
+  defaultColor = '#ffffff'
+): void {
+  console.log('[msaColorService] applyCombinedColoring:', columnColors.size, 'columns');
+  
+  // Convert Maps to plain objects
+  const positionColors: Record<number, string> = {};
+  columnColors.forEach((color, pos) => {
+    positionColors[pos] = color;
+  });
+  
+  const cellColors: Record<string, string> = {};
+  for (const { rowIndex, start, end, color } of rowHighlights) {
+    for (let pos = start; pos <= end; pos++) {
+      cellColors[`${rowIndex}-${pos}`] = color;
+    }
+  }
+  
+  applyColorConfig({
+    positionColors,
+    cellColors: Object.keys(cellColors).length > 0 ? cellColors : undefined,
+    defaultColor,
+  });
 }
 
 export function clearColorConfig(): void {
@@ -120,23 +151,6 @@ export function applySingleRowHighlight(
 // Combined: column base + row overrides
 // ============================================================
 
-export function applyCombinedColoring(
-  columnColors: Map<number, string>,
-  rowHighlights: RowHighlight[],
-  defaultColor = '#ffffff'
-): void {
-  const cellColors = new Map<string, string>();
-  for (const { rowIndex, start, end, color } of rowHighlights) {
-    for (let pos = start; pos <= end; pos++) {
-      cellColors.set(`${rowIndex}-${pos}`, color);
-    }
-  }
-  applyColorConfig({
-    positionColors: columnColors,
-    cellColors: cellColors.size > 0 ? cellColors : undefined,
-    defaultColor,
-  });
-}
 
 // ============================================================
 // Annotation-based coloring (for real API data)
