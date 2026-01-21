@@ -752,14 +752,22 @@ export class MolstarInstance {
   // Colorscheme Operations
   // ============================================================
 
+  // src/components/molstar/services/MolstarInstance.ts
+
   async applyColorscheme(colorschemeId: string, colorings: ResidueColoring[]): Promise<void> {
     const plugin = this.viewer.ctx;
-    if (!plugin || colorings.length === 0) {
-      console.log(`[${this.id}] applyColorscheme: no plugin or empty colorings`);
+    if (!plugin) return;
+
+    // 1. ALWAYS clear existing overpaint first to ensure we aren't "stacking" colors
+    // This is the step that was likely missing, causing old highlights to persist
+    await this.restoreDefaultColors();
+
+    if (colorings.length === 0) {
+      this.dispatch(setActiveColorscheme({ instanceId: this.id, colorschemeId: null }));
       return;
     }
 
-    // Group colorings by color AND chain
+    // 2. Group colorings by color AND chain for batch processing
     const colorChainGroups = new Map<string, { color: Color; chainId: string; authSeqIds: number[] }>();
 
     for (const coloring of colorings) {
@@ -774,20 +782,12 @@ export class MolstarInstance {
       colorChainGroups.get(key)!.authSeqIds.push(coloring.authSeqId);
     }
 
-    // Get structure hierarchy
     const hierarchy = plugin.managers.structure.hierarchy.current;
-    if (hierarchy.structures.length === 0) {
-      console.log(`[${this.id}] applyColorscheme: no structures in hierarchy`);
-      return;
-    }
-
+    if (hierarchy.structures.length === 0) return;
     const structureRef = hierarchy.structures[0];
 
-    // Apply each color group
+    // 3. Apply the current set of active color groups
     for (const { color, chainId, authSeqIds } of colorChainGroups.values()) {
-      console.log(`[${this.id}] Applying overpaint: chain ${chainId}, ${authSeqIds.length} residues, color ${color}`);
-
-      // Create a loci getter that selects residues by chain and auth_seq_id
       const lociGetter = async (structure: Structure) => {
         const query = buildMultiResidueQuery(chainId, authSeqIds);
         const loci = executeQuery(query, structure);

@@ -42,6 +42,7 @@ import { Eye, EyeOff, Focus, ArrowLeft, Microscope, Plus, X, Loader2 } from 'luc
 import { useSync, useSyncHandlers } from '@/hooks/useSync';
 import { useBindingSites } from '@/hooks/useBindingSites';
 import { BindingSite } from '@/lib/types/sync';
+import { AnnotationData, AnnotationPanel } from '@/app/msalite/components/AnnotationPanel';
 
 // Convert the old format to the new format
 const BINDING_SITES: BindingSite[] = TUBULIN_BINDING_SITES.map(site => ({
@@ -50,10 +51,6 @@ const BINDING_SITES: BindingSite[] = TUBULIN_BINDING_SITES.map(site => ({
   color: site.color,
   msaRegions: site.regions,
 }));
-
-// ============================================================
-// Types
-// ============================================================
 
 interface StructureProfile {
   rcsb_id: string;
@@ -67,10 +64,6 @@ interface StructureProfile {
   }>;
   [key: string]: any;
 }
-
-// ============================================================
-// Main Page Component
-// ============================================================
 
 export default function StructureProfilePageRefactored() {
   const params = useParams();
@@ -94,6 +87,7 @@ export default function StructureProfilePageRefactored() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<StructureProfile | null>(null);
+  const [showMutations, setShowMutations] = useState(false);
   const loadedFromUrlRef = useRef<string | null>(null);
   const masterSequencesInitialized = useRef(false);
 
@@ -103,20 +97,23 @@ export default function StructureProfilePageRefactored() {
   const masterSequences = useAppSelector(selectMasterSequences);
   const pdbSequences = useAppSelector(selectPdbSequences);
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el || !instance) return;
+  // Sync logic lifted to page level
+  const sequenceId = loadedStructure && activeChainId ? `${loadedStructure}_${activeChainId}` : null;
+  const positionMapping = useAppSelector((state) =>
+    sequenceId ? selectPositionMapping(state, sequenceId) : null
+  );
 
-    const observer = new ResizeObserver(() => {
-      // Trigger Molstar's internal resize logic
-      requestAnimationFrame(() => {
-        instance.viewer.handleResize();
-      });
-    });
+  const dispatcher = useSync(msaRef, instance, activeChainId || '', positionMapping);
+  const { activeSites, toggleSite, focusSite, clearAll } = useBindingSites(dispatcher, BINDING_SITES);
 
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [instance]);
+  const annotationData: AnnotationData = useMemo(() => ({
+    bindingSites: BINDING_SITES,
+    mutations: [
+      { masterIndex: 250, fromResidue: 'S', toResidue: 'F', phenotype: 'Resistance' },
+      { masterIndex: 315, fromResidue: 'T', toResidue: 'I' }
+    ]
+  }), []);
+
   // Initialize master sequences once
   useEffect(() => {
     if (!masterData?.sequences || masterSequencesInitialized.current) return;
@@ -126,6 +123,21 @@ export default function StructureProfilePageRefactored() {
     });
     masterSequencesInitialized.current = true;
   }, [masterData, dispatch]);
+
+  // Handle Molstar Resizing on container size change
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !instance) return;
+
+    const observer = new ResizeObserver(() => {
+      requestAnimationFrame(() => {
+        instance.viewer.handleResize();
+      });
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [instance]);
 
   // Load structure on URL change
   useEffect(() => {
@@ -161,7 +173,6 @@ export default function StructureProfilePageRefactored() {
     loadStructure();
   }, [isInitialized, instance, pdbIdFromUrl, dispatch]);
 
-  // Helper to get family for a chain
   const getFamilyForChain = useCallback((chainId: string): string | undefined => {
     if (!profile) return undefined;
     const poly = profile.polypeptides.find(p => p.auth_asym_id === chainId);
@@ -201,6 +212,13 @@ export default function StructureProfilePageRefactored() {
                 instance={instance}
                 pdbId={loadedStructure}
                 profile={profile}
+                annotationData={annotationData}
+                activeBindingSites={activeSites}
+                showMutations={showMutations}
+                onToggleSite={toggleSite}
+                onFocusSite={focusSite}
+                onToggleMutations={setShowMutations}
+                onClearAll={clearAll}
               />
             </div>
           </div>
@@ -208,7 +226,7 @@ export default function StructureProfilePageRefactored() {
 
         {/* Main content area */}
         <div className="flex-1 h-full flex flex-col min-w-0 overflow-hidden">
-          {/* Molstar viewer: Added min-h-0 to allow shrinking */}
+          {/* Molstar viewer */}
           <div
             className={`relative transition-all duration-300 min-h-0 ${isMonomerView ? 'h-1/2' : 'h-full'}`}
           >
@@ -218,7 +236,7 @@ export default function StructureProfilePageRefactored() {
             )}
           </div>
 
-          {/* MSA Panel: Added min-h-0 and flex-col for stable layout */}
+          {/* MSA Panel (only in monomer view) */}
           {isMonomerView && activeChainId && (
             <div className="h-1/2 border-t border-gray-300 bg-white min-h-0 flex flex-col overflow-hidden">
               <MonomerMSAPanelRefactored
@@ -231,18 +249,21 @@ export default function StructureProfilePageRefactored() {
                 maxLength={masterData?.alignment_length ?? 0}
                 nglLoaded={nglLoaded}
                 msaRef={msaRef}
+                activeSites={activeSites}
+                toggleSite={toggleSite}
+                focusSite={focusSite}
+                clearAll={clearAll}
+                showMutations={showMutations}
+                setShowMutations={setShowMutations}
               />
             </div>
           )}
         </div>
       </div>
     </div>
-  );;
+  );
 }
 
-// ============================================================
-// Structure Sidebar
-// ============================================================
 
 function StructureSidebar({
   loadedStructure,
@@ -259,7 +280,6 @@ function StructureSidebar({
   error: string | null;
   profile: StructureProfile | null;
 }) {
-  // Helper to get family for chain
   const getFamilyForChain = (chainId: string): string | undefined => {
     if (!profile) return undefined;
     const poly = profile.polypeptides.find(p => p.auth_asym_id === chainId);
@@ -270,9 +290,7 @@ function StructureSidebar({
   return (
     <div className="h-full bg-white border-r border-gray-200 p-4 overflow-y-auto">
       <h1 className="text-lg font-semibold mb-4">{loadedStructure ?? 'No Structure'}</h1>
-
       {error && <div className="text-red-500 text-sm mb-4 p-2 bg-red-50 rounded">{error}</div>}
-
       <section className="mb-6">
         <h2 className="text-sm font-medium text-gray-700 mb-2">Chains</h2>
         <div className="space-y-1">
@@ -286,7 +304,6 @@ function StructureSidebar({
           ))}
         </div>
       </section>
-
       {ligandComponents.length > 0 && (
         <section>
           <h2 className="text-sm font-medium text-gray-700 mb-2">Ligands</h2>
@@ -301,10 +318,6 @@ function StructureSidebar({
   );
 }
 
-// ============================================================
-// Monomer Sidebar
-// ============================================================
-
 function MonomerSidebar({
   activeChainId,
   polymerComponents,
@@ -312,6 +325,13 @@ function MonomerSidebar({
   instance,
   pdbId,
   profile,
+  annotationData,
+  activeBindingSites,
+  showMutations,
+  onToggleSite,
+  onFocusSite,
+  onToggleMutations,
+  onClearAll,
 }: {
   activeChainId: string | null;
   polymerComponents: PolymerComponent[];
@@ -319,20 +339,21 @@ function MonomerSidebar({
   instance: MolstarInstance | null;
   pdbId: string | null;
   profile: StructureProfile | null;
+  annotationData: AnnotationData;
+  activeBindingSites: Set<string>;
+  showMutations: boolean;
+  onToggleSite: (siteId: string, enabled: boolean) => void;
+  onFocusSite: (siteId: string) => void;
+  onToggleMutations: (enabled: boolean) => void;
+  onClearAll: () => void;
 }) {
   const [showAlignForm, setShowAlignForm] = useState(false);
 
-  const handleBack = () => {
-    instance?.exitMonomerView();
-  };
-
+  const handleBack = () => instance?.exitMonomerView();
   const handleChainSwitch = (chainId: string) => {
-    if (chainId !== activeChainId) {
-      instance?.switchMonomerChain(chainId);
-    }
+    if (chainId !== activeChainId) instance?.switchMonomerChain(chainId);
   };
 
-  // Get family for active chain
   const activeFamily = (() => {
     if (!profile || !activeChainId) return undefined;
     const poly = profile.polypeptides.find(p => p.auth_asym_id === activeChainId);
@@ -343,90 +364,84 @@ function MonomerSidebar({
   const formattedFamily = activeFamily ? formatFamilyShort(activeFamily) : null;
 
   return (
-    <div className="h-full bg-white border-r border-gray-200 p-4 overflow-y-auto">
-      <button
-        onClick={handleBack}
-        className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-4"
-      >
-        <ArrowLeft size={16} />
-        Back to structure
-      </button>
+    <div className="h-full bg-white border-r border-gray-200 p-4 flex flex-col overflow-hidden">
+      <div className="flex-shrink-0">
+        <button
+          onClick={handleBack}
+          className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-4"
+        >
+          <ArrowLeft size={16} />
+          Back to structure
+        </button>
+        <h1 className="text-lg font-semibold mb-1">
+          Chain {activeChainId}
+          {formattedFamily && (
+            <span className="ml-2 text-sm font-normal text-gray-500">({formattedFamily})</span>
+          )}
+        </h1>
+        <p className="text-sm text-gray-500 mb-6">{pdbId}</p>
 
-      <h1 className="text-lg font-semibold mb-1">
-        Chain {activeChainId}
-        {formattedFamily && (
-          <span className="ml-2 text-sm font-normal text-gray-500">({formattedFamily})</span>
-        )}
-      </h1>
-      <p className="text-sm text-gray-500 mb-4">{pdbId}</p>
+        <section className="mb-6">
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Switch Chain</h2>
+          <div className="flex flex-wrap gap-1">
+            {polymerComponents.map((chain) => (
+              <button
+                key={chain.chainId}
+                onClick={() => handleChainSwitch(chain.chainId)}
+                className={`px-2 py-1 text-xs font-mono rounded ${chain.chainId === activeChainId
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+              >
+                {chain.chainId}
+              </button>
+            ))}
+          </div>
+        </section>
 
-      {/* Chain switcher */}
-      <section className="mb-6">
-        <h2 className="text-sm font-medium text-gray-700 mb-2">Switch Chain</h2>
-        <div className="flex flex-wrap gap-1">
-          {polymerComponents.map((chain) => (
+        <section className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Aligned Structures</h2>
             <button
-              key={chain.chainId}
-              onClick={() => handleChainSwitch(chain.chainId)}
-              className={`px-2 py-1 text-xs font-mono rounded ${chain.chainId === activeChainId
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+              onClick={() => setShowAlignForm(true)}
+              className="p-1 text-gray-400 hover:text-blue-600"
             >
-              {chain.chainId}
+              <Plus size={14} />
             </button>
-          ))}
-        </div>
-      </section>
-
-      {/* Aligned structures */}
-      <section className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-medium text-gray-700">Aligned Structures</h2>
-          <button
-            onClick={() => setShowAlignForm(true)}
-            className="p-1 text-gray-400 hover:text-blue-600"
-            title="Add aligned structure"
-          >
-            <Plus size={16} />
-          </button>
-        </div>
-
-        {alignedStructures.length === 0 && !showAlignForm && (
-          <p className="text-xs text-gray-400">No aligned structures</p>
-        )}
-
-        {showAlignForm && activeChainId && (
-          <AlignStructureForm
-            targetChainId={activeChainId}
-            instance={instance}
-            onClose={() => setShowAlignForm(false)}
-          />
-        )}
-
-        <div className="space-y-1 mt-2">
-          {alignedStructures.map((aligned) => (
-            <AlignedStructureRow
-              key={aligned.id}
-              aligned={aligned}
+          </div>
+          {showAlignForm && activeChainId && (
+            <AlignStructureForm
+              targetChainId={activeChainId}
               instance={instance}
+              onClose={() => setShowAlignForm(false)}
             />
-          ))}
-        </div>
-      </section>
+          )}
+          <div className="space-y-1 mt-2">
+            {alignedStructures.map((aligned) => (
+              <AlignedStructureRow
+                key={aligned.id}
+                aligned={aligned}
+                instance={instance}
+              />
+            ))}
+          </div>
+        </section>
+      </div>
 
-      {/* Annotations placeholder */}
-      <section>
-        <h2 className="text-sm font-medium text-gray-700 mb-2">Annotations</h2>
-        <p className="text-xs text-gray-400">Coming soon...</p>
+      <section className="flex-1 min-h-0 border-t pt-4 flex flex-col overflow-hidden">
+        <AnnotationPanel
+          annotations={annotationData}
+          activeBindingSites={activeBindingSites}
+          showMutations={showMutations}
+          onToggleSite={onToggleSite}
+          onFocusSite={onFocusSite}
+          onToggleMutations={onToggleMutations}
+          onClearAll={onClearAll}
+        />
       </section>
     </div>
   );
 }
-
-// ============================================================
-// REFACTORED Monomer MSA Panel using SyncDispatcher
-// ============================================================
 
 function MonomerMSAPanelRefactored({
   pdbId,
@@ -438,6 +453,12 @@ function MonomerMSAPanelRefactored({
   maxLength,
   nglLoaded,
   msaRef,
+  activeSites,
+  toggleSite,
+  focusSite,
+  clearAll,
+  showMutations,
+  setShowMutations,
 }: {
   pdbId: string | null;
   chainId: string;
@@ -448,10 +469,17 @@ function MonomerMSAPanelRefactored({
   maxLength: number;
   nglLoaded: boolean;
   msaRef: React.RefObject<ResizableMSAContainerHandle>;
+  activeSites: Set<string>;
+  toggleSite: (id: string, e: boolean) => void;
+  focusSite: (id: string) => void;
+  clearAll: () => void;
+  showMutations: boolean;
+  setShowMutations: (e: boolean) => void;
 }) {
   const { alignChain, isAligning } = useChainAlignment();
   const sequenceId = pdbId ? `${pdbId}_${chainId}` : null;
 
+  // FIX: Use the selector properly with the actual Redux state
   const isAligned = useAppSelector((state) =>
     pdbId ? selectIsChainAligned(state, pdbId, chainId) : false
   );
@@ -460,35 +488,15 @@ function MonomerMSAPanelRefactored({
     sequenceId ? selectPositionMapping(state, sequenceId) : null
   );
 
-  // ============================================================
-  // NEW: Initialize the sync dispatcher
-  // ============================================================
-  const dispatcher = useSync(
-    msaRef,
-    instance,
-    chainId,
-    positionMapping
-  );
-
-  // ============================================================
-  // NEW: Use the binding sites hook with the dispatcher
-  // ============================================================
-  const { activeSites, toggleSite, focusSite, clearAll } = useBindingSites(
-    dispatcher,
-    BINDING_SITES
-  );
-
-  // ============================================================
-  // NEW: Use sync handlers for hover/click
-  // ============================================================
+  const dispatcher = useSync(msaRef, instance, chainId, positionMapping);
   const { handleResidueHover, handleResidueLeave, handleResidueClick } = useSyncHandlers(
     dispatcher,
     chainId,
     positionMapping
   );
 
-  // Auto-align when entering monomer view
   useEffect(() => {
+    // Only align if we have the data and it's not already aligned/aligning
     if (!instance || !pdbId || !chainId || isAligned || isAligning) return;
 
     alignChain(pdbId, chainId, instance, family).catch(err => {
@@ -496,7 +504,6 @@ function MonomerMSAPanelRefactored({
     });
   }, [instance, pdbId, chainId, family, isAligned, isAligning, alignChain]);
 
-  // Build sequences for display
   const allSequences = useMemo(() => [
     ...masterSequences.map((seq) => ({
       id: seq.id,
@@ -513,119 +520,61 @@ function MonomerMSAPanelRefactored({
     })),
   ], [masterSequences, pdbSequences]);
 
-  const handleJumpToRange = useCallback((start: number, end: number) => {
-    dispatcher?.dispatch({ type: 'JUMP_TO_RANGE', start, end });
-  }, [dispatcher]);
-
-  const handleSchemeChange = useCallback((scheme: string) => {
-    clearAll(); // Clear any active binding sites
-    dispatcher?.setColorScheme(scheme);
-  }, [dispatcher, clearAll]);
-
   const handleReset = useCallback(() => {
     clearAll();
+    setShowMutations(false);
     dispatcher?.setColorScheme('clustal2');
-  }, [dispatcher, clearAll]);
+  }, [dispatcher, clearAll, setShowMutations]);
 
-  if (!nglLoaded || maxLength === 0) {
+  if (!nglLoaded || maxLength === 0 || isAligning) {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2" />
-          <p className="text-sm text-gray-500">Loading MSA components...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (isAligning) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2" />
-          <p className="text-sm text-gray-500">Aligning {pdbId}:{chainId}...</p>
+          <p className="text-sm text-gray-500">{isAligning ? `Aligning ${pdbId}:${chainId}...` : 'Loading...'}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-white">
-      {/* Header */}
-      <div className="flex-shrink-0 px-3 py-2 border-b bg-gray-50 flex items-center justify-between">
+    <div className="h-full flex flex-col bg-white overflow-hidden">
+      <div className="flex-shrink-0 px-4 py-2 border-b bg-gray-50 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-700">
-            {pdbId}:{chainId} Alignment
-          </span>
-          <span className="text-xs text-gray-500">
-            {allSequences.length} seq, {maxLength} pos
-          </span>
+          <span className="text-sm font-semibold text-gray-800">Sequence Alignment</span>
+          <span className="text-xs text-gray-400 font-mono">{pdbId}:{chainId}</span>
         </div>
-        {activeSites.size > 0 && (
-          <button
-            onClick={handleReset}
-            className="text-xs text-gray-500 hover:text-gray-700"
-          >
-            Clear coloring
-          </button>
-        )}
       </div>
-
-      {/* Toolbar */}
-      <div className="flex-shrink-0 px-3 py-1.5 border-b bg-gray-50/50">
+      <div className="flex-shrink-0 px-3 py-1.5 border-b bg-white">
         <MSAToolbar
           currentScheme={dispatcher?.getCurrentColorScheme() || 'clustal2'}
           maxLength={maxLength}
-          onSchemeChange={handleSchemeChange}
-          onJumpToRange={handleJumpToRange}
+          onSchemeChange={(s) => { clearAll(); dispatcher?.setColorScheme(s); }}
+          onJumpToRange={(s, e) => dispatcher?.dispatch({ type: 'JUMP_TO_RANGE', start: s, end: e })}
           onReset={handleReset}
           compact={true}
         />
       </div>
-
-      {/* Main content: MSA + Binding sites panel */}
-      <div className="flex-1 min-h-0 flex">
-        {/* MSA viewer */}
-        <div className="flex-1 min-w-0 p-2">
-          <ResizableMSAContainer
-            ref={msaRef}
-            sequences={allSequences}
-            maxLength={maxLength}
-            colorScheme={dispatcher?.getCurrentColorScheme() || 'clustal2'}
-            onResidueHover={handleResidueHover}
-            onResidueLeave={handleResidueLeave}
-            onResidueClick={handleResidueClick}
-          />
-        </div>
-
-        {/* Binding sites panel */}
-        <div className="w-48 flex-shrink-0 border-l bg-gray-50 p-2 overflow-y-auto">
-          <div className="text-xs font-medium text-gray-600 mb-2">Binding Sites</div>
-          <BindingSitePanel
-            sites={TUBULIN_BINDING_SITES}
-            activeSites={activeSites}
-            onSiteToggle={toggleSite}
-            onSiteFocus={focusSite}
-          />
-        </div>
+      <div className="flex-1 min-h-0 p-2">
+        <ResizableMSAContainer
+          ref={msaRef}
+          sequences={allSequences}
+          maxLength={maxLength}
+          colorScheme={dispatcher?.getCurrentColorScheme() || 'clustal2'}
+          onResidueHover={handleResidueHover}
+          onResidueLeave={handleResidueLeave}
+          onResidueClick={handleResidueClick}
+        />
       </div>
     </div>
   );
 }
 
-// ============================================================
-// Helper Components
-// ============================================================
-
 function formatFamilyShort(family: string): string {
   const tubulinMatch = family.match(/^tubulin_(\w+)$/);
-  if (tubulinMatch) {
-    return tubulinMatch[1].charAt(0).toUpperCase() + tubulinMatch[1].slice(1);
-  }
+  if (tubulinMatch) return tubulinMatch[1].charAt(0).toUpperCase() + tubulinMatch[1].slice(1);
   const mapMatch = family.match(/^map_(\w+)/);
-  if (mapMatch) {
-    return mapMatch[1].toUpperCase();
-  }
+  if (mapMatch) return mapMatch[1].toUpperCase();
   return family;
 }
 
@@ -640,66 +589,28 @@ function LoadingOverlay({ text }: { text: string }) {
   );
 }
 
-function ChainRow({
-  chain,
-  instance,
-  family,
-}: {
-  chain: PolymerComponent;
-  instance: MolstarInstance | null;
-  family?: string;
-}) {
+function ChainRow({ chain, instance, family }: { chain: PolymerComponent; instance: MolstarInstance | null; family?: string; }) {
   const componentState = useAppSelector((state) => selectComponentState(state, 'structure', chain.chainId));
-
-  const handleOpenMonomer = () => {
-    instance?.enterMonomerView(chain.chainId);
-  };
-
   const familyLabel = family ? formatFamilyShort(family) : null;
-
   return (
     <div
-      className={`flex items-center justify-between py-1 px-2 rounded text-sm cursor-pointer transition-colors ${componentState.hovered ? 'bg-blue-100' : 'hover:bg-gray-100'
-        }`}
+      className={`flex items-center justify-between py-1 px-2 rounded text-sm cursor-pointer transition-colors ${componentState.hovered ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
       onMouseEnter={() => instance?.highlightChain(chain.chainId, true)}
       onMouseLeave={() => instance?.highlightChain(chain.chainId, false)}
       onClick={() => instance?.focusChain(chain.chainId)}
     >
       <div className="flex items-center gap-2">
         <span className="font-mono">{chain.chainId}</span>
-        {familyLabel && (
-          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
-            {familyLabel}
-          </span>
-        )}
+        {familyLabel && <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{familyLabel}</span>}
       </div>
       <div className="flex items-center gap-1">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            handleOpenMonomer();
-          }}
-          className="p-1 text-gray-400 hover:text-blue-600"
-          title="Open monomer view"
-        >
+        <button onClick={(e) => { e.stopPropagation(); instance?.enterMonomerView(chain.chainId); }} className="p-1 text-gray-400 hover:text-blue-600" title="Open monomer view">
           <Microscope size={14} />
         </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            instance?.focusChain(chain.chainId);
-          }}
-          className="p-1 text-gray-400 hover:text-gray-700"
-        >
+        <button onClick={(e) => { e.stopPropagation(); instance?.focusChain(chain.chainId); }} className="p-1 text-gray-400 hover:text-gray-700">
           <Focus size={14} />
         </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            instance?.setChainVisibility(chain.chainId, !componentState.visible);
-          }}
-          className="p-1 text-gray-400 hover:text-gray-700"
-        >
+        <button onClick={(e) => { e.stopPropagation(); instance?.setChainVisibility(chain.chainId, !componentState.visible); }} className="p-1 text-gray-400 hover:text-gray-700">
           {componentState.visible ? <Eye size={14} /> : <EyeOff size={14} />}
         </button>
       </div>
@@ -709,35 +620,19 @@ function ChainRow({
 
 function LigandRow({ ligand, instance }: { ligand: LigandComponent; instance: MolstarInstance | null }) {
   const componentState = useAppSelector((state) => selectComponentState(state, 'structure', ligand.uniqueKey));
-
   return (
     <div
-      className={`flex items-center justify-between py-1 px-2 rounded text-sm cursor-pointer transition-colors ${componentState.hovered ? 'bg-blue-100' : 'hover:bg-gray-100'
-        }`}
+      className={`flex items-center justify-between py-1 px-2 rounded text-sm cursor-pointer transition-colors ${componentState.hovered ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
       onMouseEnter={() => instance?.highlightLigand(ligand.uniqueKey, true)}
       onMouseLeave={() => instance?.highlightLigand(ligand.uniqueKey, false)}
       onClick={() => instance?.focusLigand(ligand.uniqueKey)}
     >
-      <span className="font-mono text-xs">
-        {ligand.compId} ({ligand.authAsymId}:{ligand.authSeqId})
-      </span>
+      <span className="font-mono text-xs">{ligand.compId} ({ligand.authAsymId}:{ligand.authSeqId})</span>
       <div className="flex items-center gap-1">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            instance?.focusLigand(ligand.uniqueKey);
-          }}
-          className="p-1 text-gray-400 hover:text-gray-700"
-        >
+        <button onClick={(e) => { e.stopPropagation(); instance?.focusLigand(ligand.uniqueKey); }} className="p-1 text-gray-400 hover:text-gray-700">
           <Focus size={14} />
         </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            instance?.setLigandVisibility(ligand.uniqueKey, !componentState.visible);
-          }}
-          className="p-1 text-gray-400 hover:text-gray-700"
-        >
+        <button onClick={(e) => { e.stopPropagation(); instance?.setLigandVisibility(ligand.uniqueKey, !componentState.visible); }} className="p-1 text-gray-400 hover:text-gray-700">
           {componentState.visible ? <Eye size={14} /> : <EyeOff size={14} />}
         </button>
       </div>
@@ -745,15 +640,7 @@ function LigandRow({ ligand, instance }: { ligand: LigandComponent; instance: Mo
   );
 }
 
-function AlignStructureForm({
-  targetChainId,
-  instance,
-  onClose,
-}: {
-  targetChainId: string;
-  instance: MolstarInstance | null;
-  onClose: () => void;
-}) {
+function AlignStructureForm({ targetChainId, instance, onClose }: { targetChainId: string; instance: MolstarInstance | null; onClose: () => void; }) {
   const [sourcePdbId, setSourcePdbId] = useState('');
   const [sourceChainId, setSourceChainId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -762,110 +649,43 @@ function AlignStructureForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!instance || !sourcePdbId.trim() || !sourceChainId.trim()) return;
-
-    setLoading(true);
-    setError(null);
-
+    setLoading(true); setError(null);
     try {
-      const result = await instance.loadAlignedStructure(
-        targetChainId,
-        sourcePdbId.trim().toUpperCase(),
-        sourceChainId.trim().toUpperCase()
-      );
-
-      if (result) {
-        onClose();
-      } else {
-        setError('Failed to load or align structure');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
+      const result = await instance.loadAlignedStructure(targetChainId, sourcePdbId.trim().toUpperCase(), sourceChainId.trim().toUpperCase());
+      if (result) onClose(); else setError('Failed to load or align structure');
+    } catch (err) { setError(err instanceof Error ? err.message : 'Unknown error'); } finally { setLoading(false); }
   };
 
   return (
     <form onSubmit={handleSubmit} className="p-2 bg-gray-50 rounded space-y-2">
       <div className="flex gap-2">
-        <input
-          type="text"
-          placeholder="PDB ID"
-          value={sourcePdbId}
-          onChange={(e) => setSourcePdbId(e.target.value)}
-          className="flex-1 px-2 py-1 text-xs border rounded"
-          disabled={loading}
-        />
-        <input
-          type="text"
-          placeholder="Chain"
-          value={sourceChainId}
-          onChange={(e) => setSourceChainId(e.target.value)}
-          className="w-16 px-2 py-1 text-xs border rounded"
-          disabled={loading}
-        />
+        <input type="text" placeholder="PDB ID" value={sourcePdbId} onChange={(e) => setSourcePdbId(e.target.value)} className="flex-1 px-2 py-1 text-xs border rounded" disabled={loading} />
+        <input type="text" placeholder="Chain" value={sourceChainId} onChange={(e) => setSourceChainId(e.target.value)} className="w-16 px-2 py-1 text-xs border rounded" disabled={loading} />
       </div>
-
       {error && <p className="text-xs text-red-500">{error}</p>}
-
       <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={loading || !sourcePdbId.trim() || !sourceChainId.trim()}
-          className="flex-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1"
-        >
-          {loading && <Loader2 size={12} className="animate-spin" />}
-          Align
+        <button type="submit" disabled={loading || !sourcePdbId.trim() || !sourceChainId.trim()} className="flex-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1">
+          {loading && <Loader2 size={12} className="animate-spin" />} Align
         </button>
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={loading}
-          className="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300"
-        >
-          Cancel
-        </button>
+        <button type="button" onClick={onClose} disabled={loading} className="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300">Cancel</button>
       </div>
     </form>
   );
 }
-
-function AlignedStructureRow({
-  aligned,
-  instance,
-}: {
-  aligned: AlignedStructure;
-  instance: MolstarInstance | null;
-}) {
-  const handleToggleVisibility = () => {
-    instance?.setAlignedStructureVisible(aligned.targetChainId, aligned.id, !aligned.visible);
-  };
-
-  const handleRemove = () => {
-    instance?.removeAlignedStructureById(aligned.targetChainId, aligned.id);
-  };
-
+function AlignedStructureRow({ aligned, instance }: { aligned: AlignedStructure; instance: MolstarInstance | null; }) {
+  const handleToggleVisibility = () => instance?.setAlignedStructureVisible(aligned.targetChainId, aligned.id, !aligned.visible);
+  const handleRemove = () => instance?.removeAlignedStructureById(aligned.targetChainId, aligned.id);
   return (
     <div className="flex items-center justify-between py-1 px-2 rounded text-sm bg-red-50">
       <div className="flex-1 min-w-0">
-        <span className="font-mono text-xs">
-          {aligned.sourcePdbId}:{aligned.sourceChainId}
-        </span>
-        {aligned.rmsd !== null && (
-          <span className="text-xs text-gray-500 ml-2">RMSD: {aligned.rmsd.toFixed(2)}</span>
-        )}
+        <span className="font-mono text-xs">{aligned.sourcePdbId}:{aligned.sourceChainId}</span>
+        {aligned.rmsd !== null && <span className="text-xs text-gray-500 ml-2">RMSD: {aligned.rmsd.toFixed(2)}</span>}
       </div>
       <div className="flex items-center gap-1">
-        <button
-          onClick={handleToggleVisibility}
-          className="p-1 text-gray-400 hover:text-gray-700"
-        >
+        <button onClick={handleToggleVisibility} className="p-1 text-gray-400 hover:text-gray-700">
           {aligned.visible ? <Eye size={14} /> : <EyeOff size={14} />}
         </button>
-        <button
-          onClick={handleRemove}
-          className="p-1 text-gray-400 hover:text-red-600"
-        >
+        <button onClick={handleRemove} className="p-1 text-gray-400 hover:text-red-600">
           <X size={14} />
         </button>
       </div>

@@ -1,26 +1,22 @@
 // src/app/msalite/components/AnnotationPanel.tsx
 'use client';
 
-import { useState, useMemo } from 'react';
-import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react';
-
-// ============================================================
-// Types
-// ============================================================
+import { useState } from 'react';
+import { ChevronDown, ChevronRight, Eye, EyeOff, Focus } from 'lucide-react';
 
 export interface MutationAnnotation {
-    masterIndex : number;
-    fromResidue : string;
-    toResidue   : string;
-    phenotype  ?: string;
-    source     ?: string;
+    masterIndex: number;
+    fromResidue: string;
+    toResidue: string;
+    phenotype?: string;
+    source?: string;
 }
 
 export interface BindingSite {
-    id        : string;
-    name      : string;
-    positions : number[];
-    color    ?: string;
+    id: string;
+    name: string;
+    msaRegions: { start: number; end: number }[];
+    color: string;
 }
 
 export interface AnnotationData {
@@ -29,58 +25,33 @@ export interface AnnotationData {
 }
 
 export interface EnabledAnnotations {
-    bindingSites: Set<string>;
+    activeBindingSites: Set<string>;
     showMutations: boolean;
 }
 
 interface AnnotationPanelProps {
     annotations: AnnotationData;
-    onChange: (enabled: EnabledAnnotations) => void;
-    onClear: () => void;
+    activeBindingSites: Set<string>;
+    showMutations: boolean;
+    onToggleSite: (siteId: string, enabled: boolean) => void;
+    onFocusSite: (siteId: string) => void;
+    onToggleMutations: (enabled: boolean) => void;
+    onClearAll: () => void;
 }
-
-// ============================================================
-// Color palettes (exported for use by parent)
-// ============================================================
-
-export const BINDING_SITE_COLORS: Record<string, string> = {
-    colchicine: '#e6194b',
-    taxol: '#3cb44b',
-    paclitaxel: '#3cb44b',
-    vinblastine: '#ffe119',
-    gtp: '#4363d8',
-    gdp: '#4363d8',
-    default: '#f58231',
-};
 
 export const MUTATION_COLOR = '#ff6b6b';
 
-export function getBindingSiteColor(site: BindingSite): string {
-    return site.color
-        || BINDING_SITE_COLORS[site.id.toLowerCase()]
-        || BINDING_SITE_COLORS[site.name.toLowerCase()]
-        || BINDING_SITE_COLORS.default;
-}
-
-// ============================================================
-// Component
-// ============================================================
-
 export function AnnotationPanel({
     annotations,
-    onChange,
-    onClear,
+    activeBindingSites,
+    showMutations,
+    onToggleSite,
+    onFocusSite,
+    onToggleMutations,
+    onClearAll,
 }: AnnotationPanelProps) {
-    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['bindingSites']));
-    const [enabledBindingSites, setEnabledBindingSites] = useState<Set<string>>(new Set());
-    const [showMutations, setShowMutations] = useState(false);
-
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['bindingSites', 'mutations']));
     const { mutations = [], bindingSites = [] } = annotations;
-
-    // Notify parent when selections change
-    const notifyChange = (sites: Set<string>, mutations: boolean) => {
-        onChange({ bindingSites: sites, showMutations: mutations });
-    };
 
     const toggleSection = (section: string) => {
         setExpandedSections((prev) => {
@@ -91,148 +62,118 @@ export function AnnotationPanel({
         });
     };
 
-    const toggleBindingSite = (siteId: string) => {
-        setEnabledBindingSites((prev) => {
-            const next = new Set(prev);
-            if (next.has(siteId)) next.delete(siteId);
-            else next.add(siteId);
-            notifyChange(next, showMutations);
-            return next;
-        });
-    };
-
-    const toggleAllBindingSites = (enable: boolean) => {
-        const next = enable ? new Set(bindingSites.map((s) => s.id)) : new Set<string>();
-        setEnabledBindingSites(next);
-        notifyChange(next, showMutations);
-    };
-
-    const toggleMutations = () => {
-        const next = !showMutations;
-        setShowMutations(next);
-        notifyChange(enabledBindingSites, next);
-    };
-
-    const handleClearAll = () => {
-        setEnabledBindingSites(new Set());
-        setShowMutations(false);
-        onClear();
-    };
-
-    const hasAnyEnabled = enabledBindingSites.size > 0 || showMutations;
+    const hasAnyEnabled = activeBindingSites.size > 0 || showMutations;
 
     return (
-        <div className="text-xs">
+        <div className="text-xs h-full flex flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between mb-2">
-                <span className="font-medium text-gray-700">Annotations</span>
+            <div className="flex items-center justify-between mb-4 flex-shrink-0">
+                <span className="font-semibold text-gray-700 uppercase tracking-wider text-[10px]">Annotations</span>
                 {hasAnyEnabled && (
-                    <button onClick={handleClearAll} className="text-gray-400 hover:text-gray-600">
+                    <button onClick={onClearAll} className="text-blue-600 hover:text-blue-800 font-medium">
                         Clear all
                     </button>
                 )}
             </div>
 
-            {/* Binding Sites Section */}
-            {bindingSites.length > 0 && (
-                <div className="mb-2">
-                    <button
-                        onClick={() => toggleSection('bindingSites')}
-                        className="flex items-center gap-1 w-full text-left py-1 text-gray-600 hover:text-gray-800"
-                    >
-                        {expandedSections.has('bindingSites') ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                        <span>Binding Sites ({bindingSites.length})</span>
-                    </button>
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+                {/* Binding Sites Section */}
+                {bindingSites.length > 0 && (
+                    <section>
+                        <button
+                            onClick={() => toggleSection('bindingSites')}
+                            className="flex items-center gap-1 w-full text-left py-1 font-medium text-gray-600 hover:text-gray-900 border-b border-gray-100 mb-2"
+                        >
+                            {expandedSections.has('bindingSites') ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            <span>Binding Sites</span>
+                        </button>
 
-                    {expandedSections.has('bindingSites') && (
-                        <div className="ml-4 space-y-1">
-                            <div className="flex items-center justify-between py-0.5 text-gray-400">
-                                <span>Toggle all</span>
-                                <div className="flex gap-1">
-                                    <button onClick={() => toggleAllBindingSites(true)} className="hover:text-gray-600">
-                                        <Eye size={12} />
-                                    </button>
-                                    <button onClick={() => toggleAllBindingSites(false)} className="hover:text-gray-600">
-                                        <EyeOff size={12} />
-                                    </button>
-                                </div>
-                            </div>
+                        {expandedSections.has('bindingSites') && (
+                            <div className="space-y-1">
+                                {bindingSites.map((site) => {
+                                    const isActive = activeBindingSites.has(site.id);
+                                    const totalPositions = site.msaRegions.reduce((sum, r) => sum + (r.end - r.start + 1), 0);
 
-                            {bindingSites.map((site) => {
-                                const isEnabled = enabledBindingSites.has(site.id);
-                                const color = getBindingSiteColor(site);
-
-                                return (
-                                    <button
-                                        key={site.id}
-                                        onClick={() => toggleBindingSite(site.id)}
-                                        className={`flex items-center gap-2 w-full py-1 px-1.5 rounded transition-colors ${isEnabled ? 'bg-gray-100' : 'hover:bg-gray-50'
-                                            }`}
-                                    >
+                                    return (
                                         <div
-                                            className="w-3 h-3 rounded-sm flex-shrink-0"
-                                            style={{ backgroundColor: isEnabled ? color : '#e5e5e5' }}
-                                        />
-                                        <span className={isEnabled ? 'text-gray-800' : 'text-gray-500'}>
-                                            {site.name}
-                                        </span>
-                                        <span className="text-gray-400 ml-auto">{site.positions.length} pos</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* Mutations Section */}
-            {mutations.length > 0 && (
-                <div className="mb-2">
-                    <button
-                        onClick={() => toggleSection('mutations')}
-                        className="flex items-center gap-1 w-full text-left py-1 text-gray-600 hover:text-gray-800"
-                    >
-                        {expandedSections.has('mutations') ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                        <span>Mutations ({mutations.length})</span>
-                    </button>
-
-                    {expandedSections.has('mutations') && (
-                        <div className="ml-4">
-                            <button
-                                onClick={toggleMutations}
-                                className={`flex items-center gap-2 w-full py-1 px-1.5 rounded transition-colors ${showMutations ? 'bg-gray-100' : 'hover:bg-gray-50'
-                                    }`}
-                            >
-                                <div
-                                    className="w-3 h-3 rounded-sm flex-shrink-0"
-                                    style={{ backgroundColor: showMutations ? MUTATION_COLOR : '#e5e5e5' }}
-                                />
-                                <span className={showMutations ? 'text-gray-800' : 'text-gray-500'}>
-                                    Show all mutations
-                                </span>
-                            </button>
-
-                            {showMutations && (
-                                <div className="mt-1 max-h-24 overflow-y-auto space-y-0.5 pl-5">
-                                    {mutations.slice(0, 10).map((mut, idx) => (
-                                        <div key={idx} className="text-gray-500">
-                                            {mut.fromResidue}{mut.masterIndex + 1}{mut.toResidue}
-                                            {mut.phenotype && <span className="text-gray-400 ml-1">- {mut.phenotype}</span>}
+                                            key={site.id}
+                                            className={`group flex items-center gap-2 px-2 py-1.5 rounded transition-colors cursor-pointer ${isActive ? 'bg-white shadow-sm ring-1 ring-black/5' : 'hover:bg-gray-100'
+                                                }`}
+                                            onClick={() => onToggleSite(site.id, !isActive)}
+                                        >
+                                            <div
+                                                className="w-3 h-3 rounded-sm flex-shrink-0 border border-black/10"
+                                                style={{ backgroundColor: isActive ? site.color : '#e5e5e5' }}
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <div className={`font-medium truncate ${isActive ? 'text-gray-900' : 'text-gray-500'}`}>
+                                                    {site.name}
+                                                </div>
+                                                <div className="text-[10px] text-gray-400">
+                                                    {totalPositions} residues
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onFocusSite(site.id);
+                                                }}
+                                                className={`p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                                    }`}
+                                                title="Focus in viewer"
+                                            >
+                                                <Focus size={12} />
+                                            </button>
                                         </div>
-                                    ))}
-                                    {mutations.length > 10 && (
-                                        <div className="text-gray-400">...and {mutations.length - 10} more</div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            )}
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </section>
+                )}
 
-            {bindingSites.length === 0 && mutations.length === 0 && (
-                <div className="text-gray-400 py-2">No annotations available</div>
-            )}
+                {/* Mutations Section */}
+                {mutations.length > 0 && (
+                    <section>
+                        <button
+                            onClick={() => toggleSection('mutations')}
+                            className="flex items-center gap-1 w-full text-left py-1 font-medium text-gray-600 hover:text-gray-900 border-b border-gray-100 mb-2"
+                        >
+                            {expandedSections.has('mutations') ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            <span>Mutations</span>
+                        </button>
+
+                        {expandedSections.has('mutations') && (
+                            <div className="space-y-1">
+                                <button
+                                    onClick={() => onToggleMutations(!showMutations)}
+                                    className={`flex items-center gap-2 w-full py-1.5 px-2 rounded transition-colors ${showMutations ? 'bg-white shadow-sm ring-1 ring-black/5' : 'hover:bg-gray-100'
+                                        }`}
+                                >
+                                    <div
+                                        className="w-3 h-3 rounded-sm flex-shrink-0 border border-black/10"
+                                        style={{ backgroundColor: showMutations ? MUTATION_COLOR : '#e5e5e5' }}
+                                    />
+                                    <span className={showMutations ? 'text-gray-900 font-medium' : 'text-gray-500'}>
+                                        Show all mutations
+                                    </span>
+                                </button>
+
+                                {showMutations && (
+                                    <div className="mt-1 max-h-48 overflow-y-auto space-y-0.5 pl-7 border-l-2 border-gray-100 ml-1.5">
+                                        {mutations.map((mut, idx) => (
+                                            <div key={idx} className="text-gray-500 py-0.5">
+                                                <span className="font-mono">{mut.fromResidue}{mut.masterIndex + 1}{mut.toResidue}</span>
+                                                {mut.phenotype && <span className="text-gray-400 ml-1.5 italic">- {mut.phenotype}</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </section>
+                )}
+            </div>
         </div>
     );
 }

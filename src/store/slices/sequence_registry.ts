@@ -110,8 +110,8 @@ export const {
 } = sequenceRegistrySlice.actions;
 
 // Selectors
-const selectSequencesMap = (state: RootState) => state.sequenceRegistry.sequences;
-const selectPositionMappingsMap = (state: RootState) => state.sequenceRegistry.positionMappings;
+const selectSequencesMap = (state: RootState) => state.sequenceRegistry?.sequences || {};
+const selectPositionMappingsMap = (state: RootState) => state.sequenceRegistry?.positionMappings || {};
 
 export const selectOrderedSequences = createSelector(
   [selectSequencesMap],
@@ -181,8 +181,13 @@ export const selectPositionMapping = createSelector(
 );
 
 export const selectIsChainAligned = createSelector(
-  [selectSequencesMap, (_state: RootState, pdbId: string, _chainId: string) => pdbId, (_state: RootState, _pdbId: string, chainId: string) => chainId],
+  [
+    selectSequencesMap, 
+    (_state: RootState, pdbId: string, _chainId: string) => pdbId, 
+    (_state: RootState, _pdbId: string, chainId: string) => chainId
+  ],
   (sequences, pdbId, chainId) => {
+    // sequences is now guaranteed to be at least an empty object {}
     return Object.values(sequences).some(
       s => s.originType === 'pdb' &&
         s.chainRef?.pdbId === pdbId &&
