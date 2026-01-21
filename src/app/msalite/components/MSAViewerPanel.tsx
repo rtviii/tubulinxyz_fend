@@ -1,11 +1,14 @@
 // src/app/msalite/components/MSAViewerPanel.tsx
 'use client';
 
-import { useRef, useCallback, useState, useEffect } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import { ResizableMSAContainer, ResizableMSAContainerHandle } from './ResizableMSAContainer';
 import { MSAToolbar } from './MSAToolbar';
-import { AnnotationPanel, AnnotationData } from './AnnotationPanel';
+import { AnnotationPanel, AnnotationData, EnabledAnnotations } from './AnnotationPanel';
+import { applyAnnotationColoring, clearAnnotationColoring } from '../services/annotationSyncService';
 import { clearColorConfig } from '../services/msaColorService';
+import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
+import { PositionMapping } from '@/store/slices/sequence_registry';
 import { Settings2, X } from 'lucide-react';
 
 interface SequenceData {
@@ -28,6 +31,10 @@ interface MSAViewerPanelProps {
   showToolbar?: boolean;
   showAnnotations?: boolean;
   compact?: boolean;
+  // New props for Molstar sync
+  molstarInstance?: MolstarInstance | null;
+  chainId?: string;
+  positionMapping?: PositionMapping | null;
 }
 
 export function MSAViewerPanel({
@@ -42,46 +49,72 @@ export function MSAViewerPanel({
   showToolbar = true,
   showAnnotations = true,
   compact = false,
+  molstarInstance = null,
+  chainId = '',
+  positionMapping = null,
 }: MSAViewerPanelProps) {
   const msaRef = useRef<ResizableMSAContainerHandle>(null);
   const [colorScheme, setColorScheme] = useState('clustal2');
   const [showAnnotationPanel, setShowAnnotationPanel] = useState(false);
 
-  // Find active sequence index for row-specific annotations
   const activeSequenceIndex = activeSequenceId
     ? sequences.findIndex((s) => s.id === activeSequenceId)
     : 0;
 
-  const handleSchemeChange = useCallback((scheme: string) => {
-    clearColorConfig();
-    setColorScheme(scheme);
-    msaRef.current?.setColorScheme(scheme);
-    msaRef.current?.redraw();
-  }, []);
-
-  const handleJumpToRange = useCallback((start: number, end: number) => {
-    msaRef.current?.jumpToRange(start, end);
-  }, []);
-
-  const handleReset = useCallback(() => {
-    clearColorConfig();
-    setColorScheme('clustal2');
-    msaRef.current?.setColorScheme('clustal2');
-    msaRef.current?.redraw();
-  }, []);
-
-  const handleColoringApplied = useCallback(() => {
-    // Switch to custom scheme when annotations applied
+  const triggerMsaRedraw = useCallback(() => {
     msaRef.current?.setColorScheme('custom-position');
     msaRef.current?.redraw();
     setColorScheme('custom-position');
   }, []);
 
-  const handleAnnotationsClear = useCallback(() => {
-    msaRef.current?.setColorScheme('clustal2');
+  const handleSchemeChange = useCallback((scheme: string) => {
+    clearColorConfig();
+    molstarInstance?.restoreDefaultColors();
+    setColorScheme(scheme);
+    msaRef.current?.setColorScheme(scheme);
     msaRef.current?.redraw();
-    setColorScheme('clustal2');
-  }, []);
+  }, [molstarInstance]);
+
+  const handleJumpToRange = useCallback((start: number, end: number) => {
+    msaRef.current?.jumpToRange(start, end);
+    
+    // Also focus Molstar on this range if we have mapping
+    if (molstarInstance && chainId && positionMapping) {
+      const startAuth = positionMapping[start];
+      const endAuth = positionMapping[end];
+      if (startAuth !== undefined && endAuth !== undefined) {
+        molstarInstance.focusResidueRange(chainId, startAuth, endAuth);
+      }
+    }
+  }, [molstarInstance, chainId, positionMapping]);
+
+  const handleReset = useCallback(() => {
+    clearAnnotationColoring(molstarInstance, () => {
+      msaRef.current?.setColorScheme('clustal2');
+      msaRef.current?.redraw();
+      setColorScheme('clustal2');
+    });
+  }, [molstarInstance]);
+
+  const handleAnnotationsChange = useCallback((enabled: EnabledAnnotations) => {
+    applyAnnotationColoring({
+      annotations,
+      enabled,
+      positionMapping,
+      chainId,
+      activeSequenceIndex: activeSequenceIndex >= 0 ? activeSequenceIndex : 0,
+      instance: molstarInstance,
+      onMsaRedraw: triggerMsaRedraw,
+    });
+  }, [annotations, positionMapping, chainId, activeSequenceIndex, molstarInstance, triggerMsaRedraw]);
+
+  const handleAnnotationsClear = useCallback(() => {
+    clearAnnotationColoring(molstarInstance, () => {
+      msaRef.current?.setColorScheme('clustal2');
+      msaRef.current?.redraw();
+      setColorScheme('clustal2');
+    });
+  }, [molstarInstance]);
 
   const hasAnnotations = (annotations.bindingSites?.length ?? 0) > 0 
     || (annotations.mutations?.length ?? 0) > 0;
@@ -130,7 +163,6 @@ export function MSAViewerPanel({
 
       {/* Main content */}
       <div className="flex-1 min-h-0 flex">
-        {/* MSA viewer */}
         <div className={`flex-1 min-w-0 p-2 ${showAnnotationPanel ? 'pr-0' : ''}`}>
           <ResizableMSAContainer
             ref={msaRef}
@@ -143,7 +175,6 @@ export function MSAViewerPanel({
           />
         </div>
 
-        {/* Annotation panel (slide-in) */}
         {showAnnotationPanel && (
           <div className="w-56 flex-shrink-0 border-l bg-gray-50 p-3 overflow-y-auto">
             <div className="flex items-center justify-between mb-2">
@@ -157,10 +188,7 @@ export function MSAViewerPanel({
             </div>
             <AnnotationPanel
               annotations={annotations}
-              sequenceCount={sequences.length}
-              maxLength={maxLength}
-              activeSequenceIndex={activeSequenceIndex >= 0 ? activeSequenceIndex : 0}
-              onColoringApplied={handleColoringApplied}
+              onChange={handleAnnotationsChange}
               onClear={handleAnnotationsClear}
             />
           </div>

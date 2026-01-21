@@ -21,6 +21,7 @@ import {
   executeQuery,
   structureToLoci,
   extractObservedSequence,
+  buildMultiResidueQuery,
 } from '../core/queries';
 import {
   setLoadedStructure,
@@ -732,6 +733,16 @@ export class MolstarInstance {
   // Colorscheme Operations
   // ============================================================
 
+  // In src/components/molstar/services/MolstarInstance.ts
+  // Replace the Colorscheme Operations section:
+
+  // ============================================================
+  // Colorscheme Operations
+  // ============================================================
+
+  // In the Colorscheme Operations section of MolstarInstance.ts
+  // Replace the entire applyColorscheme method:
+
   async applyColorscheme(colorschemeId: string, colorings: ResidueColoring[]): Promise<void> {
     const plugin = this.viewer.ctx;
     if (!plugin || colorings.length === 0) return;
@@ -739,39 +750,49 @@ export class MolstarInstance {
     const structure = this.viewer.getCurrentStructure();
     if (!structure) return;
 
-    const colorGroups: Record<number, ResidueColoring[]> = {};
+    // Group colorings by color AND chain (since query needs chain context)
+    const colorChainGroups = new Map<string, { color: Color; chainId: string; authSeqIds: number[] }>();
+
     for (const coloring of colorings) {
-      if (!colorGroups[coloring.color]) colorGroups[coloring.color] = [];
-      colorGroups[coloring.color].push(coloring);
+      const key = `${coloring.color}-${coloring.chainId}`;
+      if (!colorChainGroups.has(key)) {
+        colorChainGroups.set(key, {
+          color: coloring.color,
+          chainId: coloring.chainId,
+          authSeqIds: [],
+        });
+      }
+      colorChainGroups.get(key)!.authSeqIds.push(coloring.authSeqId);
     }
 
     const layers: { bundle: StructureElement.Bundle; color: Color }[] = [];
 
-    for (const [colorValue, residues] of Object.entries(colorGroups)) {
-      const color = Color(Number(colorValue));
-      const lociList: StructureElement.Loci[] = [];
+    for (const { color, chainId, authSeqIds } of colorChainGroups.values()) {
+      // Build a single query that matches all residues for this color+chain
+      const query = buildMultiResidueQuery(chainId, authSeqIds);
+      const loci = executeQuery(query, structure);
 
-      for (const res of residues) {
-        const query = buildResidueQuery(res.chainId, res.authSeqId);
-        const loci = executeQuery(query, structure);
-        if (loci && StructureElement.Loci.is(loci)) {
-          lociList.push(loci);
-        }
-      }
-
-      if (lociList.length > 0) {
-        const concatenatedLoci = Loci.concat(lociList) as StructureElement.Loci;
+      if (loci && !StructureElement.Loci.isEmpty(loci)) {
         layers.push({
-          bundle: StructureElement.Bundle.fromLoci(concatenatedLoci),
+          bundle: StructureElement.Bundle.fromLoci(loci),
           color,
         });
       }
     }
 
     if (layers.length > 0) {
-      await plugin.managers.structure.component.eachRepresentation((repr) => {
-        plugin.managers.structure.component.overpaint.set(layers, repr);
-      });
+      console.log(`[${this.id}] Applying ${layers.length} color layers for scheme: ${colorschemeId}`);
+
+      const hierarchy = plugin.managers.structure.hierarchy.current;
+      for (const structureRef of hierarchy.structures) {
+        for (const component of structureRef.components) {
+          for (const repr of component.representations) {
+            if (repr.cell?.obj) {
+              plugin.managers.structure.component.overpaint.set(layers, repr.cell);
+            }
+          }
+        }
+      }
     }
 
     this.dispatch(setActiveColorscheme({ instanceId: this.id, colorschemeId }));
@@ -781,12 +802,34 @@ export class MolstarInstance {
     const plugin = this.viewer.ctx;
     if (!plugin) return;
 
-    await plugin.managers.structure.component.eachRepresentation((repr) => {
-      plugin.managers.structure.component.overpaint.clear(repr);
-    });
+    // Molstar 4.x API: iterate through hierarchy
+    const hierarchy = plugin.managers.structure.hierarchy.current;
+    for (const structureRef of hierarchy.structures) {
+      for (const component of structureRef.components) {
+        for (const repr of component.representations) {
+          if (repr.cell?.obj) {
+            plugin.managers.structure.component.overpaint.clear(repr.cell);
+          }
+        }
+      }
+    }
 
     this.dispatch(setActiveColorscheme({ instanceId: this.id, colorschemeId: null }));
   }
+
+  /**
+   * Color specific residues by auth_seq_id with a single color.
+   * Simpler API for binding site highlighting.
+   */
+  async colorResidues(chainId: string, authSeqIds: number[], color: Color): Promise<void> {
+    const colorings: ResidueColoring[] = authSeqIds.map(authSeqId => ({
+      chainId,
+      authSeqId,
+      color,
+    }));
+    await this.applyColorscheme('custom', colorings);
+  }
+
 
   // ============================================================
   // Cleanup
