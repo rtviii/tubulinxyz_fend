@@ -1,0 +1,40 @@
+{
+  "name": "@nightingale-elements/nightingale-navigation",
+  "version": "5.6.0",
+  "description": "Navigation component for the Nightingale tool",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "rollup --config ../../rollup.config.mjs",
+    "test": "../../node_modules/.bin/jest --config ../../jest.config.js ./tests/*"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "keywords": [
+    "nightingale",
+    "customelements",
+    "webcomponents"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ebi-webcomponents/nightingale.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ebi-webcomponents/nightingale/issues"
+  },
+  "homepage": "https://ebi-webcomponents.github.io/nightingale/",
+  "author": "Aurélien Luciani <luciani@ebi.ac.uk>",
+  "license": "ISC",
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "dependencies": {
+    "@nightingale-elements/nightingale-new-core": "^5.6.0",
+    "d3": "7.9.0"
+  }
+}

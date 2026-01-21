@@ -48,3 +48,14 @@ notes*
 
 output/** 
 *.png
+
+
+
+node_modules/
+.next/
+nightingale/packages/*/dist/
+node_modules/
+nightingale/node_modules/
+nightingale/packages/*/node_modules/
+.next/
+nightingale/packages/*/dist/

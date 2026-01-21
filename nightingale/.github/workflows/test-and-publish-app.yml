@@ -1,0 +1,42 @@
+name: Test and Publish Nightingale App
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 20
+      - name: 🔧 Install
+        run: |
+          yarn
+      - name: 🔧 Build
+        run: |
+          yarn clean
+          yarn build
+      - name: 🧪 Test - Unit
+        run: |
+          yarn test
+      - name: 🧪 Test - Lint
+        run: |
+          yarn lint
+      - name: 📚 Storybook
+        run: |
+          yarn build-storybook
+      - name: 🚀 Deploy Storybook
+        if: github.ref == 'refs/heads/main'
+        uses: JamesIves/github-pages-deploy-action@v4.3.3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages # The branch the action should deploy to.
+          folder: storybook-static # The folder the action should deploy.
+          clean: true
+      - name: 📟 Building V3
+        if: github.ref == 'refs/heads/main'
+        run: |
+          gh workflow run test-and-publish-app.yml --ref v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
