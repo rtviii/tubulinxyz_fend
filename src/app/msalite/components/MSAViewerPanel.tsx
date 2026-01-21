@@ -102,25 +102,25 @@ export function MSAViewerPanel({
         });
     }, [molstarInstance]);
 
-    const handleAnnotationsChange = useCallback((enabled: EnabledAnnotations) => {
-        applyAnnotationColoring({
-            annotations,
-            enabled,
-            positionMapping,
-            chainId,
-            activeSequenceIndex: activeSequenceIndex >= 0 ? activeSequenceIndex : 0,
-            instance: molstarInstance,
-            onMsaRedraw: triggerMsaRedraw,
-        });
-    }, [annotations, positionMapping, chainId, activeSequenceIndex, molstarInstance, triggerMsaRedraw]);
+    // const handleAnnotationsChange = useCallback((enabled: EnabledAnnotations) => {
+    //     applyAnnotationColoring({
+    //         annotations,
+    //         enabled,
+    //         positionMapping,
+    //         chainId,
+    //         activeSequenceIndex: activeSequenceIndex >= 0 ? activeSequenceIndex : 0,
+    //         instance: molstarInstance,
+    //         onMsaRedraw: triggerMsaRedraw,
+    //     });
+    // }, [annotations, positionMapping, chainId, activeSequenceIndex, molstarInstance, triggerMsaRedraw]);
 
-    const handleAnnotationsClear = useCallback(() => {
-        clearAnnotationColoring(molstarInstance, () => {
-            msaRef.current?.setColorScheme('clustal2');
-            msaRef.current?.redraw();
-            setColorScheme('clustal2');
-        });
-    }, [molstarInstance]);
+    // const handleAnnotationsClear = useCallback(() => {
+    //     clearAnnotationColoring(molstarInstance, () => {
+    //         msaRef.current?.setColorScheme('clustal2');
+    //         msaRef.current?.redraw();
+    //         setColorScheme('clustal2');
+    //     });
+    // }, [molstarInstance]);
 
     const hasAnnotations = (annotations.bindingSites?.length ?? 0) > 0
         || (annotations.mutations?.length ?? 0) > 0;
@@ -191,11 +191,11 @@ export function MSAViewerPanel({
                                 <X size={12} />
                             </button>
                         </div>
-                        <AnnotationPanel
+                        {/* <AnnotationPanel
                             annotations={annotations}
                             onChange={handleAnnotationsChange}
                             onClear={handleAnnotationsClear}
-                        />
+                        /> */}
                     </div>
                 )}
             </div>

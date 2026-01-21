@@ -3,7 +3,7 @@
 
 import { useState, useCallback } from 'react';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
-import { useChainAlignment } from '../hooks/useChainAlignment';
+import { useChainAlignment } from '../../../hooks/useChainAlignment';
 import { useAppSelector } from '@/store/store';
 import { selectIsChainAligned } from '@/store/slices/sequence_registry';
 

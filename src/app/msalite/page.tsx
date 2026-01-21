@@ -10,14 +10,13 @@ import {
   selectAddedSequenceGroups,
   removeSequence
 } from '@/store/slices/sequence_registry';
-import { useNightingaleComponents } from './useNightingaleComponents';
+import { useNightingaleComponents } from '../../hooks/useNightingaleComponents';
 
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
 import { MolstarNode } from '@/components/molstar/spec';
 
 import { MSAViewerPanel } from './components/MSAViewerPanel';
-import { ChainAligner } from './components/ChainAligner';
-import { AnnotationData } from './components/AnnotationPanel';
+// import { ChainAligner } from './components/ChainAligner';
 
 // Mock annotations for demo/testing
 const DEMO_ANNOTATIONS: AnnotationData = {
@@ -183,9 +182,9 @@ export default function MSALitePage() {
                   </div>
                 )}
               </div>
-              <div className="flex-1 min-w-0">
+              {/* <div className="flex-1 min-w-0">
                 <ChainAligner molstarInstance={molstarInstance} onLog={log} />
-              </div>
+              </div> */}
             </div>
           </div>
 

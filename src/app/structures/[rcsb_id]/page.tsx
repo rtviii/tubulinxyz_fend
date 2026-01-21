@@ -26,11 +26,11 @@ import {
   selectIsChainAligned,
 } from '@/store/slices/sequence_registry';
 import { useGetMasterProfileMsaMasterGetQuery } from '@/store/tubxz_api';
-import { useChainAlignment } from '@/app/msalite/hooks/useChainAlignment';
-import { useNightingaleComponents } from '@/app/msalite/useNightingaleComponents';
+import { useChainAlignment } from '@/hooks/useChainAlignment';
+import { useNightingaleComponents } from '@/hooks/useNightingaleComponents';
 import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/app/msalite/components/ResizableMSAContainer';
 import { MSAToolbar } from '@/app/msalite/components/MSAToolbar';
-import { BindingSitePanel, TUBULIN_BINDING_SITES } from '@/app/msalite/components/BindingSitePanel';
+import { BindingSitePanel, TUBULIN_BINDING_SITES } from '@/app/structures/[rcsb_id]/BindingSitePanel';
 import { API_BASE_URL } from '@/config';
 import { PolymerComponent, LigandComponent, AlignedStructure } from '@/components/molstar/core/types';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
