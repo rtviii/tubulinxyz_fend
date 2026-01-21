@@ -19,6 +19,11 @@ import {
 } from '@/components/molstar/state/selectors';
 import { createClassificationFromProfile } from '@/services/profile_service';
 import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
+import {
   addSequence,
   selectMasterSequences,
   selectPdbSequences,
@@ -182,84 +187,105 @@ export default function StructureProfilePageRefactored() {
 
   const isMonomerView = viewMode === 'monomer';
 
+  // src/app/structures/[rcsb_id]/page.tsx
+
   return (
     <div className="h-screen w-screen overflow-hidden bg-gray-100">
-      <div className="flex h-full">
-        {/* Sidebar */}
-        <div className="relative w-80 h-full flex-shrink-0 overflow-hidden">
-          <div
-            className="flex h-full transition-transform duration-300 ease-in-out"
-            style={{ transform: isMonomerView ? 'translateX(-100%)' : 'translateX(0)' }}
-          >
-            {/* Structure sidebar */}
-            <div className="w-80 h-full flex-shrink-0">
-              <StructureSidebar
-                loadedStructure={loadedStructure}
-                polymerComponents={polymerComponents}
-                ligandComponents={ligandComponents}
-                instance={instance}
-                error={error}
-                profile={profile}
-              />
-            </div>
+      <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+        {/* Sidebar Panel: Horizontally Resizable */}
+        <ResizablePanel
+          defaultSize={20}
+          minSize={15}
+          maxSize={30}
+          className="bg-white border-r"
+        >
+          <div className="relative h-full overflow-hidden">
+            <div
+              className="flex h-full transition-transform duration-300 ease-in-out"
+              style={{ transform: isMonomerView ? 'translateX(-100%)' : 'translateX(0)' }}
+            >
+              {/* Structure sidebar */}
+              <div className="w-full h-full flex-shrink-0">
+                <StructureSidebar
+                  loadedStructure={loadedStructure}
+                  polymerComponents={polymerComponents}
+                  ligandComponents={ligandComponents}
+                  instance={instance}
+                  error={error}
+                  profile={profile}
+                />
+              </div>
 
-            {/* Monomer sidebar */}
-            <div className="w-80 h-full flex-shrink-0">
-              <MonomerSidebar
-                activeChainId={activeChainId}
-                polymerComponents={polymerComponents}
-                alignedStructures={alignedStructures}
-                instance={instance}
-                pdbId={loadedStructure}
-                profile={profile}
-                annotationData={annotationData}
-                activeBindingSites={activeSites}
-                showMutations={showMutations}
-                onToggleSite={toggleSite}
-                onFocusSite={focusSite}
-                onToggleMutations={setShowMutations}
-                onClearAll={clearAll}
-              />
+              {/* Monomer sidebar */}
+              <div className="w-full h-full flex-shrink-0">
+                <MonomerSidebar
+                  activeChainId={activeChainId}
+                  polymerComponents={polymerComponents}
+                  alignedStructures={alignedStructures}
+                  instance={instance}
+                  pdbId={loadedStructure}
+                  profile={profile}
+                  annotationData={annotationData}
+                  activeBindingSites={activeSites}
+                  showMutations={showMutations}
+                  onToggleSite={toggleSite}
+                  onFocusSite={focusSite}
+                  onToggleMutations={setShowMutations}
+                  onClearAll={clearAll}
+                />
+              </div>
             </div>
           </div>
-        </div>
+        </ResizablePanel>
 
-        {/* Main content area */}
-        <div className="flex-1 h-full flex flex-col min-w-0 overflow-hidden">
-          {/* Molstar viewer */}
-          <div
-            className={`relative transition-all duration-300 min-h-0 ${isMonomerView ? 'h-1/2' : 'h-full'}`}
-          >
-            <div ref={containerRef} className="w-full h-full" />
-            {(!isInitialized || isLoading) && (
-              <LoadingOverlay text={isLoading ? 'Loading structure...' : 'Initializing viewer...'} />
+        {/* Vertical handle for sidebar resizing */}
+        <ResizableHandle withHandle />
+
+        {/* Main Content Area: Vertically Resizable between Molstar and MSA */}
+        <ResizablePanel defaultSize={80}>
+          <ResizablePanelGroup direction="vertical">
+            {/* Molstar Viewer Panel */}
+            <ResizablePanel defaultSize={isMonomerView ? 50 : 100} minSize={30}>
+              <div className="relative w-full h-full min-h-0 bg-gray-200">
+                <div ref={containerRef} className="w-full h-full" />
+                {(!isInitialized || isLoading) && (
+                  <LoadingOverlay
+                    text={isLoading ? 'Loading structure...' : 'Initializing viewer...'}
+                  />
+                )}
+              </div>
+            </ResizablePanel>
+
+            {/* MSA Panel (only shown in monomer view) */}
+            {isMonomerView && activeChainId && (
+              <>
+                <ResizableHandle withHandle />
+                <ResizablePanel defaultSize={50} minSize={20}>
+                  <div className="h-full border-t border-gray-300 bg-white min-h-0 flex flex-col overflow-hidden">
+                    <MonomerMSAPanelRefactored
+                      pdbId={loadedStructure}
+                      chainId={activeChainId}
+                      family={getFamilyForChain(activeChainId)}
+                      instance={instance}
+                      masterSequences={masterSequences}
+                      pdbSequences={pdbSequences}
+                      maxLength={masterData?.alignment_length ?? 0}
+                      nglLoaded={nglLoaded}
+                      msaRef={msaRef}
+                      activeSites={activeSites}
+                      toggleSite={toggleSite}
+                      focusSite={focusSite}
+                      clearAll={clearAll}
+                      showMutations={showMutations}
+                      setShowMutations={setShowMutations}
+                    />
+                  </div>
+                </ResizablePanel>
+              </>
             )}
-          </div>
-
-          {/* MSA Panel (only in monomer view) */}
-          {isMonomerView && activeChainId && (
-            <div className="h-1/2 border-t border-gray-300 bg-white min-h-0 flex flex-col overflow-hidden">
-              <MonomerMSAPanelRefactored
-                pdbId={loadedStructure}
-                chainId={activeChainId}
-                family={getFamilyForChain(activeChainId)}
-                instance={instance}
-                masterSequences={masterSequences}
-                pdbSequences={pdbSequences}
-                maxLength={masterData?.alignment_length ?? 0}
-                nglLoaded={nglLoaded}
-                msaRef={msaRef}
-                activeSites={activeSites}
-                toggleSite={toggleSite}
-                focusSite={focusSite}
-                clearAll={clearAll}
-                showMutations={showMutations}
-                setShowMutations={setShowMutations}
-              />
-            </div>
-          )}
-        </div>
-      </div>
+          </ResizablePanelGroup>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }
@@ -347,14 +373,14 @@ function MonomerSidebar({
   onToggleMutations: (enabled: boolean) => void;
   onClearAll: () => void;
 }) {
-const [showAlignForm, setShowAlignForm] = useState(false);
+  const [showAlignForm, setShowAlignForm] = useState(false);
   const { alignChain } = useChainAlignment(); // Access the alignment hook
 
   const handleBack = () => instance?.exitMonomerView();
   const handleChainSwitch = (chainId: string) => {
     if (chainId !== activeChainId) instance?.switchMonomerChain(chainId);
   };
-const getFamilyForChain = (chainId: string): string | undefined => {
+  const getFamilyForChain = (chainId: string): string | undefined => {
     if (!profile) return undefined;
     const poly = profile.polypeptides.find(p => p.auth_asym_id === chainId);
     if (!poly) return undefined;
@@ -415,7 +441,7 @@ const getFamilyForChain = (chainId: string): string | undefined => {
               <Plus size={14} />
             </button>
           </div>
-{showAlignForm && activeChainId && (
+          {showAlignForm && activeChainId && (
             <AlignStructureForm
               targetChainId={activeChainId}
               instance={instance}
@@ -648,18 +674,18 @@ function LigandRow({ ligand, instance }: { ligand: LigandComponent; instance: Mo
   );
 }
 
-function AlignStructureForm({ 
-    targetChainId, 
-    instance, 
-    onClose, 
-    alignChain, 
-    targetFamily 
-}: { 
-    targetChainId: string; 
-    instance: MolstarInstance | null; 
-    onClose: () => void;
-    alignChain: (pdbId: string, chainId: string, inst: MolstarInstance, family?: string) => Promise<any>;
-    targetFamily?: string;
+function AlignStructureForm({
+  targetChainId,
+  instance,
+  onClose,
+  alignChain,
+  targetFamily
+}: {
+  targetChainId: string;
+  instance: MolstarInstance | null;
+  onClose: () => void;
+  alignChain: (pdbId: string, chainId: string, inst: MolstarInstance, family?: string) => Promise<any>;
+  targetFamily?: string;
 }) {
   const [sourcePdbId, setSourcePdbId] = useState('');
   const [sourceChainId, setSourceChainId] = useState('');
@@ -672,62 +698,61 @@ function AlignStructureForm({
     const chainId = sourceChainId.trim().toUpperCase();
 
     if (!instance || !pdbId || !chainId) return;
-    
-    setLoading(true); 
+
+    setLoading(true);
     setError(null);
 
     try {
       // 1. Structural Alignment (Molstar side)
       // This performs the 3D superposition relative to the targetChainId
       const structuralResult = await instance.loadAlignedStructure(targetChainId, pdbId, chainId);
-      
+
       if (structuralResult) {
         // 2. Sequence Alignment (MSA side)
         // This triggers the backend call you mentioned to fetch gapped sequence/mapping
         // We pass the targetFamily so the backend knows which Master sequence to use
         await alignChain(pdbId, chainId, instance, targetFamily);
-        onClose(); 
+        onClose();
       } else {
         setError('Failed to load or align structure in 3D');
       }
-    } catch (err) { 
-        setError(err instanceof Error ? err.message : 'Unknown error during alignment'); 
-    } finally { 
-        setLoading(false); 
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error during alignment');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <form onSubmit={handleSubmit} className="p-2 bg-gray-50 rounded space-y-2">
       <div className="flex gap-2">
-        <input 
-            type="text" 
-            placeholder="PDB ID" 
-            value={sourcePdbId} 
-            onChange={(e) => setSourcePdbId(e.target.value)} 
-            className="flex-1 px-2 py-1 text-xs border rounded" 
-            disabled={loading} 
+        <input
+          type="text"
+          placeholder="PDB ID"
+          value={sourcePdbId} onChange={(e) => setSourcePdbId(e.target.value)}
+          className="flex-1 px-2 py-1 text-xs border rounded"
+          disabled={loading}
         />
-        <input 
-            type="text" 
-            placeholder="Chain" 
-            value={sourceChainId} 
-            onChange={(e) => setSourceChainId(e.target.value)} 
-            className="w-16 px-2 py-1 text-xs border rounded" 
-            disabled={loading} 
+        <input
+          type="text"
+          placeholder="Chain"
+          value={sourceChainId}
+          onChange={(e) => setSourceChainId(e.target.value)}
+          className="w-16 px-2 py-1 text-xs border rounded"
+          disabled={loading}
         />
       </div>
       {error && <p className="text-[10px] text-red-500 leading-tight">{error}</p>}
       <div className="flex gap-2">
-        <button 
-            type="submit" 
-            disabled={loading || !sourcePdbId.trim() || !sourceChainId.trim()} 
-            className="flex-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1"
+        <button
+          type="submit"
+          disabled={loading || !sourcePdbId.trim() || !sourceChainId.trim()}
+          className="flex-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-1"
         >
           {loading ? <Loader2 size={12} className="animate-spin" /> : 'Align'}
         </button>
         <button type="button" onClick={onClose} disabled={loading} className="px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300">
-            Cancel
+          Cancel
         </button>
       </div>
     </form>
