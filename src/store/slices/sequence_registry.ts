@@ -24,12 +24,14 @@ export type PositionMapping = Record<number, number>;
 interface SequenceRegistryState {
   sequences: Record<string, MsaSequence>;
   positionMappings: Record<string, PositionMapping>;
+  selectedSequenceId: string | null;
   nextRowIndex: number;
 }
 
 const initialState: SequenceRegistryState = {
   sequences: {},
   positionMappings: {},
+  selectedSequenceId: null,
   nextRowIndex: 0,
 };
 
@@ -70,8 +72,26 @@ export const sequenceRegistrySlice = createSlice({
       state.positionMappings[action.payload.sequenceId] = action.payload.mapping;
     },
 
+    setSelectedSequence: (state, action: PayloadAction<string | null>) => {
+      state.selectedSequenceId = action.payload;
+    },
+
+    toggleSelectedSequence: (state, action: PayloadAction<string>) => {
+      if (state.selectedSequenceId === action.payload) {
+        state.selectedSequenceId = null;
+      } else {
+        state.selectedSequenceId = action.payload;
+      }
+    },
+
     removeSequence: (state, action: PayloadAction<string>) => {
       const id = action.payload;
+      
+      // Clear selection if we're removing the selected sequence
+      if (state.selectedSequenceId === id) {
+        state.selectedSequenceId = null;
+      }
+      
       delete state.sequences[id];
       delete state.positionMappings[id];
 
@@ -90,6 +110,11 @@ export const sequenceRegistrySlice = createSlice({
         }
       });
 
+      // Clear selection if it was a pdb sequence
+      if (state.selectedSequenceId && !state.sequences[state.selectedSequenceId]) {
+        state.selectedSequenceId = null;
+      }
+
       const sorted = Object.values(state.sequences).sort((a, b) => a.rowIndex - b.rowIndex);
       sorted.forEach((seq, idx) => {
         state.sequences[seq.id].rowIndex = idx;
@@ -104,13 +129,15 @@ export const sequenceRegistrySlice = createSlice({
 export const {
   addSequence,
   setPositionMapping,
+  setSelectedSequence,
+  toggleSelectedSequence,
   removeSequence,
   clearPdbSequences,
   clearAllSequences,
 } = sequenceRegistrySlice.actions;
 
 // ============================================================
-// STABLE EMPTY REFERENCES - Critical for selector stability
+// STABLE EMPTY REFERENCES
 // ============================================================
 
 const EMPTY_SEQUENCES: Record<string, MsaSequence> = {};
@@ -119,7 +146,7 @@ const EMPTY_SEQUENCE_ARRAY: MsaSequence[] = [];
 const EMPTY_GROUPS: { title: string; sequences: MsaSequence[] }[] = [];
 
 // ============================================================
-// Base Selectors - Return stable references
+// Base Selectors
 // ============================================================
 
 const selectSequencesMap = (state: RootState): Record<string, MsaSequence> => 
@@ -127,6 +154,9 @@ const selectSequencesMap = (state: RootState): Record<string, MsaSequence> =>
 
 const selectPositionMappingsMap = (state: RootState): Record<string, PositionMapping> => 
   state.sequenceRegistry?.positionMappings ?? EMPTY_MAPPINGS;
+
+export const selectSelectedSequenceId = (state: RootState): string | null =>
+  state.sequenceRegistry?.selectedSequenceId ?? null;
 
 // ============================================================
 // Derived Selectors
@@ -138,6 +168,14 @@ export const selectOrderedSequences = createSelector(
     const values = Object.values(sequences);
     if (values.length === 0) return EMPTY_SEQUENCE_ARRAY;
     return values.sort((a, b) => a.rowIndex - b.rowIndex);
+  }
+);
+
+export const selectSelectedSequence = createSelector(
+  [selectSequencesMap, selectSelectedSequenceId],
+  (sequences, selectedId): MsaSequence | null => {
+    if (!selectedId) return null;
+    return sequences[selectedId] ?? null;
   }
 );
 
