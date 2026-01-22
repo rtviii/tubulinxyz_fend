@@ -7,11 +7,11 @@ import { Color } from 'molstar/lib/mol-util/color';
 import { StateSelection } from 'molstar/lib/mol-state';
 import { Structure } from 'molstar/lib/mol-model/structure';
 import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state';
-import { StructureElement } from 'molstar/lib/mol-model/structure';
+import { StructureElement, StructureProperties } from 'molstar/lib/mol-model/structure';
 import { ribxzSpec } from '../spec';
 import { EnhancedTubulinSplitPreset } from '../colors/preset_structure'; // <-- Add import
 import { MonomerPreset } from '../colors/preset_monomer';
-
+import { Subscription } from 'rxjs';
 
 /**
  * Pure Molstar wrapper - handles lifecycle and low-level canvas operations.
@@ -125,6 +125,62 @@ export class MolstarViewer {
     return cell?.obj?.data as Structure | undefined;
   }
 
+
+
+  //----
+
+
+  subscribeToHover(
+  callback: (info: { chainId: string; authSeqId: number } | null) => void
+): () => void {
+  if (!this.ctx) {
+    console.warn('[MolstarViewer] Cannot subscribe to hover - not initialized');
+    return () => {};
+  }
+
+  const subscription = this.ctx.behaviors.interaction.hover.subscribe((e) => {
+    if (StructureElement.Loci.is(e.current.loci) && !StructureElement.Loci.isEmpty(e.current.loci)) {
+      // Extract first residue's info
+      let emitted = false;
+      StructureElement.Loci.forEachLocation(e.current.loci, (location) => {
+        if (emitted) return; // Only emit first
+        const chainId = StructureProperties.chain.auth_asym_id(location);
+        const authSeqId = StructureProperties.residue.auth_seq_id(location);
+        callback({ chainId, authSeqId });
+        emitted = true;
+      });
+    } else {
+      callback(null);
+    }
+  });
+
+  return () => subscription.unsubscribe();
+}
+
+subscribeToClick(
+  callback: (info: { chainId: string; authSeqId: number } | null) => void
+): () => void {
+  if (!this.ctx) {
+    return () => {};
+  }
+
+  const subscription = this.ctx.behaviors.interaction.click.subscribe((e) => {
+    if (StructureElement.Loci.is(e.current.loci) && !StructureElement.Loci.isEmpty(e.current.loci)) {
+      let emitted = false;
+      StructureElement.Loci.forEachLocation(e.current.loci, (location) => {
+        if (emitted) return;
+        const chainId = StructureProperties.chain.auth_asym_id(location);
+        const authSeqId = StructureProperties.residue.auth_seq_id(location);
+        callback({ chainId, authSeqId });
+        emitted = true;
+      });
+    } else {
+      callback(null);
+    }
+  });
+
+  return () => subscription.unsubscribe();
+}
   // --- Selection ---
 
   clearSelection(): void {

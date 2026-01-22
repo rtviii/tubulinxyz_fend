@@ -52,6 +52,7 @@ import { StructureSelection, QueryContext } from 'molstar/lib/mol-model/structur
 import { setStructureOverpaint } from 'molstar/lib/mol-plugin-state/helpers/structure-overpaint';
 
 import { ResidueColoring } from '../coloring/types';
+import { removeSequence } from '@/store/slices/sequence_registry';
 
 const ALIGNED_CHAIN_COLOR = Color(0xE57373); // reddish for aligned structures
 
@@ -485,10 +486,15 @@ export class MolstarInstance {
     const aligned = chainState?.alignedStructures[alignedStructureId];
     if (!aligned) return;
 
-    // Remove from Molstar state tree (remove parent to clean up everything)
+    // 1. Remove from Molstar state tree
     await plugin.build().delete(aligned.parentRef).commit();
 
-    // Remove from Redux
+    // 2. Sync with Sequence Registry
+    // We construct the ID based on the source structure and chain
+    const sequenceId = `${aligned.sourcePdbId}_${aligned.sourceChainId}`;
+    this.dispatch(removeSequence(sequenceId));
+
+    // 3. Remove from instancesSlice
     this.dispatch(
       removeAlignedStructure({
         instanceId: this.id,

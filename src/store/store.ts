@@ -7,8 +7,6 @@ import { tubxz_api } from './tubxz_api';
 import molstarInstancesReducer from '@/components/molstar/state/molstarInstancesSlice'
 
 // Keep these
-import sequenceViewerReducer from './slices/sequence_viewer';
-import sequenceStructureSyncReducer from './slices/sequence_structure_sync';
 import interactionReducer from './slices/interaction_slice';
 import structuresReducer from './slices/slice_structures';
 import polymersReducer from './slices/slice_polymers';
@@ -20,13 +18,11 @@ export const makeStore = () => {
       // New consolidated Molstar state
       molstarInstances: molstarInstancesReducer,
 
-      // Keep these
-      sequenceViewer: sequenceViewerReducer,
-      sequenceStructureSync: sequenceStructureSyncReducer,
+      
+      sequenceRegistry: sequenceRegistryReducer,
       interaction: interactionReducer,
       structures_page: structuresReducer,
       polymers_page: polymersReducer,
-      sequenceRegistry: sequenceRegistryReducer,
       [tubxz_api.reducerPath]: tubxz_api.reducer,
     },
     middleware: getDefaultMiddleware =>

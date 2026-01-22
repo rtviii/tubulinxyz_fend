@@ -1,5 +1,5 @@
-// src/app/msalite/hooks/useChainAlignment.ts
-import { useCallback, useState } from 'react';
+// src/hooks/useChainAlignment.ts
+import { useCallback, useState, useRef } from 'react';
 import { useAppDispatch } from '@/store/store';
 import { addSequence, setPositionMapping, PositionMapping } from '@/store/slices/sequence_registry';
 import { useAlignSequenceMsaSequencePostMutation } from '@/store/tubxz_api';
@@ -11,7 +11,6 @@ export interface AlignmentResult {
   mapping: PositionMapping;
 }
 
-// "tubulin_alpha" -> "Alpha", "map_tau" -> "TAU"
 function formatFamily(family: string | undefined): string | undefined {
   if (!family) return undefined;
   
@@ -37,6 +36,10 @@ export function useChainAlignment() {
   const [currentChain, setCurrentChain] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Track in-flight requests to prevent duplicate calls
+  // This survives across state updates unlike isAligning
+  const inFlightRef = useRef<Set<string>>(new Set());
+
   const alignChain = useCallback(
     async (
       pdbId: string,
@@ -44,6 +47,15 @@ export function useChainAlignment() {
       instance: MolstarInstance,
       family?: string
     ): Promise<AlignmentResult> => {
+      const key = `${pdbId}_${chainId}`;
+
+      // Guard: Already aligning this chain
+      if (inFlightRef.current.has(key)) {
+        console.log(`[useChainAlignment] Skipping duplicate request for ${key}`);
+        throw new Error(`Already aligning ${key}`);
+      }
+
+      inFlightRef.current.add(key);
       setIsAligning(true);
       setCurrentChain(chainId);
       setError(null);
@@ -57,7 +69,7 @@ export function useChainAlignment() {
         const result = await alignSequence({
           alignmentRequest: {
             sequence: observed.sequence,
-            sequence_id: `${pdbId}_${chainId}`,
+            sequence_id: key,
             auth_seq_ids: observed.authSeqIds,
             annotations: [],
           },
@@ -70,16 +82,13 @@ export function useChainAlignment() {
           }
         });
 
-        const sequenceId = `${pdbId}_${chainId}`;
         const formattedFamily = formatFamily(family);
-        
-        // Build display name: "5JCO:A" or "5JCO:A (Alpha)"
         const displayName = formattedFamily 
           ? `${pdbId}:${chainId} (${formattedFamily})`
           : `${pdbId}:${chainId}`;
 
         dispatch(addSequence({
-          id: sequenceId,
+          id: key,
           name: displayName,
           sequence: result.aligned_sequence,
           originType: 'pdb',
@@ -88,12 +97,12 @@ export function useChainAlignment() {
         }));
 
         dispatch(setPositionMapping({
-          sequenceId,
+          sequenceId: key,
           mapping: positionMapping,
         }));
 
         return {
-          sequenceId,
+          sequenceId: key,
           alignedSequence: result.aligned_sequence,
           mapping: positionMapping,
         };
@@ -102,6 +111,7 @@ export function useChainAlignment() {
         setError(message);
         throw new Error(message);
       } finally {
+        inFlightRef.current.delete(key);
         setIsAligning(false);
         setCurrentChain(null);
       }

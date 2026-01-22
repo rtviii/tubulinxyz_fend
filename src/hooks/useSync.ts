@@ -1,115 +1,107 @@
 // src/hooks/useSync.ts
 
-import { useEffect, useRef, useMemo } from 'react';
-import { SyncDispatcher } from '@/lib/controllers/SyncDispatcher';
-import { MSAController } from '@/lib/controllers/MSAController';
-import { StructureController } from '@/lib/controllers/StructureController';
+import { useEffect, useRef, useCallback } from 'react';
+import { SyncDispatcher, MSAController, StructureController, PositionMapping, ResizableMSAContainerHandle } from '@/lib/sync';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
-import { ResizableMSAContainerHandle } from '@/app/msalite/components/ResizableMSAContainer';
-import { PositionMapping } from '@/lib/types/sync';
 
 /**
- * Hook to create and manage a SyncDispatcher for coordinating MSA and Structure views.
+ * Main sync hook - creates and manages the SyncDispatcher.
  */
 export function useSync(
   msaRef: React.RefObject<ResizableMSAContainerHandle>,
   molstarInstance: MolstarInstance | null,
-  chainId: string | null,
+  chainId: string,
   positionMapping: PositionMapping | null
-) {
-  // Create dispatcher once
-  const dispatcherRef = useRef<SyncDispatcher>();
+): SyncDispatcher | null {
+  const dispatcherRef = useRef<SyncDispatcher | null>(null);
 
   if (!dispatcherRef.current) {
     dispatcherRef.current = new SyncDispatcher();
   }
-
   const dispatcher = dispatcherRef.current;
 
-  // Setup MSA controller
+  // Connect MSA controller when ref is available
   useEffect(() => {
-    const msaController = new MSAController(msaRef);
-    dispatcher.setMSAController(msaController);
+    const checkRef = () => {
+      if (msaRef.current) {
+        dispatcher.setMSAController(new MSAController(msaRef));
+        return true;
+      }
+      return false;
+    };
 
-    console.log('[useSync] MSA controller registered');
+    if (checkRef()) return;
+
+    const interval = setInterval(() => {
+      if (checkRef()) clearInterval(interval);
+    }, 100);
+
+    return () => clearInterval(interval);
   }, [dispatcher, msaRef]);
 
-  // Setup Structure controller
+  // Connect Structure controller when instance changes
   useEffect(() => {
-    const structureController = new StructureController(molstarInstance);
-    dispatcher.setStructureController(structureController);
-
-    console.log('[useSync] Structure controller registered');
-
-    return () => {
-      // Cleanup if instance changes
-      structureController.setInstance(null);
-    };
+    dispatcher.setStructureController(new StructureController(molstarInstance));
   }, [dispatcher, molstarInstance]);
 
-  // Update context when chainId or positionMapping changes
+  // Update context when chain/mapping changes
   useEffect(() => {
     if (chainId && positionMapping) {
       dispatcher.setContext(chainId, positionMapping);
-      console.log('[useSync] Context updated:', chainId, Object.keys(positionMapping).length, 'mappings');
     } else {
       dispatcher.clearContext();
-      console.log('[useSync] Context cleared');
     }
   }, [dispatcher, chainId, positionMapping]);
+
+  // Subscribe to Molstar hover events
+  useEffect(() => {
+    if (!molstarInstance?.viewer) return;
+
+    const unsubscribe = molstarInstance.viewer.subscribeToHover((info) => {
+      if (info) {
+        dispatcher.onMolstarHover(info.chainId, info.authSeqId);
+      } else {
+        dispatcher.onMolstarHoverEnd();
+      }
+    });
+
+    return unsubscribe;
+  }, [molstarInstance, dispatcher]);
 
   return dispatcher;
 }
 
 /**
- * Hook for simple hover/click handlers that dispatch to the sync system.
+ * Hook for MSA event handlers.
  */
 export function useSyncHandlers(
   dispatcher: SyncDispatcher | null,
-  chainId: string | null,
+  chainId: string,
   positionMapping: PositionMapping | null
 ) {
-  const handleResidueHover = useMemo(() => {
-    return (seqId: string, msaPosition: number) => {
-      if (!dispatcher || !chainId || !positionMapping) return;
+  const handleResidueHover = useCallback(
+    (seqId: string, position: number) => {
+      dispatcher?.onMSAHover(position);
+    },
+    [dispatcher]
+  );
 
-      const authSeqId = positionMapping[msaPosition];
-      if (authSeqId !== undefined) {
-        dispatcher.dispatch({
-          type: 'HIGHLIGHT_RESIDUE',
-          chainId,
-          authSeqId,
-          msaPosition,
-        });
-      }
-    };
-  }, [dispatcher, chainId, positionMapping]);
-
-  const handleResidueLeave = useMemo(() => {
-    return () => {
-      dispatcher?.dispatch({ type: 'CLEAR_HIGHLIGHT' });
-    };
+  const handleResidueLeave = useCallback(() => {
+    dispatcher?.onMSAHoverEnd();
   }, [dispatcher]);
 
-  const handleResidueClick = useMemo(() => {
-    return (seqId: string, msaPosition: number) => {
-      if (!dispatcher || !chainId || !positionMapping) return;
+  const handleResidueClick = useCallback(
+    (seqId: string, position: number) => {
+      if (!dispatcher || !chainId) return;
+      dispatcher.dispatch({
+        type: 'FOCUS_RESIDUE',
+        chainId,
+        msaPosition: position,
+        authSeqId: positionMapping?.[position] ?? 0,
+      });
+    },
+    [dispatcher, chainId, positionMapping]
+  );
 
-      const authSeqId = positionMapping[msaPosition];
-      if (authSeqId !== undefined) {
-        dispatcher.dispatch({
-          type: 'FOCUS_RESIDUE',
-          chainId,
-          authSeqId,
-          msaPosition,
-        });
-      }
-    };
-  }, [dispatcher, chainId, positionMapping]);
-
-  return {
-    handleResidueHover,
-    handleResidueLeave,
-    handleResidueClick,
-  };
+  return { handleResidueHover, handleResidueLeave, handleResidueClick };
 }

@@ -1,103 +1,12 @@
 // src/hooks/useBindingSites.ts
 
-import { useState, useCallback, useMemo } from 'react';
-import { SyncDispatcher } from '@/lib/controllers/SyncDispatcher';
-import { BindingSite } from '@/lib/types/sync';
+import { useState, useCallback } from 'react';
+import { SyncDispatcher, BindingSite } from '@/lib/sync';
 
 /**
- * Hook for managing binding site visualization using the unified dispatcher.
+ * Expand regions to individual MSA positions.
  */
-export function useBindingSites(
-  dispatcher: SyncDispatcher | null,
-  sites: BindingSite[]
-) {
-  const [activeSites, setActiveSites] = useState<Set<string>>(new Set());
-
-  // Build site lookup
-  const sitesById = useMemo(() => {
-    const map = new Map<string, BindingSite>();
-    sites.forEach((s) => map.set(s.id, s));
-    return map;
-  }, [sites]);
-
-  // Toggle a site on/off
-  const toggleSite = useCallback(
-    (siteId: string, enabled: boolean) => {
-      if (!dispatcher) return;
-
-      setActiveSites((prev) => {
-        const next = new Set(prev);
-
-        if (enabled) {
-          next.add(siteId);
-
-          // Add the color rule via dispatcher
-          const site = sitesById.get(siteId);
-          if (site) {
-            const positions = expandRegions(site.msaRegions);
-            dispatcher.addBindingSite(site.id, site.name, site.color, positions);
-          }
-        } else {
-          next.delete(siteId);
-
-          // Remove the color rule
-          dispatcher.removeBindingSite(siteId);
-        }
-
-        return next;
-      });
-    },
-    [dispatcher, sitesById]
-  );
-
-  // Focus camera on a site
-  const focusSite = useCallback(
-    (siteId: string) => {
-      if (!dispatcher) return;
-
-      const site = sitesById.get(siteId);
-      if (!site) return;
-
-      // Get the full range
-      const positions = expandRegions(site.msaRegions);
-      if (positions.length === 0) return;
-
-      const minPos = Math.min(...positions);
-      const maxPos = Math.max(...positions);
-
-      // Dispatch a range focus action
-      dispatcher.dispatch({
-        type: 'JUMP_TO_RANGE',
-        start: minPos,
-        end: maxPos,
-      });
-
-      // Enable the site if not already
-      if (!activeSites.has(siteId)) {
-        toggleSite(siteId, true);
-      }
-    },
-    [dispatcher, sitesById, activeSites, toggleSite]
-  );
-
-  // Clear all sites
-  const clearAll = useCallback(() => {
-    if (!dispatcher) return;
-
-    setActiveSites(new Set());
-    dispatcher.clearAllColors();
-  }, [dispatcher]);
-
-  return {
-    activeSites,
-    toggleSite,
-    focusSite,
-    clearAll,
-  };
-}
-
-// Helper to expand regions to positions
-function expandRegions(regions: Array<{ start: number; end: number }>): number[] {
+function expandRegionsToPositions(regions: { start: number; end: number }[]): number[] {
   const positions: number[] = [];
   for (const { start, end } of regions) {
     for (let i = start; i <= end; i++) {
@@ -105,4 +14,77 @@ function expandRegions(regions: Array<{ start: number; end: number }>): number[]
     }
   }
   return positions;
+}
+
+/**
+ * Hook to manage binding site state and sync with the dispatcher.
+ */
+export function useBindingSites(dispatcher: SyncDispatcher | null, sites: BindingSite[]) {
+  const [activeSites, setActiveSites] = useState<Set<string>>(new Set());
+
+  const toggleSite = useCallback(
+    (siteId: string, enabled: boolean) => {
+      if (!dispatcher) return;
+
+      const site = sites.find((s) => s.id === siteId);
+      if (!site) return;
+
+      if (enabled) {
+        const msaPositions = expandRegionsToPositions(site.msaRegions);
+        dispatcher.addBindingSite(siteId, site.name, site.color, msaPositions);
+        setActiveSites((prev) => new Set(prev).add(siteId));
+      } else {
+        dispatcher.removeBindingSite(siteId);
+        setActiveSites((prev) => {
+          const next = new Set(prev);
+          next.delete(siteId);
+          return next;
+        });
+      }
+    },
+    [dispatcher, sites]
+  );
+
+  const focusSite = useCallback(
+    (siteId: string) => {
+      if (!dispatcher) return;
+
+      const site = sites.find((s) => s.id === siteId);
+      if (!site || site.msaRegions.length === 0) return;
+
+      const firstRegion = site.msaRegions[0];
+      dispatcher.dispatch({
+        type: 'JUMP_TO_RANGE',
+        start: firstRegion.start,
+        end: firstRegion.end,
+      });
+    },
+    [dispatcher, sites]
+  );
+
+  const hoverSite = useCallback(
+    (siteId: string, msaStart: number, msaEnd: number) => {
+      dispatcher?.highlightRangeFromAnnotation(msaStart, msaEnd);
+    },
+    [dispatcher]
+  );
+
+  const hoverEnd = useCallback(() => {
+    dispatcher?.clearHighlight();
+  }, [dispatcher]);
+
+  const clearAll = useCallback(() => {
+    if (!dispatcher) return;
+    for (const siteId of activeSites) {
+      dispatcher.removeBindingSite(siteId);
+    }
+    setActiveSites(new Set());
+  }, [dispatcher, activeSites]);
+
+  const getSite = useCallback(
+    (siteId: string): BindingSite | undefined => sites.find((s) => s.id === siteId),
+    [sites]
+  );
+
+  return { activeSites, toggleSite, focusSite, hoverSite, hoverEnd, clearAll, getSite };
 }

@@ -16,7 +16,7 @@ export interface MsaSequence {
   rowIndex: number;
   originType: SequenceOriginType;
   chainRef?: ChainRef;
-  family?: string;  // e.g., "tubulin_alpha", "tubulin_beta", "map_tau"
+  family?: string;
 }
 
 export type PositionMapping = Record<number, number>;
@@ -109,29 +109,62 @@ export const {
   clearAllSequences,
 } = sequenceRegistrySlice.actions;
 
-// Selectors
-const selectSequencesMap = (state: RootState) => state.sequenceRegistry?.sequences || {};
-const selectPositionMappingsMap = (state: RootState) => state.sequenceRegistry?.positionMappings || {};
+// ============================================================
+// STABLE EMPTY REFERENCES - Critical for selector stability
+// ============================================================
+
+const EMPTY_SEQUENCES: Record<string, MsaSequence> = {};
+const EMPTY_MAPPINGS: Record<string, PositionMapping> = {};
+const EMPTY_SEQUENCE_ARRAY: MsaSequence[] = [];
+const EMPTY_GROUPS: { title: string; sequences: MsaSequence[] }[] = [];
+
+// ============================================================
+// Base Selectors - Return stable references
+// ============================================================
+
+const selectSequencesMap = (state: RootState): Record<string, MsaSequence> => 
+  state.sequenceRegistry?.sequences ?? EMPTY_SEQUENCES;
+
+const selectPositionMappingsMap = (state: RootState): Record<string, PositionMapping> => 
+  state.sequenceRegistry?.positionMappings ?? EMPTY_MAPPINGS;
+
+// ============================================================
+// Derived Selectors
+// ============================================================
 
 export const selectOrderedSequences = createSelector(
   [selectSequencesMap],
-  (sequences) => Object.values(sequences).sort((a, b) => a.rowIndex - b.rowIndex)
+  (sequences): MsaSequence[] => {
+    const values = Object.values(sequences);
+    if (values.length === 0) return EMPTY_SEQUENCE_ARRAY;
+    return values.sort((a, b) => a.rowIndex - b.rowIndex);
+  }
 );
 
 export const selectMasterSequences = createSelector(
   [selectOrderedSequences],
-  (sequences) => sequences.filter(s => s.originType === 'master')
+  (sequences): MsaSequence[] => {
+    const filtered = sequences.filter(s => s.originType === 'master');
+    if (filtered.length === 0) return EMPTY_SEQUENCE_ARRAY;
+    return filtered;
+  }
 );
 
 export const selectPdbSequences = createSelector(
   [selectOrderedSequences],
-  (sequences) => sequences.filter(s => s.originType === 'pdb')
+  (sequences): MsaSequence[] => {
+    const filtered = sequences.filter(s => s.originType === 'pdb');
+    if (filtered.length === 0) return EMPTY_SEQUENCE_ARRAY;
+    return filtered;
+  }
 );
 
 export const selectAddedSequenceGroups = createSelector(
   [selectOrderedSequences],
   (sequences) => {
     const added = sequences.filter(s => s.originType !== 'master');
+    if (added.length === 0) return EMPTY_GROUPS;
+
     const pdbGroups: Record<string, MsaSequence[]> = {};
     const customSeqs: MsaSequence[] = [];
 
@@ -159,14 +192,22 @@ export const selectAddedSequenceGroups = createSelector(
   }
 );
 
+// ============================================================
+// Parameterized Selectors
+// ============================================================
+
 export const selectSequenceById = createSelector(
   [selectSequencesMap, (_state: RootState, id: string) => id],
-  (sequences, id) => sequences[id] ?? null
+  (sequences, id): MsaSequence | null => sequences[id] ?? null
 );
 
 export const selectSequenceByChain = createSelector(
-  [selectSequencesMap, (_state: RootState, pdbId: string, _chainId: string) => pdbId, (_state: RootState, _pdbId: string, chainId: string) => chainId],
-  (sequences, pdbId, chainId) => {
+  [
+    selectSequencesMap, 
+    (_state: RootState, pdbId: string, _chainId: string) => pdbId, 
+    (_state: RootState, _pdbId: string, chainId: string) => chainId
+  ],
+  (sequences, pdbId, chainId): MsaSequence | null => {
     return Object.values(sequences).find(
       s => s.originType === 'pdb' &&
         s.chainRef?.pdbId === pdbId &&
@@ -177,7 +218,7 @@ export const selectSequenceByChain = createSelector(
 
 export const selectPositionMapping = createSelector(
   [selectPositionMappingsMap, (_state: RootState, sequenceId: string) => sequenceId],
-  (mappings, sequenceId) => mappings[sequenceId] ?? null
+  (mappings, sequenceId): PositionMapping | null => mappings[sequenceId] ?? null
 );
 
 export const selectIsChainAligned = createSelector(
@@ -186,8 +227,7 @@ export const selectIsChainAligned = createSelector(
     (_state: RootState, pdbId: string, _chainId: string) => pdbId, 
     (_state: RootState, _pdbId: string, chainId: string) => chainId
   ],
-  (sequences, pdbId, chainId) => {
-    // sequences is now guaranteed to be at least an empty object {}
+  (sequences, pdbId, chainId): boolean => {
     return Object.values(sequences).some(
       s => s.originType === 'pdb' &&
         s.chainRef?.pdbId === pdbId &&

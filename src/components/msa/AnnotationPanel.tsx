@@ -1,33 +1,11 @@
-// src/app/msalite/components/AnnotationPanel.tsx
+// src/components/msa/AnnotationPanel.tsx
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, Eye, EyeOff, Focus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Focus } from 'lucide-react';
+import { AnnotationData, BindingSite, MutationAnnotation } from '@/lib/sync/types';
 
-export interface MutationAnnotation {
-    masterIndex: number;
-    fromResidue: string;
-    toResidue: string;
-    phenotype?: string;
-    source?: string;
-}
-
-export interface BindingSite {
-    id: string;
-    name: string;
-    msaRegions: { start: number; end: number }[];
-    color: string;
-}
-
-export interface AnnotationData {
-    mutations?: MutationAnnotation[];
-    bindingSites?: BindingSite[];
-}
-
-export interface EnabledAnnotations {
-    activeBindingSites: Set<string>;
-    showMutations: boolean;
-}
+export const MUTATION_COLOR = '#ff6b6b';
 
 interface AnnotationPanelProps {
     annotations: AnnotationData;
@@ -38,8 +16,6 @@ interface AnnotationPanelProps {
     onToggleMutations: (enabled: boolean) => void;
     onClearAll: () => void;
 }
-
-export const MUTATION_COLOR = '#ff6b6b';
 
 export function AnnotationPanel({
     annotations,
@@ -66,7 +42,6 @@ export function AnnotationPanel({
 
     return (
         <div className="text-xs h-full flex flex-col">
-            {/* Header */}
             <div className="flex items-center justify-between mb-4 flex-shrink-0">
                 <span className="font-semibold text-gray-700 uppercase tracking-wider text-[10px]">Annotations</span>
                 {hasAnyEnabled && (
@@ -77,7 +52,6 @@ export function AnnotationPanel({
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-                {/* Binding Sites Section */}
                 {bindingSites.length > 0 && (
                     <section>
                         <button
@@ -109,9 +83,7 @@ export function AnnotationPanel({
                                                 <div className={`font-medium truncate ${isActive ? 'text-gray-900' : 'text-gray-500'}`}>
                                                     {site.name}
                                                 </div>
-                                                <div className="text-[10px] text-gray-400">
-                                                    {totalPositions} residues
-                                                </div>
+                                                <div className="text-[10px] text-gray-400">{totalPositions} residues</div>
                                             </div>
                                             <button
                                                 onClick={(e) => {
@@ -132,7 +104,6 @@ export function AnnotationPanel({
                     </section>
                 )}
 
-                {/* Mutations Section */}
                 {mutations.length > 0 && (
                     <section>
                         <button
@@ -163,7 +134,11 @@ export function AnnotationPanel({
                                     <div className="mt-1 max-h-48 overflow-y-auto space-y-0.5 pl-7 border-l-2 border-gray-100 ml-1.5">
                                         {mutations.map((mut, idx) => (
                                             <div key={idx} className="text-gray-500 py-0.5">
-                                                <span className="font-mono">{mut.fromResidue}{mut.masterIndex + 1}{mut.toResidue}</span>
+                                                <span className="font-mono">
+                                                    {mut.fromResidue}
+                                                    {mut.masterIndex + 1}
+                                                    {mut.toResidue}
+                                                </span>
                                                 {mut.phenotype && <span className="text-gray-400 ml-1.5 italic">- {mut.phenotype}</span>}
                                             </div>
                                         ))}
@@ -177,3 +152,6 @@ export function AnnotationPanel({
         </div>
     );
 }
+
+// Re-export types for convenience
+export type { AnnotationData, BindingSite, MutationAnnotation };
