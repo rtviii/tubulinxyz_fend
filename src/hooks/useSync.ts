@@ -1,16 +1,11 @@
 // src/hooks/useSync.ts
 
-import { useEffect, useRef, useMemo, useCallback } from 'react';
-import { SyncDispatcher } from '@/lib/controllers/SyncDispatcher';
-import { MSAController } from '@/lib/controllers/MSAController';
-import { StructureController } from '@/lib/controllers/StructureController';
+import { useEffect, useRef, useCallback } from 'react';
+import { SyncDispatcher, MSAController, StructureController, PositionMapping, ResizableMSAContainerHandle } from '@/lib/sync';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
-import { ResizableMSAContainerHandle } from '@/app/msalite/components/ResizableMSAContainer';
-import { PositionMapping } from '@/lib/types/sync';
 
 /**
  * Main sync hook - creates and manages the SyncDispatcher.
- * Returns the dispatcher for use by other hooks/components.
  */
 export function useSync(
   msaRef: React.RefObject<ResizableMSAContainerHandle>,
@@ -20,40 +15,31 @@ export function useSync(
 ): SyncDispatcher | null {
   const dispatcherRef = useRef<SyncDispatcher | null>(null);
 
-  // Create dispatcher once
   if (!dispatcherRef.current) {
     dispatcherRef.current = new SyncDispatcher();
   }
   const dispatcher = dispatcherRef.current;
 
-  // Update MSA controller when ref is available
-  // In useSync hook - fix timing of MSA controller connection
+  // Connect MSA controller when ref is available
   useEffect(() => {
-    // Check periodically until msaRef is available
     const checkRef = () => {
       if (msaRef.current) {
-        console.log('[useSync] MSA ref available, setting controller');
         dispatcher.setMSAController(new MSAController(msaRef));
         return true;
       }
       return false;
     };
 
-    // Try immediately
     if (checkRef()) return;
 
-    // If not available, poll briefly
     const interval = setInterval(() => {
-      if (checkRef()) {
-        clearInterval(interval);
-      }
+      if (checkRef()) clearInterval(interval);
     }, 100);
 
-    // Cleanup
     return () => clearInterval(interval);
   }, [dispatcher, msaRef]);
 
-  // Update Structure controller when instance changes
+  // Connect Structure controller when instance changes
   useEffect(() => {
     dispatcher.setStructureController(new StructureController(molstarInstance));
   }, [dispatcher, molstarInstance]);
@@ -86,7 +72,7 @@ export function useSync(
 }
 
 /**
- * Hook for MSA event handlers - connect MSA events to the dispatcher.
+ * Hook for MSA event handlers.
  */
 export function useSyncHandlers(
   dispatcher: SyncDispatcher | null,
@@ -107,8 +93,6 @@ export function useSyncHandlers(
   const handleResidueClick = useCallback(
     (seqId: string, position: number) => {
       if (!dispatcher || !chainId) return;
-
-      // Focus on click
       dispatcher.dispatch({
         type: 'FOCUS_RESIDUE',
         chainId,
@@ -119,9 +103,5 @@ export function useSyncHandlers(
     [dispatcher, chainId, positionMapping]
   );
 
-  return {
-    handleResidueHover,
-    handleResidueLeave,
-    handleResidueClick,
-  };
+  return { handleResidueHover, handleResidueLeave, handleResidueClick };
 }

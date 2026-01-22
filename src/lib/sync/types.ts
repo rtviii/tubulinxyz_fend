@@ -1,9 +1,9 @@
-// src/lib/types/sync.ts
+// src/lib/sync/types.ts
 
 import { Color } from 'molstar/lib/mol-util/color';
 
 // ============================================================
-// Core Types
+// Position Mapping
 // ============================================================
 
 export interface PositionMapping {
@@ -16,24 +16,19 @@ export interface PositionMapper {
 }
 
 /**
- * Creates a position mapper from the MSA->auth mapping.
+ * Creates a bidirectional position mapper from the MSA->auth mapping.
  * 
- * TODO: Replace with proper backend-provided bidirectional mapping.
- * Currently builds a naive reverse map which may have issues with:
- * - Gaps in the MSA (multiple MSA positions -> same auth or no auth)
- * - Insertions in the structure not present in MSA
- * 
- * The backend should provide both directions explicitly.
+ * Note: The reverse map is built naively - if multiple MSA positions map 
+ * to the same auth_seq_id, only the last one is kept. For production use,
+ * consider having the backend provide both directions explicitly.
  */
+
 export function createPositionMapper(msaToAuthMap: PositionMapping | null): PositionMapper {
-  // Build reverse map (naive implementation)
   const authToMsaMap: Record<number, number> = {};
   
   if (msaToAuthMap) {
     for (const [msaPosStr, authSeqId] of Object.entries(msaToAuthMap)) {
       const msaPos = parseInt(msaPosStr, 10);
-      // Note: If multiple MSA positions map to same auth_seq_id,
-      // this will keep the last one. This is a known limitation.
       authToMsaMap[authSeqId] = msaPos;
     }
   }
@@ -48,18 +43,17 @@ export function createPositionMapper(msaToAuthMap: PositionMapping | null): Posi
   };
 }
 
+// ============================================================
+// Color Rules
+// ============================================================
+
 export interface ColorRule {
   id: string;
   type: 'binding-site' | 'mutation' | 'annotation' | 'custom';
   priority: number; // Higher priority overrides lower
-
-  // MSA coloring
-  msaColumns?: number[]; // Column-wide coloring (applies to all sequences)
-  msaCells?: Array<{ row: number; column: number }>; // Row-specific coloring
-
-  // Molstar coloring
+  msaColumns?: number[];
+  msaCells?: Array<{ row: number; column: number }>;
   residues?: Array<{ chainId: string; authSeqId: number }>;
-
   color: string; // Hex color (e.g., '#FF0000')
   label?: string;
 }
@@ -70,7 +64,23 @@ export interface ColorState {
 }
 
 // ============================================================
-// Action Types
+// Nightingale Custom Color Config
+// ============================================================
+
+export interface NightingaleColorConfig {
+  positionColors: Record<number, string>;
+  cellColors?: Record<string, string>;
+  defaultColor: string;
+}
+
+declare global {
+  interface Window {
+    __nightingaleCustomColors?: NightingaleColorConfig;
+  }
+}
+
+// ============================================================
+// Actions
 // ============================================================
 
 export type SyncAction =
@@ -90,6 +100,7 @@ export type SyncAction =
 
 export interface IMSAController {
   setColorScheme(scheme: string): void;
+  getCurrentScheme(): string;
   applyColors(rules: ColorRule[], defaultColor: string): void;
   clearColors(): void;
   jumpToRange(start: number, end: number): void;
@@ -109,7 +120,7 @@ export interface IStructureController {
 }
 
 // ============================================================
-// Annotation Types
+// Annotation Types (for UI components)
 // ============================================================
 
 export interface BindingSite {
@@ -119,11 +130,15 @@ export interface BindingSite {
   msaRegions: Array<{ start: number; end: number }>;
 }
 
-export interface Mutation {
-  id: string;
-  msaPosition: number;
+export interface MutationAnnotation {
+  masterIndex: number;
   fromResidue: string;
   toResidue: string;
-  color: string;
-  label?: string;
+  phenotype?: string;
+  source?: string;
+}
+
+export interface AnnotationData {
+  mutations?: MutationAnnotation[];
+  bindingSites?: BindingSite[];
 }

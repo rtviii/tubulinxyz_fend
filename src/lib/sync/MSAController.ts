@@ -1,11 +1,18 @@
-// src/lib/controllers/MSAController.ts
+// src/lib/sync/MSAController.ts
 
-import { ColorRule, IMSAController } from '../types/sync';
-import { ResizableMSAContainerHandle } from '@/app/msalite/components/ResizableMSAContainer';
+import { ColorRule, IMSAController, NightingaleColorConfig } from './types';
+
+export interface ResizableMSAContainerHandle {
+  redraw: () => void;
+  jumpToRange: (start: number, end: number) => void;
+  setColorScheme: (scheme: string) => void;
+  setHighlight: (start: number, end: number) => void;
+  clearHighlight: () => void;
+}
 
 /**
  * Controller for MSA operations.
- * Wraps the ResizableMSAContainer and provides a clean API for the SyncDispatcher.
+ * Manages the Nightingale MSA component and its custom color configuration.
  */
 export class MSAController implements IMSAController {
   private msaRef: React.RefObject<ResizableMSAContainerHandle>;
@@ -16,11 +23,10 @@ export class MSAController implements IMSAController {
   }
 
   // ============================================================
-  // Color Scheme Methods
+  // Color Scheme
   // ============================================================
 
   setColorScheme(scheme: string): void {
-    console.log('[MSAController] setColorScheme:', scheme);
     this.currentScheme = scheme;
     this.msaRef.current?.setColorScheme(scheme);
     this.msaRef.current?.redraw();
@@ -31,25 +37,19 @@ export class MSAController implements IMSAController {
   }
 
   // ============================================================
-  // Annotation Coloring Methods
+  // Custom Color Application
   // ============================================================
 
   applyColors(rules: ColorRule[], defaultColor: string): void {
-    console.log('[MSAController] applyColors:', rules.length, 'rules');
-
-    // Build nightingale color config from rules
     const positionColors: Record<number, string> = {};
     const cellColors: Record<string, string> = {};
 
     for (const rule of rules) {
-      // Column-wide coloring (applies to all sequences)
       if (rule.msaColumns) {
         for (const pos of rule.msaColumns) {
           positionColors[pos] = rule.color;
         }
       }
-
-      // Row-specific coloring (applies to specific sequence rows)
       if (rule.msaCells) {
         for (const { row, column } of rule.msaCells) {
           cellColors[`${row}-${column}`] = rule.color;
@@ -57,75 +57,46 @@ export class MSAController implements IMSAController {
       }
     }
 
-    // Update the global config used by nightingale's custom color scheme
-    window.__nightingaleCustomColors = {
+    const config: NightingaleColorConfig = {
       positionColors,
       cellColors: Object.keys(cellColors).length > 0 ? cellColors : undefined,
       defaultColor,
     };
 
-    console.log('[MSAController] Applied config:', {
-      positionColors: Object.keys(positionColors).length,
-      cellColors: Object.keys(cellColors).length,
-      defaultColor,
-    });
-
-    // Switch to custom scheme and redraw
+    window.__nightingaleCustomColors = config;
     this.setColorScheme('custom-position');
   }
 
   clearColors(): void {
-    console.log('[MSAController] clearColors');
     delete window.__nightingaleCustomColors;
     this.setColorScheme('clustal2');
   }
 
   // ============================================================
-  // Navigation Methods
+  // Navigation
   // ============================================================
 
   jumpToRange(start: number, end: number): void {
-    console.log('[MSAController] jumpToRange:', start, end);
     this.msaRef.current?.jumpToRange(start, end);
   }
 
   redraw(): void {
-    console.log('[MSAController] redraw');
     this.msaRef.current?.redraw();
   }
 
   // ============================================================
-  // Hover Highlight Methods
+  // Hover Highlighting
   // ============================================================
 
-  /**
-   * Highlight a single MSA position (column) across all sequences.
-   * Used for hover sync from Molstar -> MSA.
-   * 
-   * This uses nightingale's built-in highlight attribute which draws
-   * a colored rectangle over the specified region.
-   */
   highlightPosition(msaPosition: number): void {
-    console.log('[MSAController] highlightPosition:', msaPosition);
     this.msaRef.current?.setHighlight(msaPosition, msaPosition);
   }
 
-  /**
-   * Highlight a range of MSA positions (columns) across all sequences.
-   * Used for range selection or binding site hover preview.
-   */
   highlightRange(start: number, end: number): void {
-    console.log('[MSAController] highlightRange:', start, '-', end);
     this.msaRef.current?.setHighlight(start, end);
   }
 
-  /**
-   * Clear the hover highlight.
-   * Called when mouse leaves the triggering element (Molstar residue,
-   * annotation panel item, etc.)
-   */
   clearHighlight(): void {
-    console.log('[MSAController] clearHighlight');
     this.msaRef.current?.clearHighlight();
   }
 }

@@ -34,8 +34,7 @@ import { useGetMasterProfileMsaMasterGetQuery } from '@/store/tubxz_api';
 import { useChainAlignment } from '@/hooks/useChainAlignment';
 import { useNightingaleComponents } from '@/hooks/useNightingaleComponents';
 // import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/app/msalite/components/ResizableMSAContainer';
-import { MSAToolbar } from '@/app/msalite/components/MSAToolbar';
-import { BindingSitePanel, TUBULIN_BINDING_SITES } from '@/app/structures/[rcsb_id]/BindingSitePanel';
+import { MSAToolbar } from '@/components/msa/MSAToolbar';
 import { API_BASE_URL } from '@/config';
 import { PolymerComponent, LigandComponent, AlignedStructure } from '@/components/molstar/core/types';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
@@ -47,16 +46,49 @@ import { Eye, EyeOff, Focus, ArrowLeft, Microscope, Plus, X, Loader2 } from 'luc
 import { useSync, useSyncHandlers } from '@/hooks/useSync';
 import { useBindingSites } from '@/hooks/useBindingSites';
 import { BindingSite } from '@/lib/types/sync';
-import { AnnotationData, AnnotationPanel } from '@/app/msalite/components/AnnotationPanel';
-import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/app/msalite/ResizableMSAContainer';
+import { AnnotationData, AnnotationPanel } from '@/components/msa/AnnotationPanel';
+import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/components/msa/ResizableMSAContainer';
 import { SyncDispatcher } from '@/lib/controllers/SyncDispatcher';
+// In page.tsx or a separate constants file
+export const TUBULIN_BINDING_SITES: BindingSite[] = [
+  {
+    id: 'colchicine',
+    name: 'Colchicine',
+    color: '#e6194b',
+    msaRegions: [{ start: 247, end: 260 }, { start: 314, end: 320 }],
+  },
+  {
+    id: 'taxol',
+    name: 'Paclitaxel (Taxol)',
+    color: '#3cb44b',
+    msaRegions: [{ start: 22, end: 28 }, { start: 225, end: 232 }, { start: 272, end: 278 }],
+  },
+  {
+    id: 'vinblastine',
+    name: 'Vinblastine',
+    color: '#ffe119',
+    msaRegions: [{ start: 175, end: 182 }, { start: 212, end: 218 }],
+  },
+  {
+    id: 'gtp',
+    name: 'GTP/GDP',
+    color: '#4363d8',
+    msaRegions: [{ start: 10, end: 20 }, { start: 140, end: 148 }],
+  },
+  {
+    id: 'mapt',
+    name: 'MAP/Tau',
+    color: '#f58231',
+    msaRegions: [{ start: 430, end: 445 }],
+  },
+];
 
 // Convert the old format to the new format
 const BINDING_SITES: BindingSite[] = TUBULIN_BINDING_SITES.map(site => ({
   id: site.id,
   name: site.name,
   color: site.color,
-  msaRegions: site.regions,
+  msaRegions: site.msaRegions,
 }));
 
 interface StructureProfile {
