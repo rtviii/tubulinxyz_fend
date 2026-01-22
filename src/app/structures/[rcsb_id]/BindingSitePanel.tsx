@@ -1,7 +1,7 @@
 // src/app/msalite/components/BindingSitePanel.tsx
 'use client';
 
-import { MapPin, Eye, EyeOff, Focus } from 'lucide-react';
+import { Focus } from 'lucide-react';
 
 // ============================================================
 // Types
@@ -17,9 +17,12 @@ export interface BindingSiteRegion {
 
 interface BindingSitePanelProps {
   sites: BindingSiteRegion[];
+  activeSites: Set<string>;
   onSiteToggle: (siteId: string, enabled: boolean) => void;
   onSiteFocus: (siteId: string) => void;
-  activeSites: Set<string>;
+  // Hover highlight callbacks (for sync with MSA/Molstar)
+  onSiteHover?: (siteId: string, msaStart: number, msaEnd: number) => void;
+  onSiteHoverEnd?: () => void;
 }
 
 // ============================================================
@@ -60,9 +63,12 @@ export const TUBULIN_BINDING_SITES: BindingSiteRegion[] = [
 ];
 
 // ============================================================
-// Helper to expand regions to individual positions
+// Helpers
 // ============================================================
 
+/**
+ * Expand regions to individual MSA positions.
+ */
 export function expandRegionsToPositions(regions: { start: number; end: number }[]): number[] {
   const positions: number[] = [];
   for (const { start, end } of regions) {
@@ -73,16 +79,50 @@ export function expandRegionsToPositions(regions: { start: number; end: number }
   return positions;
 }
 
+/**
+ * Get the bounding range of all regions (for highlight preview).
+ */
+function getBoundingRange(regions: { start: number; end: number }[]): { start: number; end: number } | null {
+  if (regions.length === 0) return null;
+  
+  let minStart = Infinity;
+  let maxEnd = -Infinity;
+  
+  for (const { start, end } of regions) {
+    if (start < minStart) minStart = start;
+    if (end > maxEnd) maxEnd = end;
+  }
+  
+  return { start: minStart, end: maxEnd };
+}
+
 // ============================================================
 // Component
 // ============================================================
 
 export function BindingSitePanel({
   sites,
+  activeSites,
   onSiteToggle,
   onSiteFocus,
-  activeSites,
+  onSiteHover,
+  onSiteHoverEnd,
 }: BindingSitePanelProps) {
+  
+  const handleMouseEnter = (site: BindingSiteRegion) => {
+    if (!onSiteHover) return;
+    
+    // Get bounding range of all regions for this site
+    const bounds = getBoundingRange(site.regions);
+    if (bounds) {
+      onSiteHover(site.id, bounds.start, bounds.end);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    onSiteHoverEnd?.();
+  };
+
   return (
     <div className="space-y-1">
       {sites.map((site) => {
@@ -101,6 +141,8 @@ export function BindingSitePanel({
               ${isActive ? 'bg-gray-100' : 'hover:bg-gray-50'}
             `}
             onClick={() => onSiteToggle(site.id, !isActive)}
+            onMouseEnter={() => handleMouseEnter(site)}
+            onMouseLeave={handleMouseLeave}
           >
             {/* Color indicator */}
             <div

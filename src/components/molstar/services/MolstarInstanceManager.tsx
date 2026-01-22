@@ -78,10 +78,10 @@ export function MolstarInstanceManagerProvider({ children }: { children: React.R
         }
 
         const instance = new MolstarInstance(id, viewer, dispatch, getState);
-        
+
         entriesRef.current.set(id, { instance, viewer, container });
         console.log(`[MolstarManager] Instance created: ${id}`);
-        
+
         return instance;
       } catch (error) {
         console.error(`[MolstarManager] Failed to create instance ${id}:`, error);
@@ -122,12 +122,12 @@ export function useMolstarInstance(
 
   const [isInitialized, setIsInitialized] = useState(false);
   const [instance, setInstance] = useState<MolstarInstance | null>(null);
-  
+
   const getState = useCallback(() => store.getState(), [store]);
 
   // Track the container element
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
-  
+
   // Update container when ref changes
   useEffect(() => {
     if (containerRef.current !== container) {
@@ -144,9 +144,9 @@ export function useMolstarInstance(
 
     const init = async () => {
       console.log(`[${instanceId}] Requesting instance...`);
-      
+
       const inst = await context.initializeInstance(instanceId, container, dispatch, getState);
-      
+
       if (cancelled) {
         console.log(`[${instanceId}] Init completed but cancelled`);
         return;
@@ -207,7 +207,7 @@ export function useExistingInstance(instanceId: MolstarInstanceId): MolstarInsta
         setInstance(inst);
       }
     };
-    
+
     check();
     const interval = setInterval(check, 200);
     return () => clearInterval(interval);

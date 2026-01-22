@@ -49,6 +49,7 @@ import { useBindingSites } from '@/hooks/useBindingSites';
 import { BindingSite } from '@/lib/types/sync';
 import { AnnotationData, AnnotationPanel } from '@/app/msalite/components/AnnotationPanel';
 import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/app/msalite/ResizableMSAContainer';
+import { SyncDispatcher } from '@/lib/controllers/SyncDispatcher';
 
 // Convert the old format to the new format
 const BINDING_SITES: BindingSite[] = TUBULIN_BINDING_SITES.map(site => ({
@@ -273,6 +274,7 @@ export default function StructureProfilePageRefactored() {
                       maxLength={masterData?.alignment_length ?? 0}
                       nglLoaded={nglLoaded}
                       msaRef={msaRef}
+                      dispatcher={dispatcher}  // <-- Pass the page-level dispatcher
                       activeSites={activeSites}
                       toggleSite={toggleSite}
                       focusSite={focusSite}
@@ -488,6 +490,7 @@ function MonomerMSAPanelRefactored({
   maxLength,
   nglLoaded,
   msaRef,
+  dispatcher,  // <-- Receive from parent instead of creating new one
   activeSites,
   toggleSite,
   focusSite,
@@ -504,6 +507,7 @@ function MonomerMSAPanelRefactored({
   maxLength: number;
   nglLoaded: boolean;
   msaRef: React.RefObject<ResizableMSAContainerHandle>;
+  dispatcher: SyncDispatcher | null;  // <-- Add type
   activeSites: Set<string>;
   toggleSite: (id: string, e: boolean) => void;
   focusSite: (id: string) => void;
@@ -514,7 +518,6 @@ function MonomerMSAPanelRefactored({
   const { alignChain, isAligning } = useChainAlignment();
   const sequenceId = pdbId ? `${pdbId}_${chainId}` : null;
 
-  // FIX: Use the selector properly with the actual Redux state
   const isAligned = useAppSelector((state) =>
     pdbId ? selectIsChainAligned(state, pdbId, chainId) : false
   );
@@ -523,21 +526,44 @@ function MonomerMSAPanelRefactored({
     sequenceId ? selectPositionMapping(state, sequenceId) : null
   );
 
-  const dispatcher = useSync(msaRef, instance, chainId, positionMapping);
   const { handleResidueHover, handleResidueLeave, handleResidueClick } = useSyncHandlers(
     dispatcher,
     chainId,
     positionMapping
   );
 
+  const alignmentAttemptedRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
-    // Only align if we have the data and it's not already aligned/aligning
-    if (!instance || !pdbId || !chainId || isAligned || isAligning) return;
+    const key = pdbId && chainId ? `${pdbId}_${chainId}` : null;
+
+    // Guards
+    if (!instance || !pdbId || !chainId) return;
+    if (isAligned || isAligning) return;
+    if (key && alignmentAttemptedRef.current.has(key)) return;
+
+    // Mark as attempted BEFORE the async call
+    if (key) {
+      alignmentAttemptedRef.current.add(key);
+    }
 
     alignChain(pdbId, chainId, instance, family).catch(err => {
       console.error('Auto-align failed:', err);
+      // On failure, allow retry by removing from attempted set
+      if (key) {
+        alignmentAttemptedRef.current.delete(key);
+      }
     });
   }, [instance, pdbId, chainId, family, isAligned, isAligning, alignChain]);
+
+  // useEffect(() => {
+  //   // Only align if we have the data and it's not already aligned/aligning
+  //   if (!instance || !pdbId || !chainId || isAligned || isAligning) return;
+
+  //   alignChain(pdbId, chainId, instance, family).catch(err => {
+  //     console.error('Auto-align failed:', err);
+  //   });
+  // }, [instance, pdbId, chainId, family, isAligned, isAligning, alignChain]);
 
   const allSequences = useMemo(() => [
     ...masterSequences.map((seq) => ({
@@ -572,6 +598,17 @@ function MonomerMSAPanelRefactored({
     );
   }
 
+  // In MonomerMSAPanelRefactored, add right before the return:
+
+  console.log('[MonomerMSAPanel] Debug:', {
+    masterSequences: masterSequences.length,
+    pdbSequences: pdbSequences.length,
+    allSequences: allSequences.length,
+    isAligning,
+    isAligned,
+    pdbId,
+    chainId,
+  });
   return (
     <div className="h-full flex flex-col bg-white overflow-hidden">
       <div className="flex-shrink-0 px-4 py-2 border-b bg-gray-50 flex items-center justify-between">
@@ -581,8 +618,8 @@ function MonomerMSAPanelRefactored({
         </div>
       </div>
       <div className="flex-shrink-0 px-3 py-1.5 border-b bg-white">
-        <MSAToolbar
-          currentScheme={dispatcher?.getCurrentColorScheme() || 'clustal2'}
+ <MSAToolbar
+          currentScheme={dispatcher?.getCurrentColorScheme() || 'clustal2'}  // Now correct!
           maxLength={maxLength}
           onSchemeChange={(s) => { clearAll(); dispatcher?.setColorScheme(s); }}
           onJumpToRange={(s, e) => dispatcher?.dispatch({ type: 'JUMP_TO_RANGE', start: s, end: e })}
@@ -591,11 +628,11 @@ function MonomerMSAPanelRefactored({
         />
       </div>
       <div className="flex-1 min-h-0 p-2">
-        <ResizableMSAContainer
+     <ResizableMSAContainer
           ref={msaRef}
           sequences={allSequences}
           maxLength={maxLength}
-          colorScheme={dispatcher?.getCurrentColorScheme() || 'clustal2'}
+          colorScheme={dispatcher?.getCurrentColorScheme() || 'clustal2'}  // Now correct!
           onResidueHover={handleResidueHover}
           onResidueLeave={handleResidueLeave}
           onResidueClick={handleResidueClick}

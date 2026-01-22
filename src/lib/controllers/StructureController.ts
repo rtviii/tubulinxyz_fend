@@ -10,7 +10,7 @@ import { Color } from 'molstar/lib/mol-util/color';
  * Wraps MolstarInstance and provides a clean API.
  */
 export class StructureController implements IStructureController {
-  constructor(private instance: MolstarInstance | null) {}
+  constructor(private instance: MolstarInstance | null) { }
 
   setInstance(instance: MolstarInstance | null): void {
     this.instance = instance;
@@ -54,9 +54,9 @@ export class StructureController implements IStructureController {
 
   highlightResidue(chainId: string, authSeqId: number, highlight: boolean): void {
     if (!this.instance) return;
-    
+
     if (highlight) {
-      this.instance.highlightResidue(chainId, authSeqId);
+      this.instance.highlightResidue(chainId, authSeqId, true);  // <-- Add `true` here!
     } else {
       this.clearHighlight();
     }

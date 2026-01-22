@@ -4,19 +4,19 @@
 import { useEffect, useLayoutEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
 
 interface SequenceData {
-  id      : string;
-  name    : string;
+  id: string;
+  name: string;
   sequence: string;
 }
 
 interface ResizableMSAContainerProps {
-  sequences      : SequenceData[];
-  maxLength      : number;
-  colorScheme   ?: string;
-  minTileWidth  ?: number;
-  rowHeight     ?: number;
-  navHeight     ?: number;
-  maxMsaHeight  ?: number;
+  sequences: SequenceData[];
+  maxLength: number;
+  colorScheme?: string;
+  minTileWidth?: number;
+  rowHeight?: number;
+  navHeight?: number;
+  maxMsaHeight?: number;
   onResidueHover?: (seqId: string, position: number) => void;
   onResidueLeave?: () => void;
   onResidueClick?: (seqId: string, position: number) => void;
@@ -26,12 +26,14 @@ export interface ResizableMSAContainerHandle {
   redraw: () => void;
   jumpToRange: (start: number, end: number) => void;
   setColorScheme: (scheme: string) => void;
+  setHighlight: (start: number, end: number) => void;
+  clearHighlight: () => void;
 }
 
 const DEFAULTS = {
   minTileWidth: 1,
-  navHeight   : 60,
-  rowHeight   : 20,
+  navHeight: 60,
+  rowHeight: 20,
   maxMsaHeight: 800,
 };
 
@@ -40,22 +42,22 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     const {
       sequences,
       maxLength,
-      colorScheme  = 'clustal2',
+      colorScheme = 'clustal2',
       minTileWidth = DEFAULTS.minTileWidth,
-      rowHeight    = DEFAULTS.rowHeight,
-      navHeight    = DEFAULTS.navHeight,
+      rowHeight = DEFAULTS.rowHeight,
+      navHeight = DEFAULTS.navHeight,
       maxMsaHeight = DEFAULTS.maxMsaHeight,
       onResidueHover,
       onResidueLeave,
       onResidueClick,
     } = props;
 
-    const outerRef                            = useRef<HTMLDivElement>(null);
-    const msaRef                              = useRef<any>(null);
-    const navRef                              = useRef<any>(null);
+    const outerRef = useRef<HTMLDivElement>(null);
+    const msaRef = useRef<any>(null);
+    const navRef = useRef<any>(null);
 
     const [availableWidth, setAvailableWidth] = useState(0);
-    const [isInitialized, setIsInitialized]   = useState(false);
+    const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
       const el = outerRef.current;
@@ -71,9 +73,9 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     }, []);
 
     const minContentWidth = maxLength * minTileWidth;
-    const contentWidth    = Math.max(availableWidth, minContentWidth);
-    const needsScroll     = availableWidth > 0 && contentWidth > availableWidth;
-    const msaHeight       = Math.min(sequences.length * rowHeight, maxMsaHeight);
+    const contentWidth = Math.max(availableWidth, minContentWidth);
+    const needsScroll = availableWidth > 0 && contentWidth > availableWidth;
+    const msaHeight = Math.min(sequences.length * rowHeight, maxMsaHeight);
 
     // Get the inner sequence viewer component
     const getSequenceViewer = useCallback((): any | null => {
@@ -82,7 +84,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       return msa.renderRoot?.querySelector('msa-sequence-viewer') ?? null;
     }, []);
 
-    // Invalidate cache and redraw - this is the key fix
+    // Invalidate cache and redraw
     const triggerRedraw = useCallback(() => {
       const seqViewer = getSequenceViewer();
       if (seqViewer && typeof seqViewer.invalidateAndRedraw === 'function') {
@@ -167,11 +169,42 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       });
     }, [getSequenceViewer]);
 
+    // ============================================================
+    // Highlight Methods (for hover sync)
+    // ============================================================
+
+    /**
+     * Set highlight on a range of MSA positions.
+     * Uses nightingale's built-in highlight attribute.
+     * Positions are 1-based in nightingale.
+     */
+    const setHighlight = useCallback((start: number, end: number) => {
+      const msa = msaRef.current;
+      if (!msa) return;
+      // Nightingale highlight format: "start:end" (1-based, inclusive)
+      msa.setAttribute('highlight', `${start}:${end}`);
+    }, []);
+
+    /**
+     * Clear the highlight.
+     */
+    const clearHighlight = useCallback(() => {
+      const msa = msaRef.current;
+      if (!msa) return;
+      msa.removeAttribute('highlight');
+    }, []);
+
+    // ============================================================
+    // Imperative Handle
+    // ============================================================
+
     useImperativeHandle(ref, () => ({
       redraw: triggerRedraw,
       jumpToRange,
       setColorScheme,
-    }), [triggerRedraw, jumpToRange, setColorScheme]);
+      setHighlight,
+      clearHighlight,
+    }), [triggerRedraw, jumpToRange, setColorScheme, setHighlight, clearHighlight]);
 
     useLayoutEffect(() => {
       if (contentWidth === 0) return;
