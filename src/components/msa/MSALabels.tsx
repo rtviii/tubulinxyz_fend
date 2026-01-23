@@ -11,8 +11,8 @@ import {
 } from '@/store/slices/sequence_registry';
 
 interface MSALabelsProps {
-  rowHeight: number;
-  scrollTop: number;
+  rowHeight         : number;
+  scrollTop         : number;
   onWidthCalculated?: (width: number) => void;
 }
 
@@ -43,12 +43,11 @@ function formatFamily(family: string): string {
 }
 
 export function MSALabels({ rowHeight, scrollTop, onWidthCalculated }: MSALabelsProps) {
-  const dispatch = useAppDispatch();
-  const sequences = useAppSelector(selectOrderedSequences);
-  const selectedId = useAppSelector(selectSelectedSequenceId);
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const measureRef = useRef<HTMLDivElement>(null);
+  const dispatch                    = useAppDispatch();
+  const sequences                   = useAppSelector(selectOrderedSequences);
+  const selectedId                  = useAppSelector(selectSelectedSequenceId);
+  const containerRef                = useRef<HTMLDivElement>(null);
+  const measureRef                  = useRef<HTMLDivElement>(null);
   const [labelWidth, setLabelWidth] = useState(0);
 
   // Measure the widest label
@@ -73,24 +72,17 @@ export function MSALabels({ rowHeight, scrollTop, onWidthCalculated }: MSALabels
   }, [dispatch]);
 
   return (
-    <div
-      ref={containerRef}
-      className="h-full overflow-hidden border-r border-gray-200 bg-gray-50"
-      style={{ width: labelWidth > 0 ? labelWidth : 'auto' }}
-    >
-      {/* Hidden measure element */}
+    <div ref={containerRef} className="h-full overflow-hidden border-r border-gray-200 bg-gray-50" style={{ width: labelWidth > 0 ? labelWidth : 'auto' }}>
       <div
         ref={measureRef}
         style={{
-          position: 'absolute',
+          position  : 'absolute',
           visibility: 'hidden',
           whiteSpace: 'nowrap',
-          fontSize: '12px',
+          fontSize  : '12px',
           fontFamily: 'monospace',
         }}
       />
-
-      {/* Scrollable labels container */}
       <div
         style={{
           transform: `translateY(${-scrollTop}px)`,

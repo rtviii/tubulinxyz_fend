@@ -16,12 +16,12 @@ const BUILTIN_SCHEMES = [
 ] as const;
 
 interface MSAToolbarProps {
-  currentScheme: string;
-  maxLength: number;
-  onSchemeChange: (scheme: string) => void;
-  onJumpToRange: (start: number, end: number) => void;
-  onReset?: () => void;
-  compact?: boolean;
+  currentScheme  : string;
+  maxLength      : number;
+  onSchemeChange : (scheme: string) => void;
+  onJumpToRange  : (start: number, end: number) => void;
+  onReset       ?: () => void;
+  compact       ?: boolean;
 }
 
 export function MSAToolbar({
@@ -32,6 +32,7 @@ export function MSAToolbar({
   onReset,
   compact = false,
 }: MSAToolbarProps) {
+
   const [jumpStart, setJumpStart] = useState(1);
   const [jumpEnd, setJumpEnd] = useState(100);
 
@@ -60,10 +61,8 @@ export function MSAToolbar({
           ))}
         </select>
       </div>
-
       <div className="w-px h-4 bg-gray-300" />
 
-      {/* Quick jumps */}
       <div className="flex items-center gap-1">
         {quickRanges.map((r) => (
           <button
@@ -77,8 +76,6 @@ export function MSAToolbar({
       </div>
 
       <div className="w-px h-4 bg-gray-300" />
-
-      {/* Custom range */}
       <div className="flex items-center gap-1">
         <input
           type="number"
@@ -104,8 +101,6 @@ export function MSAToolbar({
           Go
         </button>
       </div>
-
-      {/* Reset */}
       {onReset && (
         <>
           <div className="w-px h-4 bg-gray-300" />
