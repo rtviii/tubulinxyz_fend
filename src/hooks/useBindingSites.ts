@@ -1,11 +1,7 @@
 // src/hooks/useBindingSites.ts
-
 import { useState, useCallback } from 'react';
 import { SyncDispatcher, BindingSite } from '@/lib/sync';
 
-/**
- * Expand regions to individual MSA positions.
- */
 function expandRegionsToPositions(regions: { start: number; end: number }[]): number[] {
   const positions: number[] = [];
   for (const { start, end } of regions) {
@@ -16,22 +12,28 @@ function expandRegionsToPositions(regions: { start: number; end: number }[]): nu
   return positions;
 }
 
-/**
- * Hook to manage binding site state and sync with the dispatcher.
- */
+export type AnnotationMode = 'global' | 'selected';
+
 export function useBindingSites(dispatcher: SyncDispatcher | null, sites: BindingSite[]) {
   const [activeSites, setActiveSites] = useState<Set<string>>(new Set());
+  const [annotationMode, setAnnotationMode] = useState<AnnotationMode>('global');
 
   const toggleSite = useCallback(
-    (siteId: string, enabled: boolean) => {
+    (siteId: string, enabled: boolean, rowIndex?: number) => {
       if (!dispatcher) return;
-
       const site = sites.find((s) => s.id === siteId);
       if (!site) return;
 
       if (enabled) {
         const msaPositions = expandRegionsToPositions(site.msaRegions);
-        dispatcher.addBindingSite(siteId, site.name, site.color, msaPositions);
+        
+        if (annotationMode === 'selected' && rowIndex !== undefined) {
+          // Row-specific coloring
+          dispatcher.addBindingSiteToRow(siteId, site.name, site.color, msaPositions, rowIndex);
+        } else {
+          // Global column coloring
+          dispatcher.addBindingSite(siteId, site.name, site.color, msaPositions);
+        }
         setActiveSites((prev) => new Set(prev).add(siteId));
       } else {
         dispatcher.removeBindingSite(siteId);
@@ -42,16 +44,28 @@ export function useBindingSites(dispatcher: SyncDispatcher | null, sites: Bindin
         });
       }
     },
+    [dispatcher, sites, annotationMode]
+  );
+
+  const applyToSelected = useCallback(
+    (siteId: string, rowIndex: number) => {
+      if (!dispatcher) return;
+      const site = sites.find((s) => s.id === siteId);
+      if (!site) return;
+
+      const msaPositions = expandRegionsToPositions(site.msaRegions);
+      const ruleId = `${siteId}-row-${rowIndex}`;
+      dispatcher.addBindingSiteToRow(ruleId, site.name, site.color, msaPositions, rowIndex);
+      setActiveSites((prev) => new Set(prev).add(ruleId));
+    },
     [dispatcher, sites]
   );
 
   const focusSite = useCallback(
     (siteId: string) => {
       if (!dispatcher) return;
-
       const site = sites.find((s) => s.id === siteId);
       if (!site || site.msaRegions.length === 0) return;
-
       const firstRegion = site.msaRegions[0];
       dispatcher.dispatch({
         type: 'JUMP_TO_RANGE',
@@ -86,5 +100,16 @@ export function useBindingSites(dispatcher: SyncDispatcher | null, sites: Bindin
     [sites]
   );
 
-  return { activeSites, toggleSite, focusSite, hoverSite, hoverEnd, clearAll, getSite };
+  return {
+    activeSites,
+    annotationMode,
+    setAnnotationMode,
+    toggleSite,
+    applyToSelected,
+    focusSite,
+    hoverSite,
+    hoverEnd,
+    clearAll,
+    getSite,
+  };
 }

@@ -28,6 +28,9 @@ import {
   selectMasterSequences,
   selectPdbSequences,
   selectPositionMapping,
+
+  selectSelectedSequence,
+
   selectIsChainAligned,
 } from '@/store/slices/sequence_registry';
 import { useGetMasterProfileMsaMasterGetQuery } from '@/store/tubxz_api';
@@ -114,6 +117,8 @@ export default function StructureProfilePageRefactored() {
 
   const { instance, isInitialized } = useMolstarInstance(containerRef, 'structure');
 
+
+const selectedSequence = useAppSelector(selectSelectedSequence);
   // Redux state
   const loadedStructure = useAppSelector((state) => selectLoadedStructure(state, 'structure'));
   const polymerComponents = useAppSelector((state) => selectPolymerComponents(state, 'structure'));
@@ -143,7 +148,16 @@ export default function StructureProfilePageRefactored() {
   );
 
   const dispatcher = useSync(msaRef, instance, activeChainId || '', positionMapping);
-  const { activeSites, toggleSite, focusSite, clearAll } = useBindingSites(dispatcher, BINDING_SITES);
+
+const { 
+  activeSites, 
+  annotationMode, 
+  setAnnotationMode, 
+  toggleSite, 
+  applyToSelected,
+  focusSite, 
+  clearAll 
+} = useBindingSites(dispatcher, BINDING_SITES);
 
   const annotationData: AnnotationData = useMemo(() => ({
     bindingSites: BINDING_SITES,
@@ -266,6 +280,11 @@ export default function StructureProfilePageRefactored() {
                   onFocusSite={focusSite}
                   onToggleMutations={setShowMutations}
                   onClearAll={clearAll}
+
+  annotationMode={annotationMode}
+  selectedSequence={selectedSequence}
+  onApplyToSelected={applyToSelected}
+  onSetAnnotationMode={setAnnotationMode}
                 />
               </div>
             </div>
@@ -393,6 +412,10 @@ function MonomerSidebar({
   onFocusSite,
   onToggleMutations,
   onClearAll,
+ annotationMode,
+  selectedSequence,
+  onApplyToSelected,
+  onSetAnnotationMode,
 }: {
   activeChainId: string | null;
   polymerComponents: PolymerComponent[];
@@ -407,6 +430,11 @@ function MonomerSidebar({
   onFocusSite: (siteId: string) => void;
   onToggleMutations: (enabled: boolean) => void;
   onClearAll: () => void;
+
+  annotationMode: AnnotationMode;
+  selectedSequence: MsaSequence | null;
+  onApplyToSelected: (siteId: string, rowIndex: number) => void;
+  onSetAnnotationMode: (mode: AnnotationMode) => void;
 }) {
   const [showAlignForm, setShowAlignForm] = useState(false);
   const { alignChain } = useChainAlignment(); // Access the alignment hook
@@ -498,15 +526,19 @@ function MonomerSidebar({
       </div>
 
       <section className="flex-1 min-h-0 border-t pt-4 flex flex-col overflow-hidden">
-        <AnnotationPanel
-          annotations={annotationData}
-          activeBindingSites={activeBindingSites}
-          showMutations={showMutations}
-          onToggleSite={onToggleSite}
-          onFocusSite={onFocusSite}
-          onToggleMutations={onToggleMutations}
-          onClearAll={onClearAll}
-        />
+<AnnotationPanel
+      annotations={annotationData}
+      activeBindingSites={activeBindingSites}
+      showMutations={showMutations}
+      annotationMode={annotationMode}
+      selectedSequence={selectedSequence}
+      onToggleSite={onToggleSite}
+      onApplyToSelected={onApplyToSelected}
+      onFocusSite={onFocusSite}
+      onToggleMutations={onToggleMutations}
+      onClearAll={onClearAll}
+      onSetAnnotationMode={onSetAnnotationMode}
+    />
       </section>
     </div>
   );

@@ -1,0 +1,52 @@
+﻿[
+  {
+    "ix": {
+      "identity": 381,
+      "labels": [
+        "Interaction"
+      ],
+      "properties": {
+        "auth_seq_id": 502,
+        "auth_comp_id": "MG",
+        "atom_id": "MG",
+        "type": "Ionic Interaction"
+      },
+      "elementId": "4:bfc18370-43e7-47bf-91b1-fa9343e8ae61:381"
+    },
+    "ni.auth_asym_id": "A"
+  },
+  {
+    "ix": {
+      "identity": 711,
+      "labels": [
+        "Interaction"
+      ],
+      "properties": {
+        "auth_seq_id": 11,
+        "auth_comp_id": "GLN",
+        "atom_id": "N",
+        "master_index": 11,
+        "type": "Hydrogen Bond"
+      },
+      "elementId": "4:bfc18370-43e7-47bf-91b1-fa9343e8ae61:711"
+    },
+    "ni.auth_asym_id": "A"
+  },
+  {
+    "ix": {
+      "identity": 719,
+      "labels": [
+        "Interaction"
+      ],
+      "properties": {
+        "auth_seq_id": 228,
+        "auth_comp_id": "ASN",
+        "atom_id": "ND2",
+        "master_index": 228,
+        "type": "Hydrogen Bond"
+      },
+      "elementId": "4:bfc18370-43e7-47bf-91b1-fa9343e8ae61:719"
+    },
+    "ni.auth_asym_id": "A"
+  }
+]
