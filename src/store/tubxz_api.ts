@@ -44,13 +44,15 @@ const injectedRtkApi = api
             ligands: queryArg.ligands,
             family: queryArg.family,
             uniprot: queryArg.uniprot,
-            hasMutations: queryArg.hasMutations,
-            mutationFamily: queryArg.mutationFamily,
-            mutationPosMin: queryArg.mutationPosMin,
-            mutationPosMax: queryArg.mutationPosMax,
-            mutationFrom: queryArg.mutationFrom,
-            mutationTo: queryArg.mutationTo,
-            mutationPhenotype: queryArg.mutationPhenotype,
+            hasVariants: queryArg.hasVariants,
+            variantFamily: queryArg.variantFamily,
+            variantType: queryArg.variantType,
+            variantPosMin: queryArg.variantPosMin,
+            variantPosMax: queryArg.variantPosMax,
+            variantWildType: queryArg.variantWildType,
+            variantObserved: queryArg.variantObserved,
+            variantSource: queryArg.variantSource,
+            variantPhenotype: queryArg.variantPhenotype,
           },
         }),
         providesTags: ["Structures"],
@@ -113,7 +115,7 @@ const injectedRtkApi = api
             motif: queryArg.motif,
             seqLenMin: queryArg.seqLenMin,
             seqLenMax: queryArg.seqLenMax,
-            hasMutations: queryArg.hasMutations,
+            hasVariants: queryArg.hasVariants,
           },
         }),
         providesTags: ["Polymers"],
@@ -148,6 +150,16 @@ const injectedRtkApi = api
         }),
         providesTags: ["Ligands"],
       }),
+      getLigandNeighborhoodsLigandsNeighborhoodsRcsbIdAuthAsymIdGet:
+        build.query<
+          GetLigandNeighborhoodsLigandsNeighborhoodsRcsbIdAuthAsymIdGetApiResponse,
+          GetLigandNeighborhoodsLigandsNeighborhoodsRcsbIdAuthAsymIdGetApiArg
+        >({
+          query: (queryArg) => ({
+            url: `/ligands/neighborhoods/${queryArg.rcsbId}/${queryArg.authAsymId}`,
+          }),
+          providesTags: ["Ligands"],
+        }),
       alignSequenceMsaSequencePost: build.mutation<
         AlignSequenceMsaSequencePostApiResponse,
         AlignSequenceMsaSequencePostApiArg
@@ -166,48 +178,19 @@ const injectedRtkApi = api
         query: () => ({ url: `/msa/master` }),
         providesTags: ["MSA Alignment"],
       }),
-      getMutationsAtPositionEndpointAnnotationsMutationsFamilyPositionGet:
+      getVariantsAtPositionEndpointAnnotationsVariantsFamilyPositionGet:
         build.query<
-          GetMutationsAtPositionEndpointAnnotationsMutationsFamilyPositionGetApiResponse,
-          GetMutationsAtPositionEndpointAnnotationsMutationsFamilyPositionGetApiArg
+          GetVariantsAtPositionEndpointAnnotationsVariantsFamilyPositionGetApiResponse,
+          GetVariantsAtPositionEndpointAnnotationsVariantsFamilyPositionGetApiArg
         >({
           query: (queryArg) => ({
-            url: `/annotations/mutations/${queryArg.family}/${queryArg.position}`,
+            url: `/annotations/variants/${queryArg.family}/${queryArg.position}`,
           }),
           providesTags: ["Annotations"],
         }),
-      getInteractionsAtPositionEndpointAnnotationsInteractionsFamilyPositionGet:
-        build.query<
-          GetInteractionsAtPositionEndpointAnnotationsInteractionsFamilyPositionGetApiResponse,
-          GetInteractionsAtPositionEndpointAnnotationsInteractionsFamilyPositionGetApiArg
-        >({
-          query: (queryArg) => ({
-            url: `/annotations/interactions/${queryArg.family}/${queryArg.position}`,
-          }),
-          providesTags: ["Annotations"],
-        }),
-      getNeighborhoodsAtPositionEndpointAnnotationsNeighborhoodsFamilyPositionGet:
-        build.query<
-          GetNeighborhoodsAtPositionEndpointAnnotationsNeighborhoodsFamilyPositionGetApiResponse,
-          GetNeighborhoodsAtPositionEndpointAnnotationsNeighborhoodsFamilyPositionGetApiArg
-        >({
-          query: (queryArg) => ({
-            url: `/annotations/neighborhoods/${queryArg.family}/${queryArg.position}`,
-          }),
-          providesTags: ["Annotations"],
-        }),
-      getAllAnnotationsAtPositionAnnotationsAllFamilyPositionGet: build.query<
-        GetAllAnnotationsAtPositionAnnotationsAllFamilyPositionGetApiResponse,
-        GetAllAnnotationsAtPositionAnnotationsAllFamilyPositionGetApiArg
-      >({
-        query: (queryArg) => ({
-          url: `/annotations/all/${queryArg.family}/${queryArg.position}`,
-        }),
-        providesTags: ["Annotations"],
-      }),
-      getAnnotationsInRangeAnnotationsRangeFamilyGet: build.query<
-        GetAnnotationsInRangeAnnotationsRangeFamilyGetApiResponse,
-        GetAnnotationsInRangeAnnotationsRangeFamilyGetApiArg
+      getVariantsInRangeAnnotationsRangeFamilyGet: build.query<
+        GetVariantsInRangeAnnotationsRangeFamilyGetApiResponse,
+        GetVariantsInRangeAnnotationsRangeFamilyGetApiArg
       >({
         query: (queryArg) => ({
           url: `/annotations/range/${queryArg.family}`,
@@ -218,46 +201,22 @@ const injectedRtkApi = api
         }),
         providesTags: ["Annotations"],
       }),
-      getPolymerMutationsAnnotationsPolymerRcsbIdAuthAsymIdMutationsGet:
-        build.query<
-          GetPolymerMutationsAnnotationsPolymerRcsbIdAuthAsymIdMutationsGetApiResponse,
-          GetPolymerMutationsAnnotationsPolymerRcsbIdAuthAsymIdMutationsGetApiArg
-        >({
-          query: (queryArg) => ({
-            url: `/annotations/polymer/${queryArg.rcsbId}/${queryArg.authAsymId}/mutations`,
-          }),
-          providesTags: ["Annotations"],
+      getPolymerAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdGet: build.query<
+        GetPolymerAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdGetApiResponse,
+        GetPolymerAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/annotations/polymer/${queryArg.rcsbId}/${queryArg.authAsymId}`,
         }),
-      getPolymerInteractionsAnnotationsPolymerRcsbIdAuthAsymIdInteractionsGet:
-        build.query<
-          GetPolymerInteractionsAnnotationsPolymerRcsbIdAuthAsymIdInteractionsGetApiResponse,
-          GetPolymerInteractionsAnnotationsPolymerRcsbIdAuthAsymIdInteractionsGetApiArg
-        >({
-          query: (queryArg) => ({
-            url: `/annotations/polymer/${queryArg.rcsbId}/${queryArg.authAsymId}/interactions`,
-          }),
-          providesTags: ["Annotations"],
-        }),
-      getPolymerNeighborhoodsAnnotationsPolymerRcsbIdAuthAsymIdNeighborhoodsGet:
-        build.query<
-          GetPolymerNeighborhoodsAnnotationsPolymerRcsbIdAuthAsymIdNeighborhoodsGetApiResponse,
-          GetPolymerNeighborhoodsAnnotationsPolymerRcsbIdAuthAsymIdNeighborhoodsGetApiArg
-        >({
-          query: (queryArg) => ({
-            url: `/annotations/polymer/${queryArg.rcsbId}/${queryArg.authAsymId}/neighborhoods`,
-          }),
-          providesTags: ["Annotations"],
-        }),
-      getPolymerAllAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdAllGet:
-        build.query<
-          GetPolymerAllAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdAllGetApiResponse,
-          GetPolymerAllAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdAllGetApiArg
-        >({
-          query: (queryArg) => ({
-            url: `/annotations/polymer/${queryArg.rcsbId}/${queryArg.authAsymId}/all`,
-          }),
-          providesTags: ["Annotations"],
-        }),
+        providesTags: ["Annotations"],
+      }),
+      getVariantStatsAnnotationsStatsFamilyGet: build.query<
+        GetVariantStatsAnnotationsStatsFamilyGetApiResponse,
+        GetVariantStatsAnnotationsStatsFamilyGetApiArg
+      >({
+        query: (queryArg) => ({ url: `/annotations/stats/${queryArg.family}` }),
+        providesTags: ["Annotations"],
+      }),
       healthHealthGet: build.query<
         HealthHealthGetApiResponse,
         HealthHealthGetApiArg
@@ -292,13 +251,15 @@ export type ListStructuresStructuresGetApiArg = {
   ligands?: string[] | null;
   family?: string[] | null;
   uniprot?: string[] | null;
-  hasMutations?: boolean | null;
-  mutationFamily?: string | null;
-  mutationPosMin?: number | null;
-  mutationPosMax?: number | null;
-  mutationFrom?: string | null;
-  mutationTo?: string | null;
-  mutationPhenotype?: string | null;
+  hasVariants?: boolean | null;
+  variantFamily?: string | null;
+  variantType?: string | null;
+  variantPosMin?: number | null;
+  variantPosMax?: number | null;
+  variantWildType?: string | null;
+  variantObserved?: string | null;
+  variantSource?: string | null;
+  variantPhenotype?: string | null;
 };
 export type GetFacetsStructuresFacetsGetApiResponse =
   /** status 200 Successful Response */ FilterFacets;
@@ -312,7 +273,7 @@ export type GetFamiliesStructuresFamiliesGetApiResponse =
   /** status 200 Successful Response */ any;
 export type GetFamiliesStructuresFamiliesGetApiArg = void;
 export type GetStructureStructuresRcsbIdGetApiResponse =
-  /** status 200 Successful Response */ TubulinStructure;
+  /** status 200 Successful Response */ any;
 export type GetStructureStructuresRcsbIdGetApiArg = {
   rcsbId: string;
 };
@@ -336,7 +297,7 @@ export type ListPolymersPolymersGetApiArg = {
   motif?: string | null;
   seqLenMin?: number | null;
   seqLenMax?: number | null;
-  hasMutations?: boolean | null;
+  hasVariants?: boolean | null;
 };
 export type ListLigandsLigandsGetApiResponse =
   /** status 200 Successful Response */ LigandListResponse;
@@ -355,6 +316,13 @@ export type LigandOptionsLigandsOptionsGetApiArg = {
   search?: string | null;
   limit?: number;
 };
+export type GetLigandNeighborhoodsLigandsNeighborhoodsRcsbIdAuthAsymIdGetApiResponse =
+  /** status 200 Successful Response */ PolymerNeighborhoodsResponse;
+export type GetLigandNeighborhoodsLigandsNeighborhoodsRcsbIdAuthAsymIdGetApiArg =
+  {
+    rcsbId: string;
+    authAsymId: string;
+  };
 export type AlignSequenceMsaSequencePostApiResponse =
   /** status 200 Successful Response */ AlignmentResponse;
 export type AlignSequenceMsaSequencePostApiArg = {
@@ -363,88 +331,37 @@ export type AlignSequenceMsaSequencePostApiArg = {
 export type GetMasterProfileMsaMasterGetApiResponse =
   /** status 200 Successful Response */ any;
 export type GetMasterProfileMsaMasterGetApiArg = void;
-export type GetMutationsAtPositionEndpointAnnotationsMutationsFamilyPositionGetApiResponse =
-  /** status 200 Successful Response */ {
-    [key: string]: any;
-  };
-export type GetMutationsAtPositionEndpointAnnotationsMutationsFamilyPositionGetApiArg =
+export type GetVariantsAtPositionEndpointAnnotationsVariantsFamilyPositionGetApiResponse =
+  /** status 200 Successful Response */ PositionAnnotationsResponse;
+export type GetVariantsAtPositionEndpointAnnotationsVariantsFamilyPositionGetApiArg =
   {
     family: string;
     position: number;
   };
-export type GetInteractionsAtPositionEndpointAnnotationsInteractionsFamilyPositionGetApiResponse =
+export type GetVariantsInRangeAnnotationsRangeFamilyGetApiResponse =
   /** status 200 Successful Response */ {
     [key: string]: any;
   };
-export type GetInteractionsAtPositionEndpointAnnotationsInteractionsFamilyPositionGetApiArg =
-  {
-    family: string;
-    position: number;
-  };
-export type GetNeighborhoodsAtPositionEndpointAnnotationsNeighborhoodsFamilyPositionGetApiResponse =
-  /** status 200 Successful Response */ {
-    [key: string]: any;
-  };
-export type GetNeighborhoodsAtPositionEndpointAnnotationsNeighborhoodsFamilyPositionGetApiArg =
-  {
-    family: string;
-    position: number;
-  };
-export type GetAllAnnotationsAtPositionAnnotationsAllFamilyPositionGetApiResponse =
-  /** status 200 Successful Response */ {
-    [key: string]: any;
-  };
-export type GetAllAnnotationsAtPositionAnnotationsAllFamilyPositionGetApiArg = {
-  family: string;
-  position: number;
-};
-export type GetAnnotationsInRangeAnnotationsRangeFamilyGetApiResponse =
-  /** status 200 Successful Response */ {
-    [key: string]: any;
-  };
-export type GetAnnotationsInRangeAnnotationsRangeFamilyGetApiArg = {
+export type GetVariantsInRangeAnnotationsRangeFamilyGetApiArg = {
   family: string;
   /** Start position (inclusive) */
   start: number;
   /** End position (inclusive) */
   end: number;
 };
-export type GetPolymerMutationsAnnotationsPolymerRcsbIdAuthAsymIdMutationsGetApiResponse =
+export type GetPolymerAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdGetApiResponse =
+  /** status 200 Successful Response */ PolymerAnnotationsResponse;
+export type GetPolymerAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdGetApiArg = {
+  rcsbId: string;
+  authAsymId: string;
+};
+export type GetVariantStatsAnnotationsStatsFamilyGetApiResponse =
   /** status 200 Successful Response */ {
     [key: string]: any;
   };
-export type GetPolymerMutationsAnnotationsPolymerRcsbIdAuthAsymIdMutationsGetApiArg =
-  {
-    rcsbId: string;
-    authAsymId: string;
-  };
-export type GetPolymerInteractionsAnnotationsPolymerRcsbIdAuthAsymIdInteractionsGetApiResponse =
-  /** status 200 Successful Response */ {
-    [key: string]: any;
-  };
-export type GetPolymerInteractionsAnnotationsPolymerRcsbIdAuthAsymIdInteractionsGetApiArg =
-  {
-    rcsbId: string;
-    authAsymId: string;
-  };
-export type GetPolymerNeighborhoodsAnnotationsPolymerRcsbIdAuthAsymIdNeighborhoodsGetApiResponse =
-  /** status 200 Successful Response */ {
-    [key: string]: any;
-  };
-export type GetPolymerNeighborhoodsAnnotationsPolymerRcsbIdAuthAsymIdNeighborhoodsGetApiArg =
-  {
-    rcsbId: string;
-    authAsymId: string;
-  };
-export type GetPolymerAllAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdAllGetApiResponse =
-  /** status 200 Successful Response */ {
-    [key: string]: any;
-  };
-export type GetPolymerAllAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdAllGetApiArg =
-  {
-    rcsbId: string;
-    authAsymId: string;
-  };
+export type GetVariantStatsAnnotationsStatsFamilyGetApiArg = {
+  family: string;
+};
 export type HealthHealthGetApiResponse =
   /** status 200 Successful Response */ any;
 export type HealthHealthGetApiArg = void;
@@ -470,9 +387,9 @@ export type StructureSummary = {
 };
 export type StructureListResponse = {
   data: StructureSummary[];
-  /** Total matching results (before pagination) */
+  /** Total matching results before pagination */
   total_count: number;
-  /** Cursor for next page. Null if no more results. */
+  /** Cursor for next page */
   next_cursor?: string | null;
   /** Whether more results exist */
   has_more: boolean;
@@ -490,33 +407,34 @@ export type LigandFacet = {
   chemical_name?: string | null;
   count: number;
 };
-export type MutationByFamily = {
+export type VariantsByFamily = {
   family: string;
-  mutation_count: number;
+  variant_count: number;
   structure_count: number;
 };
-export type CommonMutation = {
+export type CommonVariant = {
   family?: string | null;
-  position: number;
-  from_residue: string;
-  to_residue: string;
+  position?: number | null;
+  wild_type?: string | null;
+  observed?: string | null;
+  variant_type: string;
   count: number;
 };
-export type MutationPositionRange = {
+export type VariantPositionRange = {
   family: string;
   min_position: number;
   max_position: number;
 };
 export type FilterFacets = {
   total_structures: number;
-  exp_methods: FacetValue[];
-  tubulin_families: FacetValue[];
+  exp_methods?: FacetValue[];
+  tubulin_families?: FacetValue[];
   year_range: RangeValue;
   resolution_range: RangeValue;
-  top_ligands: LigandFacet[];
-  mutations_by_family: MutationByFamily[];
-  common_mutations: CommonMutation[];
-  mutation_position_ranges: MutationPositionRange[];
+  top_ligands?: LigandFacet[];
+  variants_by_family?: VariantsByFamily[];
+  common_variants?: CommonVariant[];
+  variant_position_ranges?: VariantPositionRange[];
 };
 export type TubulinFamily =
   | "tubulin_alpha"
@@ -563,27 +481,32 @@ export type MapFamily =
   | "map_ttll_glutamylase_long"
   | "map_ttll_glutamylase_short"
   | "map_vash_detyrosinase";
-export type Mutation = {
-  master_index: number;
-  utn_position?: number | null;
-  from_residue: string;
-  to_residue: string;
-  uniprot_id: string;
-  species: string;
-  tubulin_type: TubulinFamily;
-  phenotype: string;
-  database_source: string;
-  reference_link: string;
-  keywords: string;
-  notes?: string | null;
+export type IndexMappingData = {
+  observed_to_master: {
+    [key: string]: number | null;
+  };
+  master_to_observed: {
+    [key: string]: number | null;
+  };
+};
+export type VariantType = "substitution" | "insertion" | "deletion";
+export type SequenceVariant = {
+  type: VariantType;
+  source?: string;
+  master_index?: number | null;
+  observed_index?: number | null;
+  wild_type?: string | null;
+  observed?: string | null;
+  uniprot_id?: string | null;
+  phenotype?: string | null;
+  reference?: string | null;
 };
 export type PolypeptideEntity = {
-  entity_id: string;
   type?: "polymer";
-  pdbx_description?: string | null;
-  formula_weight?: number | null;
-  pdbx_strand_ids?: string[];
   polymer_type?: "Protein";
+  entity_id: string;
+  pdbx_description?: string | null;
+  pdbx_strand_ids?: string[];
   one_letter_code: string;
   one_letter_code_can: string;
   sequence_length: number;
@@ -593,7 +516,8 @@ export type PolypeptideEntity = {
   host_organism_ids?: number[];
   family?: TubulinFamily | MapFamily | null;
   uniprot_accessions?: string[];
-  mutations?: Mutation[];
+  index_mapping?: IndexMappingData | null;
+  variants?: SequenceVariant[];
   alignment_stats?: {
     [key: string]: any;
   };
@@ -685,6 +609,18 @@ export type AssemblyInstancesMap = {
     [key: string]: InstanceIdentifier;
   }[];
 };
+export type BindingSiteResidue = {
+  auth_asym_id: string;
+  observed_index: number;
+  comp_id: string;
+  master_index?: number | null;
+};
+export type LigandBindingSite = {
+  ligand_comp_id: string;
+  ligand_auth_asym_id: string;
+  ligand_auth_seq_id: number;
+  residues: BindingSiteResidue[];
+};
 export type TubulinStructure = {
   rcsb_id: string;
   expMethod: string;
@@ -710,6 +646,7 @@ export type TubulinStructure = {
   polynucleotides: Polynucleotide[];
   nonpolymers: Nonpolymer[];
   assembly_map?: AssemblyInstancesMap[] | null;
+  ligand_binding_sites?: LigandBindingSite[];
   polymerization_state?:
     | ("monomer" | "dimer" | "oligomer" | "filament" | "unknown")
     | null;
@@ -722,13 +659,13 @@ export type PolypeptideEntitySummary = {
   sequence_length?: number | null;
   src_organism_names?: string[];
   uniprot_accessions?: string[];
-  mutation_count?: number | null;
+  variant_count?: number | null;
 };
 export type PolypeptideListResponse = {
   data: PolypeptideEntitySummary[];
-  /** Total matching results (before pagination) */
+  /** Total matching results before pagination */
   total_count: number;
-  /** Cursor for next page. Null if no more results. */
+  /** Cursor for next page */
   next_cursor?: string | null;
   /** Whether more results exist */
   has_more: boolean;
@@ -743,12 +680,33 @@ export type LigandSummary = {
 };
 export type LigandListResponse = {
   data: LigandSummary[];
-  /** Total matching results (before pagination) */
+  /** Total matching results before pagination */
   total_count: number;
-  /** Cursor for next page. Null if no more results. */
+  /** Cursor for next page */
   next_cursor?: string | null;
   /** Whether more results exist */
   has_more: boolean;
+};
+export type BindingSiteResidue2 = {
+  auth_asym_id: string;
+  observed_index: number;
+  comp_id: string;
+  master_index?: number | null;
+};
+export type LigandNeighborhood = {
+  ligand_id: string;
+  ligand_name?: string | null;
+  ligand_auth_asym_id: string;
+  residues?: BindingSiteResidue2[];
+  residue_count: number;
+  drugbank_id?: string | null;
+};
+export type PolymerNeighborhoodsResponse = {
+  rcsb_id: string;
+  auth_asym_id: string;
+  neighborhoods: LigandNeighborhood[];
+  total_ligands: number;
+  total_residues: number;
 };
 export type Annotation = {
   start: number;
@@ -781,6 +739,33 @@ export type AlignmentRequest = {
   /** The PDB auth_seq_ids corresponding 1:1 to the sequence characters. */
   auth_seq_ids?: number[] | null;
 };
+export type VariantAnnotation = {
+  type: string;
+  master_index?: number | null;
+  observed_index?: number | null;
+  wild_type?: string | null;
+  observed?: string | null;
+  source: string;
+  uniprot_id?: string | null;
+  phenotype?: string | null;
+  reference?: string | null;
+  rcsb_id: string;
+  entity_id: string;
+};
+export type PositionAnnotationsResponse = {
+  position: number;
+  family: string;
+  variants: VariantAnnotation[];
+  total_count: number;
+};
+export type PolymerAnnotationsResponse = {
+  rcsb_id: string;
+  auth_asym_id: string;
+  entity_id: string;
+  family: string | null;
+  variants: VariantAnnotation[];
+  total_count: number;
+};
 export const {
   useGetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetQuery,
   useListStructuresStructuresGetQuery,
@@ -792,16 +777,12 @@ export const {
   useListPolymersPolymersGetQuery,
   useListLigandsLigandsGetQuery,
   useLigandOptionsLigandsOptionsGetQuery,
+  useGetLigandNeighborhoodsLigandsNeighborhoodsRcsbIdAuthAsymIdGetQuery,
   useAlignSequenceMsaSequencePostMutation,
   useGetMasterProfileMsaMasterGetQuery,
-  useGetMutationsAtPositionEndpointAnnotationsMutationsFamilyPositionGetQuery,
-  useGetInteractionsAtPositionEndpointAnnotationsInteractionsFamilyPositionGetQuery,
-  useGetNeighborhoodsAtPositionEndpointAnnotationsNeighborhoodsFamilyPositionGetQuery,
-  useGetAllAnnotationsAtPositionAnnotationsAllFamilyPositionGetQuery,
-  useGetAnnotationsInRangeAnnotationsRangeFamilyGetQuery,
-  useGetPolymerMutationsAnnotationsPolymerRcsbIdAuthAsymIdMutationsGetQuery,
-  useGetPolymerInteractionsAnnotationsPolymerRcsbIdAuthAsymIdInteractionsGetQuery,
-  useGetPolymerNeighborhoodsAnnotationsPolymerRcsbIdAuthAsymIdNeighborhoodsGetQuery,
-  useGetPolymerAllAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdAllGetQuery,
+  useGetVariantsAtPositionEndpointAnnotationsVariantsFamilyPositionGetQuery,
+  useGetVariantsInRangeAnnotationsRangeFamilyGetQuery,
+  useGetPolymerAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdGetQuery,
+  useGetVariantStatsAnnotationsStatsFamilyGetQuery,
   useHealthHealthGetQuery,
 } = injectedRtkApi;

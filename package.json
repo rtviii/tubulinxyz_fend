@@ -16,7 +16,7 @@
     "render:list": "tsx scripts/bulk-render.ts --list",
     "setup": "yarn install && cd nightingale && yarn install && yarn build && cd ..",
     "clean": "rm -rf node_modules .next && cd nightingale && yarn clean && cd ..",
-    "rebuild-ngl": "cd nightingale && yarn build && cd .. && yarn install"
+"rebuild-ngl": "cd nightingale && yarn lerna run build --skip-nx-cache && cd .. && rm -rf .next && yarn install --force"
   },
   "dependencies": {
     "@nightingale-elements/nightingale-manager"   : "file:./nightingale/packages/nightingale-manager",

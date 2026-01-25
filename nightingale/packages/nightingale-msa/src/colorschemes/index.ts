@@ -56,14 +56,12 @@ export const staticSchemes: Record<string, Record<string, string>> = {
   turn_propensity: Turn,
   zappo: Zappo,
 };
-console.log('[colorschemes/index] Registering custom-position:', customPosition);
 
 export const dynSchemes: Record<string, ColorStructure> = {
   conservation: pid,
   "custom-position": customPosition,
 };
 
-console.log('[colorschemes/index] dynSchemes:', Object.keys(dynSchemes));
 export const defaultSchemes = [
   ...Object.keys(staticSchemes),
   ...Object.keys(dynSchemes),

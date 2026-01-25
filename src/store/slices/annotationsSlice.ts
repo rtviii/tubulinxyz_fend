@@ -9,7 +9,7 @@ import type {
   DisplayableMutation,
   PositionAnnotations,
 } from '@/lib/types/annotations';
-import { PositionMapping, selectPositionMapping } from './sequence_registry';
+import { selectPositionMapping } from './sequence_registry';
 
 const EMPTY_LIGANDS: DisplayableLigandSite[] = [];
 const EMPTY_MUTATIONS: DisplayableMutation[] = [];
@@ -29,7 +29,6 @@ const LIGAND_COLORS: Record<string, string> = {
 
 function getLigandColor(ligandId: string): string {
   if (!ligandId) return '#cccccc';
-
   if (LIGAND_COLORS[ligandId]) return LIGAND_COLORS[ligandId];
   let hash = 0;
   for (let i = 0; i < ligandId.length; i++) {
@@ -74,6 +73,7 @@ export const annotationsSlice = createSlice({
       const key = `${action.payload.rcsbId.toUpperCase()}_${action.payload.authAsymId}`;
       state.byChain[key] = action.payload;
 
+      // Auto-enable all fetched ligands by default
       const allLigandKeys = action.payload.ligandSites.map(makeLigandSiteKey);
       state.displayState[key] = {
         showMutations: true,
@@ -122,34 +122,6 @@ export const annotationsSlice = createSlice({
       delete state.byChain[key];
       delete state.displayState[key];
     },
-
-    setExplorationLoading: (state, action: PayloadAction<{ family: string; position: number }>) => {
-      state.exploration = {
-        family: action.payload.family,
-        position: action.payload.position,
-        data: null,
-        loading: true,
-        error: null,
-      };
-    },
-
-    setExplorationData: (state, action: PayloadAction<PositionAnnotations>) => {
-      if (state.exploration) {
-        state.exploration.data = action.payload;
-        state.exploration.loading = false;
-      }
-    },
-
-    setExplorationError: (state, action: PayloadAction<string>) => {
-      if (state.exploration) {
-        state.exploration.error = action.payload;
-        state.exploration.loading = false;
-      }
-    },
-
-    clearExploration: (state) => {
-      state.exploration = null;
-    },
   },
 });
 
@@ -160,10 +132,6 @@ export const {
   showAllLigands,
   hideAllLigands,
   clearChainAnnotations,
-  setExplorationLoading,
-  setExplorationData,
-  setExplorationError,
-  clearExploration,
 } = annotationsSlice.actions;
 
 const selectAnnotationsState = (state: RootState) => state.annotations;
@@ -178,8 +146,6 @@ export const selectChainDisplayState = createSelector(
   (annotations, key) => annotations.displayState[key] ?? null
 );
 
-export const selectExploration = (state: RootState) => state.annotations.exploration;
-
 export const selectDisplayableLigandSites = createSelector(
   [
     selectChainAnnotations,
@@ -188,10 +154,11 @@ export const selectDisplayableLigandSites = createSelector(
   (annotations, positionMapping): DisplayableLigandSite[] => {
     if (!annotations) return EMPTY_LIGANDS;
 
+    // Build the reverse map (authSeqId -> masterIndex)
     const authToMaster: Record<number, number> = {};
     if (positionMapping) {
       Object.entries(positionMapping).forEach(([masterStr, authSeqId]) => {
-        authToMaster[authSeqId] = parseInt(masterStr, 10);
+        authToMaster[Number(authSeqId)] = parseInt(masterStr, 10);
       });
     }
 
@@ -199,15 +166,15 @@ export const selectDisplayableLigandSites = createSelector(
       const siteKey = makeLigandSiteKey(site);
       const masterSet = new Set<number>();
 
-      for (const ix of site.interactions) {
-        if (ix.masterIndex !== null) masterSet.add(ix.masterIndex);
+      // Use the neighborhood residues provided by the backend
+      for (const authSeqId of (site.neighborhoodAuthSeqIds ?? [])) {
+        const master = authToMaster[Number(authSeqId)];
+        if (master !== undefined) masterSet.add(master);
       }
 
-      // Around line 204 in annotationsSlice.ts
-      // Add ?? [] to the loop
-      for (const authSeqId of (site.neighborhoodAuthSeqIds ?? [])) {
-        const master = authToMaster[authSeqId];
-        if (master !== undefined) masterSet.add(master);
+      // Also include master indices explicitly mentioned in interactions
+      for (const ix of site.interactions) {
+        if (ix.masterIndex !== null) masterSet.add(ix.masterIndex);
       }
 
       return {

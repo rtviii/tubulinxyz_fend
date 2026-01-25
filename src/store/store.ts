@@ -11,14 +11,15 @@ import interactionReducer from './slices/interaction_slice';
 import structuresReducer from './slices/slice_structures';
 import polymersReducer from './slices/slice_polymers';
 import sequenceRegistryReducer from './slices/sequence_registry';
+import annotationsReducer from './slices/annotationsSlice';
 
 export const makeStore = () => {
   return configureStore({
     reducer: {
       // New consolidated Molstar state
       molstarInstances: molstarInstancesReducer,
+      annotations: annotationsReducer,
 
-      
       sequenceRegistry: sequenceRegistryReducer,
       interaction: interactionReducer,
       structures_page: structuresReducer,

@@ -32,6 +32,7 @@ import {
   selectSelectedSequence,
 
   selectIsChainAligned,
+  selectSequenceById,
 } from '@/store/slices/sequence_registry';
 import { useGetMasterProfileMsaMasterGetQuery } from '@/store/tubxz_api';
 import { useChainAlignment } from '@/hooks/useChainAlignment';
@@ -49,9 +50,10 @@ import { Eye, EyeOff, Focus, ArrowLeft, Microscope, Plus, X, Loader2 } from 'luc
 import { useSync, useSyncHandlers } from '@/hooks/useSync';
 import { useBindingSites } from '@/hooks/useBindingSites';
 import { BindingSite } from '@/lib/types/sync';
-import { AnnotationData, AnnotationPanel } from '@/components/msa/AnnotationPanel';
+import { AnnotationData, AnnotationPanel, MUTATION_COLOR } from '@/components/msa/AnnotationPanel';
 import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/components/msa/ResizableMSAContainer';
 import { SyncDispatcher } from '@/lib/controllers/SyncDispatcher';
+import { useChainAnnotations } from '@/hooks/useChainAnnotations';
 // In page.tsx or a separate constants file
 export const TUBULIN_BINDING_SITES: BindingSite[] = [
   {
@@ -94,6 +96,8 @@ const BINDING_SITES: BindingSite[] = TUBULIN_BINDING_SITES.map(site => ({
   msaRegions: site.msaRegions,
 }));
 
+
+
 interface StructureProfile {
   rcsb_id: string;
   entities: Record<string, {
@@ -118,8 +122,7 @@ export default function StructureProfilePageRefactored() {
   const { instance, isInitialized } = useMolstarInstance(containerRef, 'structure');
 
 
-const selectedSequence = useAppSelector(selectSelectedSequence);
-  // Redux state
+  const selectedSequence = useAppSelector(selectSelectedSequence);
   const loadedStructure = useAppSelector((state) => selectLoadedStructure(state, 'structure'));
   const polymerComponents = useAppSelector((state) => selectPolymerComponents(state, 'structure'));
   const ligandComponents = useAppSelector((state) => selectLigandComponents(state, 'structure'));
@@ -127,47 +130,114 @@ const selectedSequence = useAppSelector(selectSelectedSequence);
   const activeChainId = useAppSelector((state) => selectActiveMonomerChainId(state, 'structure'));
   const alignedStructures = useAppSelector((state) => selectAlignedStructuresForActiveChain(state, 'structure'));
 
-  // Local state
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<StructureProfile | null>(null);
-  const [showMutations, setShowMutations] = useState(false);
   const loadedFromUrlRef = useRef<string | null>(null);
   const masterSequencesInitialized = useRef(false);
 
-  // MSA setup
   const { areLoaded: nglLoaded } = useNightingaleComponents();
   const { data: masterData } = useGetMasterProfileMsaMasterGetQuery();
   const masterSequences = useAppSelector(selectMasterSequences);
   const pdbSequences = useAppSelector(selectPdbSequences);
 
-  // Sync logic lifted to page level
   const sequenceId = loadedStructure && activeChainId ? `${loadedStructure}_${activeChainId}` : null;
   const positionMapping = useAppSelector((state) =>
     sequenceId ? selectPositionMapping(state, sequenceId) : null
   );
 
+  // Core Sync System
   const dispatcher = useSync(msaRef, instance, activeChainId || '', positionMapping);
 
-const { 
-  activeSites, 
-  annotationMode, 
-  setAnnotationMode, 
-  toggleSite, 
-  applyToSelected,
-  focusSite, 
-  clearAll 
-} = useBindingSites(dispatcher, BINDING_SITES);
+  // Fetch Real Data
+  // Inside StructureProfilePageRefactored in page.tsx
+
+  const {
+    ligandSites,
+    bindingSites,
+    activeLigandIds, // This is the Set of IDs that are currently "checked" in Redux
+    mutations,
+    showMutations,
+    setShowMutations,
+    toggleLigand,
+    clearAll: clearReduxAnnotations,
+    isLoading: annotationsLoading
+  } = useChainAnnotations(loadedStructure, activeChainId);
+
+  const activeSequence = useAppSelector(state =>
+    sequenceId ? selectSequenceById(state, sequenceId) : null
+  );
+
+  // EFFECT: Sync UI State to 3D/MSA Dispatcher
+  useEffect(() => {
+    if (!dispatcher || !activeSequence) return;
+    const rowIndex = activeSequence.rowIndex;
+
+    // Sync Ligands
+    bindingSites.forEach(site => {
+      if (activeLigandIds.has(site.id)) {
+        const lsData = ligandSites.find(ls => ls.id === site.id);
+        if (lsData) {
+          // Paint ONLY the monomer row to avoid clunky full-MSA painting
+          dispatcher.addBindingSiteToRow(site.id, site.name, site.color, lsData.masterIndices, rowIndex);
+        }
+      } else {
+        dispatcher.removeBindingSite(site.id);
+      }
+    });
+
+    // Sync Mutations
+    if (showMutations && mutations.length > 0) {
+      dispatcher.addMutations(
+        'active-mutations',
+        mutations.map(m => ({ msaPosition: m.masterIndex, color: MUTATION_COLOR })),
+        rowIndex
+      );
+    } else {
+      dispatcher.removeMutations('active-mutations');
+    }
+  }, [activeLigandIds, showMutations, bindingSites, mutations, dispatcher, activeSequence, ligandSites]);
+
+  // Transform LigandSites to BindingSites for dispatcher and UI
+
+  const {
+    annotationMode,
+    setAnnotationMode,
+    applyToSelected,
+    focusSite,
+  } = useBindingSites(dispatcher, bindingSites);
+
+  // Sync Redux state to Dispatcher Visuals
+  useEffect(() => {
+    if (!dispatcher) return;
+
+    // Toggle Ligand Highlights
+    bindingSites.forEach(site => {
+      const isVisible = ligandSites.find(ls => ls.id === site.id);
+      if (isVisible) {
+        dispatcher.addBindingSite(site.id, site.name, site.color, ligandSites.find(ls => ls.id === site.id)?.masterIndices || []);
+      } else {
+        dispatcher.removeBindingSite(site.id);
+      }
+    });
+
+    // Toggle Mutation Highlights
+    if (showMutations && mutations.length > 0) {
+      dispatcher.addMutations(
+        'active-mutations',
+        mutations.map(m => ({ msaPosition: m.masterIndex, color: MUTATION_COLOR })),
+        0
+      );
+    } else {
+      dispatcher.removeMutations('active-mutations');
+    }
+  }, [ligandSites, showMutations, bindingSites, mutations, dispatcher]);
 
   const annotationData: AnnotationData = useMemo(() => ({
-    bindingSites: BINDING_SITES,
-    mutations: [
-      { masterIndex: 250, fromResidue: 'S', toResidue: 'F', phenotype: 'Resistance' },
-      { masterIndex: 315, fromResidue: 'T', toResidue: 'I' }
-    ]
-  }), []);
+    bindingSites,
+    mutations
+  }), [bindingSites, mutations]);
 
-  // Initialize master sequences once
   useEffect(() => {
     if (!masterData?.sequences || masterSequencesInitialized.current) return;
     masterData.sequences.forEach((seq: any) => {
@@ -177,22 +247,16 @@ const {
     masterSequencesInitialized.current = true;
   }, [masterData, dispatch]);
 
-  // Handle Molstar Resizing on container size change
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !instance) return;
-
     const observer = new ResizeObserver(() => {
-      requestAnimationFrame(() => {
-        instance.viewer.handleResize();
-      });
+      requestAnimationFrame(() => instance.viewer.handleResize());
     });
-
     observer.observe(el);
     return () => observer.disconnect();
   }, [instance]);
 
-  // Load structure on URL change
   useEffect(() => {
     if (!isInitialized || !instance || !pdbIdFromUrl) return;
     if (loadedFromUrlRef.current === pdbIdFromUrl) return;
@@ -200,16 +264,12 @@ const {
     const loadStructure = async () => {
       setIsLoading(true);
       setError(null);
-
       try {
         const response = await fetch(`${API_BASE_URL}/structures/${pdbIdFromUrl}/profile`);
         if (!response.ok) throw new Error('Failed to fetch profile');
-
         const profileData = await response.json();
         setProfile(profileData);
-
         const classification = createClassificationFromProfile(profileData);
-
         const success = await instance.loadStructure(pdbIdFromUrl, classification);
         if (success) {
           loadedFromUrlRef.current = pdbIdFromUrl;
@@ -222,9 +282,8 @@ const {
         setIsLoading(false);
       }
     };
-
     loadStructure();
-  }, [isInitialized, instance, pdbIdFromUrl, dispatch]);
+  }, [isInitialized, instance, pdbIdFromUrl]);
 
   const getFamilyForChain = useCallback((chainId: string): string | undefined => {
     if (!profile) return undefined;
@@ -233,26 +292,58 @@ const {
     return profile.entities[poly.entity_id]?.family;
   }, [profile]);
 
-  const isMonomerView = viewMode === 'monomer';
 
-  // src/app/structures/[rcsb_id]/page.tsx
+
+  useEffect(() => {
+    if (!dispatcher || !activeSequence) return;
+
+    const rowIndex = activeSequence.rowIndex;
+
+    // Sync Ligand Highlighting to the SPECIFIC ROW
+    bindingSites.forEach(site => {
+      if (activeLigandIds.has(site.id)) {
+        // Find the master indices for this specific site
+        const lsData = ligandSites.find(ls => ls.id === site.id);
+        if (lsData) {
+          // Use addBindingSiteToRow instead of addBindingSite to isolate color
+          dispatcher.addBindingSiteToRow(
+            site.id,
+            site.name,
+            site.color,
+            lsData.masterIndices,
+            rowIndex
+          );
+        }
+      } else {
+        dispatcher.removeBindingSite(site.id);
+      }
+    });
+
+    // Sync Mutation Highlighting
+    if (showMutations && mutations.length > 0) {
+      dispatcher.addMutations(
+        'active-mutations',
+        mutations.map(m => ({ msaPosition: m.masterIndex, color: MUTATION_COLOR })),
+        rowIndex // Paint mutations only on the monomer row
+      );
+    } else {
+      dispatcher.removeMutations('active-mutations');
+    }
+  }, [activeLigandIds, showMutations, bindingSites, mutations, dispatcher, activeSequence, ligandSites]);
+
+
+
+  const isMonomerView = viewMode === 'monomer';
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-gray-100">
       <ResizablePanelGroup direction="horizontal" className="h-full w-full">
-        {/* Sidebar Panel: Horizontally Resizable */}
-        <ResizablePanel
-          defaultSize={20}
-          minSize={15}
-          maxSize={30}
-          className="bg-white border-r"
-        >
+        <ResizablePanel defaultSize={20} minSize={15} maxSize={30} className="bg-white border-r">
           <div className="relative h-full overflow-hidden">
             <div
               className="flex h-full transition-transform duration-300 ease-in-out"
               style={{ transform: isMonomerView ? 'translateX(-100%)' : 'translateX(0)' }}
             >
-              {/* Structure sidebar */}
               <div className="w-full h-full flex-shrink-0">
                 <StructureSidebar
                   loadedStructure={loadedStructure}
@@ -264,7 +355,6 @@ const {
                 />
               </div>
 
-              {/* Monomer sidebar */}
               <div className="w-full h-full flex-shrink-0">
                 <MonomerSidebar
                   activeChainId={activeChainId}
@@ -274,42 +364,35 @@ const {
                   pdbId={loadedStructure}
                   profile={profile}
                   annotationData={annotationData}
-                  activeBindingSites={activeSites}
+                  activeBindingSites={new Set(ligandSites.map(l => l.id))}
                   showMutations={showMutations}
-                  onToggleSite={toggleSite}
+                  onToggleSite={toggleLigand}
                   onFocusSite={focusSite}
                   onToggleMutations={setShowMutations}
-                  onClearAll={clearAll}
-
-  annotationMode={annotationMode}
-  selectedSequence={selectedSequence}
-  onApplyToSelected={applyToSelected}
-  onSetAnnotationMode={setAnnotationMode}
+                  onClearAll={clearReduxAnnotations}
+                  annotationMode={annotationMode}
+                  selectedSequence={selectedSequence}
+                  onApplyToSelected={applyToSelected}
+                  onSetAnnotationMode={setAnnotationMode}
                 />
               </div>
             </div>
           </div>
         </ResizablePanel>
 
-        {/* Vertical handle for sidebar resizing */}
         <ResizableHandle withHandle />
 
-        {/* Main Content Area: Vertically Resizable between Molstar and MSA */}
         <ResizablePanel defaultSize={80}>
           <ResizablePanelGroup direction="vertical">
-            {/* Molstar Viewer Panel */}
             <ResizablePanel defaultSize={isMonomerView ? 50 : 100} minSize={30}>
               <div className="relative w-full h-full min-h-0 bg-gray-200">
                 <div ref={containerRef} className="w-full h-full" />
                 {(!isInitialized || isLoading) && (
-                  <LoadingOverlay
-                    text={isLoading ? 'Loading structure...' : 'Initializing viewer...'}
-                  />
+                  <LoadingOverlay text={isLoading ? 'Loading structure...' : 'Initializing viewer...'} />
                 )}
               </div>
             </ResizablePanel>
 
-            {/* MSA Panel (only shown in monomer view) */}
             {isMonomerView && activeChainId && (
               <>
                 <ResizableHandle withHandle />
@@ -325,11 +408,11 @@ const {
                       maxLength={masterData?.alignment_length ?? 0}
                       nglLoaded={nglLoaded}
                       msaRef={msaRef}
-                      dispatcher={dispatcher}  // <-- Pass the page-level dispatcher
-                      activeSites={activeSites}
-                      toggleSite={toggleSite}
+                      dispatcher={dispatcher}
+                      activeSites={new Set(ligandSites.map(l => l.id))}
+                      toggleSite={toggleLigand}
                       focusSite={focusSite}
-                      clearAll={clearAll}
+                      clearAll={clearReduxAnnotations}
                       showMutations={showMutations}
                       setShowMutations={setShowMutations}
                     />
@@ -412,7 +495,7 @@ function MonomerSidebar({
   onFocusSite,
   onToggleMutations,
   onClearAll,
- annotationMode,
+  annotationMode,
   selectedSequence,
   onApplyToSelected,
   onSetAnnotationMode,
@@ -426,29 +509,31 @@ function MonomerSidebar({
   annotationData: AnnotationData;
   activeBindingSites: Set<string>;
   showMutations: boolean;
-  onToggleSite: (siteId: string, enabled: boolean) => void;
+  onToggleSite: (siteId: string) => void;
   onFocusSite: (siteId: string) => void;
   onToggleMutations: (enabled: boolean) => void;
   onClearAll: () => void;
-
-  annotationMode: AnnotationMode;
-  selectedSequence: MsaSequence | null;
+  annotationMode: any;
+  selectedSequence: any;
   onApplyToSelected: (siteId: string, rowIndex: number) => void;
-  onSetAnnotationMode: (mode: AnnotationMode) => void;
+  onSetAnnotationMode: (mode: any) => void;
 }) {
   const [showAlignForm, setShowAlignForm] = useState(false);
-  const { alignChain } = useChainAlignment(); // Access the alignment hook
+  const { alignChain } = useChainAlignment();
 
   const handleBack = () => instance?.exitMonomerView();
+
   const handleChainSwitch = (chainId: string) => {
     if (chainId !== activeChainId) instance?.switchMonomerChain(chainId);
   };
+
   const getFamilyForChain = (chainId: string): string | undefined => {
     if (!profile) return undefined;
     const poly = profile.polypeptides.find(p => p.auth_asym_id === chainId);
     if (!poly) return undefined;
     return profile.entities[poly.entity_id]?.family;
   };
+
   const activeFamily = (() => {
     if (!profile || !activeChainId) return undefined;
     const poly = profile.polypeptides.find(p => p.auth_asym_id === activeChainId);
@@ -526,19 +611,19 @@ function MonomerSidebar({
       </div>
 
       <section className="flex-1 min-h-0 border-t pt-4 flex flex-col overflow-hidden">
-<AnnotationPanel
-      annotations={annotationData}
-      activeBindingSites={activeBindingSites}
-      showMutations={showMutations}
-      annotationMode={annotationMode}
-      selectedSequence={selectedSequence}
-      onToggleSite={onToggleSite}
-      onApplyToSelected={onApplyToSelected}
-      onFocusSite={onFocusSite}
-      onToggleMutations={onToggleMutations}
-      onClearAll={onClearAll}
-      onSetAnnotationMode={onSetAnnotationMode}
-    />
+        <AnnotationPanel
+          annotations={annotationData}
+          activeBindingSites={activeBindingSites}
+          showMutations={showMutations}
+          annotationMode={annotationMode}
+          selectedSequence={selectedSequence}
+          onToggleSite={(id, enabled) => onToggleSite(id)} // Adapted to your redux-based toggle
+          onApplyToSelected={onApplyToSelected}
+          onFocusSite={onFocusSite}
+          onToggleMutations={onToggleMutations}
+          onClearAll={onClearAll}
+          onSetAnnotationMode={onSetAnnotationMode}
+        />
       </section>
     </div>
   );
@@ -682,7 +767,7 @@ function MonomerMSAPanelRefactored({
         </div>
       </div>
       <div className="flex-shrink-0 px-3 py-1.5 border-b bg-white">
- <MSAToolbar
+        <MSAToolbar
           currentScheme={dispatcher?.getCurrentColorScheme() || 'clustal2'}  // Now correct!
           maxLength={maxLength}
           onSchemeChange={(s) => { clearAll(); dispatcher?.setColorScheme(s); }}
@@ -692,7 +777,7 @@ function MonomerMSAPanelRefactored({
         />
       </div>
       <div className="flex-1 min-h-0 p-2">
-     <ResizableMSAContainer
+        <ResizableMSAContainer
           ref={msaRef}
           sequences={allSequences}
           maxLength={maxLength}

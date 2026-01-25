@@ -1,4 +1,5 @@
-import { useEffect, useCallback, useRef } from 'react';
+// src/hooks/useChainAnnotations.ts
+import { useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/store';
 import {
     setChainAnnotations,
@@ -12,35 +13,44 @@ import {
     selectVisibleLigandSites,
     selectDisplayableMutations,
 } from '@/store/slices/annotationsSlice';
-import { useGetChainAnnotationsQuery } from '@/store/tubxz_api';
-import type { ChainAnnotations, DisplayableLigandSite, DisplayableMutation } from '@/lib/types/annotations';
+import {
+    useGetPolymerAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdGetQuery,
+    useGetLigandNeighborhoodsLigandsNeighborhoodsRcsbIdAuthAsymIdGetQuery
+} from '@/store/tubxz_api';
+import type {
+    ChainAnnotations,
+    DisplayableLigandSite,
+    DisplayableMutation,
+    LigandSite,
+    MutationAnnotation
+} from '@/lib/types/annotations';
+import { BindingSite } from '@/lib/sync/types';
 
-interface UseChainAnnotationsResult {
-    annotations: ChainAnnotations | null;
-    ligandSites: DisplayableLigandSite[];
-    visibleLigandSites: DisplayableLigandSite[];
-    mutations: DisplayableMutation[];
-    isLoading: boolean;
-    error: string | null;
-    showMutations: boolean;
-    setShowMutations: (visible: boolean) => void;
-    toggleLigand: (siteId: string) => void;
-    showAllLigandSites: () => void;
-    hideAllLigandSites: () => void;
-    clearAll: () => void;
-    isLigandVisible: (siteId: string) => boolean;
+function indicesToRegions(indices: number[]): Array<{ start: number; end: number }> {
+    if (!indices || indices.length === 0) return [];
+    const sorted = [...indices].sort((a, b) => a - b);
+    const regions = [];
+    let start = sorted[0];
+    for (let i = 1; i <= sorted.length; i++) {
+        if (i === sorted.length || sorted[i] !== sorted[i - 1] + 1) {
+            regions.push({ start, end: sorted[i - 1] });
+            if (i < sorted.length) start = sorted[i];
+        }
+    }
+    return regions;
 }
 
-export function useChainAnnotations(
-    rcsbId: string | null,
-    authAsymId: string | null
-): UseChainAnnotationsResult {
+export function useChainAnnotations(rcsbId: string | null, authAsymId: string | null) {
     const dispatch = useAppDispatch();
     const normalizedRcsbId = rcsbId?.toUpperCase() || '';
     const chainKey = normalizedRcsbId && authAsymId ? `${normalizedRcsbId}_${authAsymId}` : '';
 
-    // RTK Query hook
-    const { data, isLoading, error } = useGetChainAnnotationsQuery(
+    const { data: variantData, isLoading: isLoadingVariants } = useGetPolymerAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdGetQuery(
+        { rcsbId: normalizedRcsbId, authAsymId: authAsymId || '' },
+        { skip: !normalizedRcsbId || !authAsymId }
+    );
+
+    const { data: ligandData, isLoading: isLoadingLigands } = useGetLigandNeighborhoodsLigandsNeighborhoodsRcsbIdAuthAsymIdGetQuery(
         { rcsbId: normalizedRcsbId, authAsymId: authAsymId || '' },
         { skip: !normalizedRcsbId || !authAsymId }
     );
@@ -48,110 +58,84 @@ export function useChainAnnotations(
     const processedRef = useRef<string | null>(null);
 
     useEffect(() => {
-        // Log to verify keys (should be camelCase based on your Backend CamelModel)
-        console.log(`[GATE 1] API Response for ${chainKey}:`, data);
+        // CRITICAL: We need BOTH data objects to build the full annotation record
+        if (variantData && ligandData && chainKey && processedRef.current !== chainKey) {
+            console.log(`[useChainAnnotations] Merging real data for ${chainKey}`);
 
-        // FIX: The backend sends 'ligandSites', not 'ligand_sites'
-        // Inside useChainAnnotations.ts -> useEffect
-
-        if (data?.ligandSites && data?.mutations && chainKey && processedRef.current !== chainKey) {
             const converted: ChainAnnotations = {
                 rcsbId: normalizedRcsbId,
-                authAsymId: data.authAsymId,
-                entityId: data.entityId,
-                family: data.family,
-                mutations: data.mutations.map((m: any) => ({
-                    masterIndex: m.masterIndex,
-                    fromResidue: m.fromResidue,
-                    toResidue: m.toResidue,
-                    phenotype: m.phenotype,
-                    uniprotId: m.uniprotId,
-                    species: m.species,
-                    tubulinType: m.tubulinType,
-                    keywords: m.keywords,
-                    databaseSource: m.databaseSource,
-                    referenceLink: m.referenceLink,
+                authAsymId: variantData.auth_asym_id,
+                entityId: variantData.entity_id,
+                family: variantData.family,
+                mutations: variantData.variants.map((v): MutationAnnotation => ({
+                    masterIndex: v.master_index ?? 0,
+                    fromResidue: v.wild_type ?? '?',
+                    toResidue: v.observed ?? '?',
+                    phenotype: v.phenotype ?? null,
+                    uniprotId: v.uniprot_id ?? null,
+                    species: null,
+                    tubulinType: null,
+                    keywords: null,
+                    databaseSource: v.source,
+                    referenceLink: v.reference ?? null,
                 })),
-                // FIX: Use ligandSites (camelCase) from data
-                // Inside src/hooks/useChainAnnotations.ts -> converted object
-
-                ligandSites: data.ligandSites.map((ls: any) => ({
-                    // FIX: Switch from ls.ligand_id to ls.ligandId
-                    ligandId: ls.ligandId,
-                    ligandName: ls.ligandName,
-                    ligandChain: ls.ligandChain,
-                    ligandAuthSeqId: ls.ligandAuthSeqId,
-                    // Ensure these fall back to empty arrays if null/missing
-                    neighborhoodAuthSeqIds: ls.neighborhoodAuthSeqIds || [],
-                    interactions: (ls.interactions || []).map((ix: any) => ({
-                        authSeqId: ix.authSeqId,
-                        masterIndex: ix.masterIndex,
-                        interactionType: ix.interactionType,
-                        residueCompId: ix.residueCompId,
-                        residueAtomId: ix.residueAtomId,
-                    })),
+                ligandSites: ligandData.neighborhoods.map((ls): LigandSite => ({
+                    ligandId: ls.ligand_id,
+                    ligandName: ls.ligand_name ?? ls.ligand_id,
+                    ligandChain: ls.ligand_auth_asym_id,
+                    ligandAuthSeqId: 0,
+                    drugbankId: ls.drugbank_id ?? null,
+                    smiles: null,
+                    neighborhoodAuthSeqIds: ls.residues?.map(r => r.observed_index) ?? [],
+                    interactions: ls.residues?.map(r => ({
+                        authSeqId: r.observed_index,
+                        masterIndex: r.master_index ?? null,
+                        interactionType: 'contact',
+                        residueCompId: r.comp_id,
+                        residueAtomId: '',
+                    })) ?? [],
                 })),
-                mutationCount: data.mutationCount,
-                ligandCount: data.ligandCount,
-                uniqueLigandTypes: data.uniqueLigandTypes,
+                mutationCount: variantData.total_count,
+                ligandCount: ligandData.total_ligands,
+                uniqueLigandTypes: Array.from(new Set(ligandData.neighborhoods.map(n => n.ligand_id))),
             };
 
-            console.log("FINAL MAPPING CHECK:", converted.ligandSites.map(ls => ({
-                id: ls.ligandId,
-                name: ls.ligandName,
-                count: ls.neighborhoodAuthSeqIds.length
-            })));
             dispatch(setChainAnnotations(converted));
             processedRef.current = chainKey;
         }
-    }, [data, chainKey, dispatch, normalizedRcsbId]);
+    }, [variantData, ligandData, chainKey, dispatch, normalizedRcsbId]);
 
     const annotations = useAppSelector(state => selectChainAnnotations(state, chainKey));
     const displayState = useAppSelector(state => selectChainDisplayState(state, chainKey));
-    const ligandSites = useAppSelector(state => selectDisplayableLigandSites(state, chainKey));
-    const visibleLigandSites = useAppSelector(state => selectVisibleLigandSites(state, chainKey));
-    const mutations = useAppSelector(state => selectDisplayableMutations(state, chainKey));
+    const ligandSites = useAppSelector(state => selectDisplayableLigandSites(state, chainKey)) || [];
+    const mutations = useAppSelector(state => selectDisplayableMutations(state, chainKey)) || [];
 
-    const setShowMutations = useCallback((visible: boolean) => {
-        if (chainKey) dispatch(setMutationsVisible({ chainKey, visible }));
-    }, [dispatch, chainKey]);
+    const formattedBindingSites: BindingSite[] = useMemo(() => {
+        return ligandSites.map(ls => ({
+            id: ls.id,
+            name: ls.ligandName,
+            color: ls.color,
+            msaRegions: indicesToRegions(ls.masterIndices)
+        }));
+    }, [ligandSites]);
 
-    const toggleLigand = useCallback((siteId: string) => {
-        if (chainKey) dispatch(toggleLigandSite({ chainKey, siteKey: siteId }));
-    }, [dispatch, chainKey]);
-
-    const showAllLigandSites = useCallback(() => {
-        if (chainKey) dispatch(showAllLigands(chainKey));
-    }, [dispatch, chainKey]);
-
-    const hideAllLigandSites = useCallback(() => {
-        if (chainKey) dispatch(hideAllLigands(chainKey));
-    }, [dispatch, chainKey]);
-
-    const clearAll = useCallback(() => {
-        if (chainKey) {
-            dispatch(setMutationsVisible({ chainKey, visible: false }));
-            dispatch(hideAllLigands(chainKey));
-        }
-    }, [dispatch, chainKey]);
-
-    const isLigandVisible = useCallback((siteId: string): boolean => {
-        return displayState?.visibleLigandSites.includes(siteId) ?? false;
-    }, [displayState]);
+    const activeLigandIds = useMemo(() =>
+        new Set(displayState?.visibleLigandSites || []),
+        [displayState]);
 
     return {
         annotations,
         ligandSites,
-        visibleLigandSites,
+        bindingSites: formattedBindingSites,
+        activeLigandIds,
         mutations,
-        isLoading,
-        error: error ? 'Failed to fetch annotations' : null,
+        isLoading: isLoadingVariants || isLoadingLigands,
         showMutations: displayState?.showMutations ?? false,
-        setShowMutations,
-        toggleLigand,
-        showAllLigandSites,
-        hideAllLigandSites,
-        clearAll,
-        isLigandVisible,
+        setShowMutations: (v: boolean) => dispatch(setMutationsVisible({ chainKey, visible: v })),
+        toggleLigand: (id: string) => dispatch(toggleLigandSite({ chainKey, siteKey: id })),
+        clearAll: () => {
+            dispatch(setMutationsVisible({ chainKey, visible: false }));
+            dispatch(hideAllLigands(chainKey));
+        }
     };
 }
