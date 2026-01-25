@@ -287,8 +287,8 @@ export type ListStructuresStructuresGetApiArg = {
   yearMax?: number | null;
   expMethod?: string[] | null;
   polyState?: string[] | null;
-  sourceTaxa?: number[] | null;
-  hostTaxa?: number[] | null;
+  sourceTaxa?: string[] | null;
+  hostTaxa?: string[] | null;
   ligands?: string[] | null;
   family?: string[] | null;
   uniprot?: string[] | null;
