@@ -2,7 +2,7 @@
 import { useCallback, useState, useRef } from 'react';
 import { useAppDispatch } from '@/store/store';
 import { addSequence, setPositionMapping, PositionMapping } from '@/store/slices/sequence_registry';
-import { useAlignSequenceMsaSequencePostMutation } from '@/store/tubxz_api';
+import { useAlignSequenceMutation } from '@/store/tubxz_api';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 
 export interface AlignmentResult {
@@ -30,7 +30,7 @@ function formatFamily(family: string | undefined): string | undefined {
 
 export function useChainAlignment() {
   const dispatch = useAppDispatch();
-  const [alignSequence] = useAlignSequenceMsaSequencePostMutation();
+  const [alignSequence] = useAlignSequenceMutation();
   
   const [isAligning, setIsAligning] = useState(false);
   const [currentChain, setCurrentChain] = useState<string | null>(null);

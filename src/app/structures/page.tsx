@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Eye } from "lucide-react";
 
 import { useAppDispatch, useAppSelector } from "@/store/store";
-import { useListStructuresStructuresGetQuery } from "@/store/tubxz_api";
+import { useListStructuresQuery } from "@/store/tubxz_api";
 import {
   set_structures_total_count,
   set_structures_next_cursor,
@@ -142,7 +142,7 @@ export default function StructureCataloguePage() {
   );
 
   const { data, isLoading, isError, refetch } =
-    useListStructuresStructuresGetQuery(apiArgs);
+    useListStructuresQuery(apiArgs);
 
   useEffect(() => {
     if (data) {

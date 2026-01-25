@@ -13,18 +13,18 @@ const injectedRtkApi = api
   })
   .injectEndpoints({
     endpoints: (build) => ({
-      getTaxonomyTreeStructuresTaxonomyTreeTaxTypeGet: build.query<
-        GetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetApiResponse,
-        GetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetApiArg
+      getTaxonomyTree: build.query<
+        GetTaxonomyTreeApiResponse,
+        GetTaxonomyTreeApiArg
       >({
         query: (queryArg) => ({
           url: `/structures/taxonomy-tree/${queryArg.taxType}`,
         }),
         providesTags: ["Structures"],
       }),
-      listStructuresStructuresGet: build.query<
-        ListStructuresStructuresGetApiResponse,
-        ListStructuresStructuresGetApiArg
+      listStructures: build.query<
+        ListStructuresApiResponse,
+        ListStructuresApiArg
       >({
         query: (queryArg) => ({
           url: `/structures`,
@@ -57,49 +57,40 @@ const injectedRtkApi = api
         }),
         providesTags: ["Structures"],
       }),
-      getFacetsStructuresFacetsGet: build.query<
-        GetFacetsStructuresFacetsGetApiResponse,
-        GetFacetsStructuresFacetsGetApiArg
+      getStructureFacets: build.query<
+        GetStructureFacetsApiResponse,
+        GetStructureFacetsApiArg
       >({
         query: () => ({ url: `/structures/facets` }),
         providesTags: ["Structures"],
       }),
-      getTaxonomyStructuresTaxonomyTaxTypeGet: build.query<
-        GetTaxonomyStructuresTaxonomyTaxTypeGetApiResponse,
-        GetTaxonomyStructuresTaxonomyTaxTypeGetApiArg
+      getTaxonomyFlat: build.query<
+        GetTaxonomyFlatApiResponse,
+        GetTaxonomyFlatApiArg
       >({
         query: (queryArg) => ({
           url: `/structures/taxonomy/${queryArg.taxType}`,
         }),
         providesTags: ["Structures"],
       }),
-      getFamiliesStructuresFamiliesGet: build.query<
-        GetFamiliesStructuresFamiliesGetApiResponse,
-        GetFamiliesStructuresFamiliesGetApiArg
-      >({
+      listFamilies: build.query<ListFamiliesApiResponse, ListFamiliesApiArg>({
         query: () => ({ url: `/structures/families` }),
         providesTags: ["Structures"],
       }),
-      getStructureStructuresRcsbIdGet: build.query<
-        GetStructureStructuresRcsbIdGetApiResponse,
-        GetStructureStructuresRcsbIdGetApiArg
-      >({
+      getStructure: build.query<GetStructureApiResponse, GetStructureApiArg>({
         query: (queryArg) => ({ url: `/structures/${queryArg.rcsbId}` }),
         providesTags: ["Structures"],
       }),
-      getStructureProfileStructuresRcsbIdProfileGet: build.query<
-        GetStructureProfileStructuresRcsbIdProfileGetApiResponse,
-        GetStructureProfileStructuresRcsbIdProfileGetApiArg
+      getStructureProfile: build.query<
+        GetStructureProfileApiResponse,
+        GetStructureProfileApiArg
       >({
         query: (queryArg) => ({
           url: `/structures/${queryArg.rcsbId}/profile`,
         }),
         providesTags: ["Structures"],
       }),
-      listPolymersPolymersGet: build.query<
-        ListPolymersPolymersGetApiResponse,
-        ListPolymersPolymersGetApiArg
-      >({
+      listPolymers: build.query<ListPolymersApiResponse, ListPolymersApiArg>({
         query: (queryArg) => ({
           url: `/polymers`,
           params: {
@@ -120,10 +111,7 @@ const injectedRtkApi = api
         }),
         providesTags: ["Polymers"],
       }),
-      listLigandsLigandsGet: build.query<
-        ListLigandsLigandsGetApiResponse,
-        ListLigandsLigandsGetApiArg
-      >({
+      listLigands: build.query<ListLigandsApiResponse, ListLigandsApiArg>({
         query: (queryArg) => ({
           url: `/ligands`,
           params: {
@@ -137,9 +125,9 @@ const injectedRtkApi = api
         }),
         providesTags: ["Ligands"],
       }),
-      ligandOptionsLigandsOptionsGet: build.query<
-        LigandOptionsLigandsOptionsGetApiResponse,
-        LigandOptionsLigandsOptionsGetApiArg
+      listLigandOptions: build.query<
+        ListLigandOptionsApiResponse,
+        ListLigandOptionsApiArg
       >({
         query: (queryArg) => ({
           url: `/ligands/options`,
@@ -150,19 +138,18 @@ const injectedRtkApi = api
         }),
         providesTags: ["Ligands"],
       }),
-      getLigandNeighborhoodsLigandsNeighborhoodsRcsbIdAuthAsymIdGet:
-        build.query<
-          GetLigandNeighborhoodsLigandsNeighborhoodsRcsbIdAuthAsymIdGetApiResponse,
-          GetLigandNeighborhoodsLigandsNeighborhoodsRcsbIdAuthAsymIdGetApiArg
-        >({
-          query: (queryArg) => ({
-            url: `/ligands/neighborhoods/${queryArg.rcsbId}/${queryArg.authAsymId}`,
-          }),
-          providesTags: ["Ligands"],
+      getPolymerLigandNeighborhoods: build.query<
+        GetPolymerLigandNeighborhoodsApiResponse,
+        GetPolymerLigandNeighborhoodsApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/ligands/neighborhoods/${queryArg.rcsbId}/${queryArg.authAsymId}`,
         }),
-      alignSequenceMsaSequencePost: build.mutation<
-        AlignSequenceMsaSequencePostApiResponse,
-        AlignSequenceMsaSequencePostApiArg
+        providesTags: ["Ligands"],
+      }),
+      alignSequence: build.mutation<
+        AlignSequenceApiResponse,
+        AlignSequenceApiArg
       >({
         query: (queryArg) => ({
           url: `/msa/sequence`,
@@ -171,26 +158,25 @@ const injectedRtkApi = api
         }),
         invalidatesTags: ["MSA Alignment"],
       }),
-      getMasterProfileMsaMasterGet: build.query<
-        GetMasterProfileMsaMasterGetApiResponse,
-        GetMasterProfileMsaMasterGetApiArg
+      getMasterProfile: build.query<
+        GetMasterProfileApiResponse,
+        GetMasterProfileApiArg
       >({
         query: () => ({ url: `/msa/master` }),
         providesTags: ["MSA Alignment"],
       }),
-      getVariantsAtPositionEndpointAnnotationsVariantsFamilyPositionGet:
-        build.query<
-          GetVariantsAtPositionEndpointAnnotationsVariantsFamilyPositionGetApiResponse,
-          GetVariantsAtPositionEndpointAnnotationsVariantsFamilyPositionGetApiArg
-        >({
-          query: (queryArg) => ({
-            url: `/annotations/variants/${queryArg.family}/${queryArg.position}`,
-          }),
-          providesTags: ["Annotations"],
+      getVariantsAtPosition: build.query<
+        GetVariantsAtPositionApiResponse,
+        GetVariantsAtPositionApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/annotations/variants/${queryArg.family}/${queryArg.position}`,
         }),
-      getVariantsInRangeAnnotationsRangeFamilyGet: build.query<
-        GetVariantsInRangeAnnotationsRangeFamilyGetApiResponse,
-        GetVariantsInRangeAnnotationsRangeFamilyGetApiArg
+        providesTags: ["Annotations"],
+      }),
+      getVariantsInRange: build.query<
+        GetVariantsInRangeApiResponse,
+        GetVariantsInRangeApiArg
       >({
         query: (queryArg) => ({
           url: `/annotations/range/${queryArg.family}`,
@@ -201,18 +187,18 @@ const injectedRtkApi = api
         }),
         providesTags: ["Annotations"],
       }),
-      getPolymerAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdGet: build.query<
-        GetPolymerAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdGetApiResponse,
-        GetPolymerAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdGetApiArg
+      getPolymerAnnotations: build.query<
+        GetPolymerAnnotationsApiResponse,
+        GetPolymerAnnotationsApiArg
       >({
         query: (queryArg) => ({
           url: `/annotations/polymer/${queryArg.rcsbId}/${queryArg.authAsymId}`,
         }),
         providesTags: ["Annotations"],
       }),
-      getVariantStatsAnnotationsStatsFamilyGet: build.query<
-        GetVariantStatsAnnotationsStatsFamilyGetApiResponse,
-        GetVariantStatsAnnotationsStatsFamilyGetApiArg
+      getVariantStats: build.query<
+        GetVariantStatsApiResponse,
+        GetVariantStatsApiArg
       >({
         query: (queryArg) => ({ url: `/annotations/stats/${queryArg.family}` }),
         providesTags: ["Annotations"],
@@ -228,14 +214,14 @@ const injectedRtkApi = api
     overrideExisting: false,
   });
 export { injectedRtkApi as tubxz_api };
-export type GetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetApiResponse =
-  /** status 200 Successful Response */ any;
-export type GetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetApiArg = {
+export type GetTaxonomyTreeApiResponse =
+  /** status 200 Successful Response */ TaxonomyTreeNode[];
+export type GetTaxonomyTreeApiArg = {
   taxType: string;
 };
-export type ListStructuresStructuresGetApiResponse =
+export type ListStructuresApiResponse =
   /** status 200 Successful Response */ StructureListResponse;
-export type ListStructuresStructuresGetApiArg = {
+export type ListStructuresApiArg = {
   cursor?: string | null;
   limit?: number;
   search?: string | null;
@@ -261,30 +247,30 @@ export type ListStructuresStructuresGetApiArg = {
   variantSource?: string | null;
   variantPhenotype?: string | null;
 };
-export type GetFacetsStructuresFacetsGetApiResponse =
+export type GetStructureFacetsApiResponse =
   /** status 200 Successful Response */ FilterFacets;
-export type GetFacetsStructuresFacetsGetApiArg = void;
-export type GetTaxonomyStructuresTaxonomyTaxTypeGetApiResponse =
-  /** status 200 Successful Response */ any;
-export type GetTaxonomyStructuresTaxonomyTaxTypeGetApiArg = {
+export type GetStructureFacetsApiArg = void;
+export type GetTaxonomyFlatApiResponse =
+  /** status 200 Successful Response */ TaxonomyFlatNode[];
+export type GetTaxonomyFlatApiArg = {
   taxType: string;
 };
-export type GetFamiliesStructuresFamiliesGetApiResponse =
-  /** status 200 Successful Response */ any;
-export type GetFamiliesStructuresFamiliesGetApiArg = void;
-export type GetStructureStructuresRcsbIdGetApiResponse =
-  /** status 200 Successful Response */ any;
-export type GetStructureStructuresRcsbIdGetApiArg = {
+export type ListFamiliesApiResponse =
+  /** status 200 Successful Response */ FamilyCount[];
+export type ListFamiliesApiArg = void;
+export type GetStructureApiResponse =
+  /** status 200 Successful Response */ StructureDetail;
+export type GetStructureApiArg = {
   rcsbId: string;
 };
-export type GetStructureProfileStructuresRcsbIdProfileGetApiResponse =
+export type GetStructureProfileApiResponse =
   /** status 200 Successful Response */ TubulinStructure;
-export type GetStructureProfileStructuresRcsbIdProfileGetApiArg = {
+export type GetStructureProfileApiArg = {
   rcsbId: string;
 };
-export type ListPolymersPolymersGetApiResponse =
+export type ListPolymersApiResponse =
   /** status 200 Successful Response */ PolypeptideListResponse;
-export type ListPolymersPolymersGetApiArg = {
+export type ListPolymersApiArg = {
   cursor?: string | null;
   limit?: number;
   resMin?: number | null;
@@ -299,9 +285,9 @@ export type ListPolymersPolymersGetApiArg = {
   seqLenMax?: number | null;
   hasVariants?: boolean | null;
 };
-export type ListLigandsLigandsGetApiResponse =
+export type ListLigandsApiResponse =
   /** status 200 Successful Response */ LigandListResponse;
-export type ListLigandsLigandsGetApiArg = {
+export type ListLigandsApiArg = {
   cursor?: string | null;
   limit?: number;
   search?: string | null;
@@ -309,62 +295,61 @@ export type ListLigandsLigandsGetApiArg = {
   hasDrugbank?: boolean | null;
   inStructures?: string[] | null;
 };
-export type LigandOptionsLigandsOptionsGetApiResponse =
+export type ListLigandOptionsApiResponse =
   /** status 200 Successful Response */ LigandListResponse;
-export type LigandOptionsLigandsOptionsGetApiArg = {
+export type ListLigandOptionsApiArg = {
   /** Search by ID or name */
   search?: string | null;
   limit?: number;
 };
-export type GetLigandNeighborhoodsLigandsNeighborhoodsRcsbIdAuthAsymIdGetApiResponse =
+export type GetPolymerLigandNeighborhoodsApiResponse =
   /** status 200 Successful Response */ PolymerNeighborhoodsResponse;
-export type GetLigandNeighborhoodsLigandsNeighborhoodsRcsbIdAuthAsymIdGetApiArg =
-  {
-    rcsbId: string;
-    authAsymId: string;
-  };
-export type AlignSequenceMsaSequencePostApiResponse =
+export type GetPolymerLigandNeighborhoodsApiArg = {
+  rcsbId: string;
+  authAsymId: string;
+};
+export type AlignSequenceApiResponse =
   /** status 200 Successful Response */ AlignmentResponse;
-export type AlignSequenceMsaSequencePostApiArg = {
+export type AlignSequenceApiArg = {
   alignmentRequest: AlignmentRequest;
 };
-export type GetMasterProfileMsaMasterGetApiResponse =
-  /** status 200 Successful Response */ any;
-export type GetMasterProfileMsaMasterGetApiArg = void;
-export type GetVariantsAtPositionEndpointAnnotationsVariantsFamilyPositionGetApiResponse =
+export type GetMasterProfileApiResponse =
+  /** status 200 Successful Response */ MasterProfileInfo;
+export type GetMasterProfileApiArg = void;
+export type GetVariantsAtPositionApiResponse =
   /** status 200 Successful Response */ PositionAnnotationsResponse;
-export type GetVariantsAtPositionEndpointAnnotationsVariantsFamilyPositionGetApiArg =
-  {
-    family: string;
-    position: number;
-  };
-export type GetVariantsInRangeAnnotationsRangeFamilyGetApiResponse =
-  /** status 200 Successful Response */ {
-    [key: string]: any;
-  };
-export type GetVariantsInRangeAnnotationsRangeFamilyGetApiArg = {
+export type GetVariantsAtPositionApiArg = {
+  family: string;
+  position: number;
+};
+export type GetVariantsInRangeApiResponse =
+  /** status 200 Successful Response */ VariantRangeSummary;
+export type GetVariantsInRangeApiArg = {
   family: string;
   /** Start position (inclusive) */
   start: number;
   /** End position (inclusive) */
   end: number;
 };
-export type GetPolymerAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdGetApiResponse =
+export type GetPolymerAnnotationsApiResponse =
   /** status 200 Successful Response */ PolymerAnnotationsResponse;
-export type GetPolymerAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdGetApiArg = {
+export type GetPolymerAnnotationsApiArg = {
   rcsbId: string;
   authAsymId: string;
 };
-export type GetVariantStatsAnnotationsStatsFamilyGetApiResponse =
-  /** status 200 Successful Response */ {
-    [key: string]: any;
-  };
-export type GetVariantStatsAnnotationsStatsFamilyGetApiArg = {
+export type GetVariantStatsApiResponse =
+  /** status 200 Successful Response */ VariantStats;
+export type GetVariantStatsApiArg = {
   family: string;
 };
 export type HealthHealthGetApiResponse =
   /** status 200 Successful Response */ any;
 export type HealthHealthGetApiArg = void;
+export type TaxonomyTreeNode = {
+  value: number;
+  title: string;
+  children?: TaxonomyTreeNode[] | null;
+};
 export type ValidationError = {
   loc: (string | number)[];
   msg: string;
@@ -435,6 +420,33 @@ export type FilterFacets = {
   variants_by_family?: VariantsByFamily[];
   common_variants?: CommonVariant[];
   variant_position_ranges?: VariantPositionRange[];
+};
+export type TaxonomyFlatNode = {
+  tax_id: number;
+  name: string;
+  rank?: string | null;
+  structure_count: number;
+};
+export type FamilyCount = {
+  family: string;
+  count: number;
+};
+export type StructureDetail = {
+  structure: {
+    [key: string]: any;
+  };
+  polypeptide_entities: {
+    [key: string]: any;
+  }[];
+  ligand_entities: {
+    [key: string]: any;
+  }[];
+  polypeptide_instances: {
+    [key: string]: any;
+  }[];
+  ligand_instances: {
+    [key: string]: any;
+  }[];
 };
 export type TubulinFamily =
   | "tubulin_alpha"
@@ -592,6 +604,7 @@ export type Nonpolymer = {
   asym_id: string;
   entity_id: string;
   assembly_id: number;
+  auth_seq_id: number;
 };
 export type InstanceIdentifier = {
   entity_id: string;
@@ -739,6 +752,17 @@ export type AlignmentRequest = {
   /** The PDB auth_seq_ids corresponding 1:1 to the sequence characters. */
   auth_seq_ids?: number[] | null;
 };
+export type MasterProfileInfo = {
+  profile_path: string;
+  profile_exists: boolean;
+  num_sequences: number;
+  alignment_length: number;
+  sequences: {
+    [key: string]: any;
+  }[];
+  full_alignment: string;
+  muscle_binary: string;
+};
 export type VariantAnnotation = {
   type: string;
   master_index?: number | null;
@@ -758,6 +782,18 @@ export type PositionAnnotationsResponse = {
   variants: VariantAnnotation[];
   total_count: number;
 };
+export type VariantRangeSummary = {
+  family: string;
+  range: {
+    [key: string]: number;
+  };
+  positions_with_variants: number;
+  data: {
+    [key: string]: {
+      [key: string]: any;
+    }[];
+  };
+};
 export type PolymerAnnotationsResponse = {
   rcsb_id: string;
   auth_asym_id: string;
@@ -766,23 +802,33 @@ export type PolymerAnnotationsResponse = {
   variants: VariantAnnotation[];
   total_count: number;
 };
+export type VariantStats = {
+  family: string;
+  by_type: {
+    [key: string]: number;
+  };
+  position_range: {
+    [key: string]: number | null;
+  };
+  total_variants: number;
+};
 export const {
-  useGetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetQuery,
-  useListStructuresStructuresGetQuery,
-  useGetFacetsStructuresFacetsGetQuery,
-  useGetTaxonomyStructuresTaxonomyTaxTypeGetQuery,
-  useGetFamiliesStructuresFamiliesGetQuery,
-  useGetStructureStructuresRcsbIdGetQuery,
-  useGetStructureProfileStructuresRcsbIdProfileGetQuery,
-  useListPolymersPolymersGetQuery,
-  useListLigandsLigandsGetQuery,
-  useLigandOptionsLigandsOptionsGetQuery,
-  useGetLigandNeighborhoodsLigandsNeighborhoodsRcsbIdAuthAsymIdGetQuery,
-  useAlignSequenceMsaSequencePostMutation,
-  useGetMasterProfileMsaMasterGetQuery,
-  useGetVariantsAtPositionEndpointAnnotationsVariantsFamilyPositionGetQuery,
-  useGetVariantsInRangeAnnotationsRangeFamilyGetQuery,
-  useGetPolymerAnnotationsAnnotationsPolymerRcsbIdAuthAsymIdGetQuery,
-  useGetVariantStatsAnnotationsStatsFamilyGetQuery,
+  useGetTaxonomyTreeQuery,
+  useListStructuresQuery,
+  useGetStructureFacetsQuery,
+  useGetTaxonomyFlatQuery,
+  useListFamiliesQuery,
+  useGetStructureQuery,
+  useGetStructureProfileQuery,
+  useListPolymersQuery,
+  useListLigandsQuery,
+  useListLigandOptionsQuery,
+  useGetPolymerLigandNeighborhoodsQuery,
+  useAlignSequenceMutation,
+  useGetMasterProfileQuery,
+  useGetVariantsAtPositionQuery,
+  useGetVariantsInRangeQuery,
+  useGetPolymerAnnotationsQuery,
+  useGetVariantStatsQuery,
   useHealthHealthGetQuery,
 } = injectedRtkApi;

@@ -17,6 +17,8 @@ import {
   selectActiveMonomerChainId,
   selectAlignedStructuresForActiveChain,
 } from '@/components/molstar/state/selectors';
+import { useChainAnnotationsComposed } from '@/hooks/annotations/useChainAnnotationsComposed';
+
 import { createClassificationFromProfile } from '@/services/profile_service';
 import {
   ResizableHandle,
@@ -34,7 +36,7 @@ import {
   selectIsChainAligned,
   selectSequenceById,
 } from '@/store/slices/sequence_registry';
-import { useGetMasterProfileMsaMasterGetQuery } from '@/store/tubxz_api';
+import { useGetMasterProfileQuery } from '@/store/tubxz_api';
 import { useChainAlignment } from '@/hooks/useChainAlignment';
 import { useNightingaleComponents } from '@/hooks/useNightingaleComponents';
 // import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/app/msalite/components/ResizableMSAContainer';
@@ -52,7 +54,7 @@ import { useBindingSites } from '@/hooks/useBindingSites';
 import { BindingSite } from '@/lib/types/sync';
 import { AnnotationData, AnnotationPanel, MUTATION_COLOR } from '@/components/msa/AnnotationPanel';
 import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/components/msa/ResizableMSAContainer';
-import { SyncDispatcher } from '@/lib/controllers/SyncDispatcher';
+import { SyncDispatcher } from '@/lib/sync/SyncDispatcher';
 import { useChainAnnotations } from '@/hooks/useChainAnnotations';
 // In page.tsx or a separate constants file
 export const TUBULIN_BINDING_SITES: BindingSite[] = [
@@ -137,7 +139,7 @@ export default function StructureProfilePageRefactored() {
   const masterSequencesInitialized = useRef(false);
 
   const { areLoaded: nglLoaded } = useNightingaleComponents();
-  const { data: masterData } = useGetMasterProfileMsaMasterGetQuery();
+  const { data: masterData } = useGetMasterProfileQuery();
   const masterSequences = useAppSelector(selectMasterSequences);
   const pdbSequences = useAppSelector(selectPdbSequences);
 
@@ -152,51 +154,29 @@ export default function StructureProfilePageRefactored() {
   // Fetch Real Data
   // Inside StructureProfilePageRefactored in page.tsx
 
+
   const {
     ligandSites,
-    bindingSites,
-    activeLigandIds, // This is the Set of IDs that are currently "checked" in Redux
     mutations,
+    bindingSites,
+    visibleLigandIds,
     showMutations,
+    isLoading: annotationsLoading,
     setShowMutations,
     toggleLigand,
-    clearAll: clearReduxAnnotations,
-    isLoading: annotationsLoading
-  } = useChainAnnotations(loadedStructure, activeChainId);
+    clearAll,           // <-- use this name
+    focusLigandSite,
+  } = useChainAnnotationsComposed({
+    rcsbId: loadedStructure,
+    authAsymId: activeChainId,
+    dispatcher,
+  });
+
 
   const activeSequence = useAppSelector(state =>
     sequenceId ? selectSequenceById(state, sequenceId) : null
   );
 
-  // EFFECT: Sync UI State to 3D/MSA Dispatcher
-  useEffect(() => {
-    if (!dispatcher || !activeSequence) return;
-    const rowIndex = activeSequence.rowIndex;
-
-    // Sync Ligands
-    bindingSites.forEach(site => {
-      if (activeLigandIds.has(site.id)) {
-        const lsData = ligandSites.find(ls => ls.id === site.id);
-        if (lsData) {
-          // Paint ONLY the monomer row to avoid clunky full-MSA painting
-          dispatcher.addBindingSiteToRow(site.id, site.name, site.color, lsData.masterIndices, rowIndex);
-        }
-      } else {
-        dispatcher.removeBindingSite(site.id);
-      }
-    });
-
-    // Sync Mutations
-    if (showMutations && mutations.length > 0) {
-      dispatcher.addMutations(
-        'active-mutations',
-        mutations.map(m => ({ msaPosition: m.masterIndex, color: MUTATION_COLOR })),
-        rowIndex
-      );
-    } else {
-      dispatcher.removeMutations('active-mutations');
-    }
-  }, [activeLigandIds, showMutations, bindingSites, mutations, dispatcher, activeSequence, ligandSites]);
 
   // Transform LigandSites to BindingSites for dispatcher and UI
 
@@ -294,42 +274,6 @@ export default function StructureProfilePageRefactored() {
 
 
 
-  useEffect(() => {
-    if (!dispatcher || !activeSequence) return;
-
-    const rowIndex = activeSequence.rowIndex;
-
-    // Sync Ligand Highlighting to the SPECIFIC ROW
-    bindingSites.forEach(site => {
-      if (activeLigandIds.has(site.id)) {
-        // Find the master indices for this specific site
-        const lsData = ligandSites.find(ls => ls.id === site.id);
-        if (lsData) {
-          // Use addBindingSiteToRow instead of addBindingSite to isolate color
-          dispatcher.addBindingSiteToRow(
-            site.id,
-            site.name,
-            site.color,
-            lsData.masterIndices,
-            rowIndex
-          );
-        }
-      } else {
-        dispatcher.removeBindingSite(site.id);
-      }
-    });
-
-    // Sync Mutation Highlighting
-    if (showMutations && mutations.length > 0) {
-      dispatcher.addMutations(
-        'active-mutations',
-        mutations.map(m => ({ msaPosition: m.masterIndex, color: MUTATION_COLOR })),
-        rowIndex // Paint mutations only on the monomer row
-      );
-    } else {
-      dispatcher.removeMutations('active-mutations');
-    }
-  }, [activeLigandIds, showMutations, bindingSites, mutations, dispatcher, activeSequence, ligandSites]);
 
 
 
@@ -364,12 +308,13 @@ export default function StructureProfilePageRefactored() {
                   pdbId={loadedStructure}
                   profile={profile}
                   annotationData={annotationData}
-                  activeBindingSites={new Set(ligandSites.map(l => l.id))}
-                  showMutations={showMutations}
+
+                  activeBindingSites={visibleLigandIds}  // was: new Set(ligandSites.map(l => l.id))
                   onToggleSite={toggleLigand}
-                  onFocusSite={focusSite}
+                  onFocusSite={focusLigandSite}
                   onToggleMutations={setShowMutations}
-                  onClearAll={clearReduxAnnotations}
+                  onClearAll={clearAll}
+                  showMutations={showMutations}
                   annotationMode={annotationMode}
                   selectedSequence={selectedSequence}
                   onApplyToSelected={applyToSelected}
@@ -411,8 +356,8 @@ export default function StructureProfilePageRefactored() {
                       dispatcher={dispatcher}
                       activeSites={new Set(ligandSites.map(l => l.id))}
                       toggleSite={toggleLigand}
-                      focusSite={focusSite}
-                      clearAll={clearReduxAnnotations}
+                      focusSite={focusLigandSite}
+                      clearAll={clearAll}
                       showMutations={showMutations}
                       setShowMutations={setShowMutations}
                     />

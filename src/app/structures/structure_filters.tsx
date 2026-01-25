@@ -12,9 +12,12 @@ import {
 import { ChevronDown, Layers, LayoutGrid } from "lucide-react";
 
 import {
-    useGetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetQuery,
-    useGetFamiliesStructuresFamiliesGetQuery,
-    useGetFacetsStructuresFacetsGetQuery,
+    useGetTaxonomyTreeQuery,
+    useListFamiliesQuery,
+    useGetStructureFacetsQuery,
+    // useGetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetQuery,
+    // useGetFamiliesStructuresFamiliesGetQuery,
+    // useGetFacetsStructuresFacetsGetQuery,
 } from "@/store/tubxz_api";
 
 import { useAppDispatch, useAppSelector } from "@/store/store";
@@ -63,9 +66,9 @@ const FilterSection = ({ label, children }: { label: string; children: React.Rea
 
 export const StructureFiltersComponent = ({ update_state }: { update_state: "structures" | "polymers" }) => {
     const dispatch                 = useAppDispatch();
-    const { data: sourceTaxaTree } = useGetTaxonomyTreeStructuresTaxonomyTreeTaxTypeGetQuery({ taxType: "source" });
-    const { data: familiesData }   = useGetFamiliesStructuresFamiliesGetQuery();
-    const { data: facets }         = useGetFacetsStructuresFacetsGetQuery();
+    const { data: sourceTaxaTree } = useGetTaxonomyTreeQuery({ taxType: "source" });
+    const { data: familiesData }   = useListFamiliesQuery();
+    const { data: facets }         = useGetStructureFacetsQuery();
 
     const filters = useAppSelector((state) => (update_state === "structures" ? state.structures_page.filters : state.polymers_page.filters));
     const total_count = useAppSelector((state) => (update_state === "structures" ? state.structures_page?.total_count : state.polymers_page?.total_count) || 0);
