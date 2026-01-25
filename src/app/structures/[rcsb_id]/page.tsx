@@ -56,6 +56,7 @@ import { AnnotationData, AnnotationPanel, MUTATION_COLOR } from '@/components/ms
 import { ResizableMSAContainer, ResizableMSAContainerHandle } from '@/components/msa/ResizableMSAContainer';
 import { SyncDispatcher } from '@/lib/sync/SyncDispatcher';
 import { useChainAnnotations } from '@/hooks/useChainAnnotations';
+import { ApiDebugPanel } from '@/components/debug/ApiDebugPanel';
 // In page.tsx or a separate constants file
 export const TUBULIN_BINDING_SITES: BindingSite[] = [
   {
@@ -320,6 +321,9 @@ export default function StructureProfilePageRefactored() {
                   onApplyToSelected={applyToSelected}
                   onSetAnnotationMode={setAnnotationMode}
                 />
+              </div>
+              <div>
+                <ApiDebugPanel/>
               </div>
             </div>
           </div>
