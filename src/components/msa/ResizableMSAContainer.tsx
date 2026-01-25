@@ -30,6 +30,8 @@ export interface ResizableMSAContainerHandle {
   setColorScheme: (scheme: string) => void;
   setHighlight: (start: number, end: number) => void;
   clearHighlight: () => void;
+  applyPositionColors: (colors: Record<number, string>) => void;
+  clearPositionColors: () => void;
 }
 
 const DEFAULTS = {
@@ -63,6 +65,11 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     const [labelWidth, setLabelWidth] = useState(0);
     const [scrollTop, setScrollTop] = useState(0);
     const [isInitialized, setIsInitialized] = useState(false);
+
+    // Track the base color scheme (before custom colors are applied)
+    const baseColorSchemeRef = useRef(colorScheme);
+    // Track whether we have custom colors active
+    const hasCustomColorsRef = useRef(false);
 
     // Track MSA scroll position for label sync
     useEffect(() => {
@@ -180,6 +187,13 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       const msa = msaRef.current;
       if (!msa) return;
 
+      // Update base scheme reference
+      baseColorSchemeRef.current = scheme;
+      
+      // If we have custom colors, don't actually change the scheme
+      // (custom colors take precedence)
+      if (hasCustomColorsRef.current) return;
+
       msa.setAttribute('color-scheme', scheme);
 
       requestAnimationFrame(() => {
@@ -204,13 +218,59 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       msa.removeAttribute('highlight');
     }, []);
 
+    // ============================================================
+    // Custom Position Colors
+    // ============================================================
+
+    const applyPositionColors = useCallback((colors: Record<number, string>) => {
+      const msa = msaRef.current;
+      if (!msa) return;
+
+      // Store colors globally for the custom color scheme to read
+      window.__nightingaleCustomColors = {
+        positionColors: colors,
+        defaultColor: '#ffffff',
+      };
+
+      hasCustomColorsRef.current = true;
+
+      // Switch to custom color scheme
+      msa.setAttribute('color-scheme', 'custom-position');
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          triggerRedraw();
+        });
+      });
+    }, [triggerRedraw]);
+
+    const clearPositionColors = useCallback(() => {
+      const msa = msaRef.current;
+      if (!msa) return;
+
+      // Clear global colors
+      delete window.__nightingaleCustomColors;
+      hasCustomColorsRef.current = false;
+
+      // Revert to base color scheme
+      msa.setAttribute('color-scheme', baseColorSchemeRef.current);
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          triggerRedraw();
+        });
+      });
+    }, [triggerRedraw]);
+
     useImperativeHandle(ref, () => ({
       redraw: triggerRedraw,
       jumpToRange,
       setColorScheme,
       setHighlight,
       clearHighlight,
-    }), [triggerRedraw, jumpToRange, setColorScheme, setHighlight, clearHighlight]);
+      applyPositionColors,
+      clearPositionColors,
+    }), [triggerRedraw, jumpToRange, setColorScheme, setHighlight, clearHighlight, applyPositionColors, clearPositionColors]);
 
     useLayoutEffect(() => {
       if (contentWidth === 0) return;
@@ -239,10 +299,17 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     // Handle color scheme prop changes
     useEffect(() => {
       if (!msaRef.current || !isInitialized) return;
-      msaRef.current.setAttribute('color-scheme', colorScheme);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => triggerRedraw());
-      });
+      
+      // Update base scheme
+      baseColorSchemeRef.current = colorScheme;
+      
+      // Only apply if we don't have custom colors
+      if (!hasCustomColorsRef.current) {
+        msaRef.current.setAttribute('color-scheme', colorScheme);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => triggerRedraw());
+        });
+      }
     }, [colorScheme, isInitialized, triggerRedraw]);
 
     // Event handlers
@@ -279,6 +346,13 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
 
     const handleLabelWidthCalculated = useCallback((width: number) => {
       setLabelWidth(width);
+    }, []);
+
+    // Cleanup on unmount
+    useEffect(() => {
+      return () => {
+        delete window.__nightingaleCustomColors;
+      };
     }, []);
 
     if (sequences.length === 0) {
