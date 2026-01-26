@@ -58,10 +58,10 @@ export function useMonomerAnnotations({
     isLoading,
     isError,
     refetch,
-
+    
     // Data + visibility
     ...visibility,
-
+    
     // Sync actions
     handleMSAHover: sync.handleMSAHover,
     handleMSAHoverEnd: sync.handleMSAHoverEnd,

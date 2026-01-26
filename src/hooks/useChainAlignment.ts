@@ -66,7 +66,14 @@ export function useChainAlignment() {
           throw new Error(`Failed to get observed sequence for ${pdbId}:${chainId}`);
         }
 
+
+const key = `${pdbId}_${chainId}`;        // stable chainKey == sequenceId
+const fam = family ?? 'unknown';          // keep family only as metadata
+
+
+
         const result = await alignSequence({
+          family: fam,
           alignmentRequest: {
             sequence: observed.sequence,
             sequence_id: key,
@@ -74,6 +81,7 @@ export function useChainAlignment() {
             annotations: [],
           },
         }).unwrap();
+
 
         const positionMapping: PositionMapping = {};
         result.mapping.forEach((msaPos: number, idx: number) => {

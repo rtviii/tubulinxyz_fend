@@ -4,15 +4,15 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/store';
 import {
-  selectOrderedSequences,
   selectSelectedSequenceId,
   toggleSelectedSequence,
   MsaSequence
 } from '@/store/slices/sequence_registry';
 
 interface MSALabelsProps {
-  rowHeight         : number;
-  scrollTop         : number;
+  sequences: MsaSequence[];
+  rowHeight: number;
+  scrollTop: number;
   onWidthCalculated?: (width: number) => void;
 }
 
@@ -42,15 +42,13 @@ function formatFamily(family: string): string {
   return family;
 }
 
-export function MSALabels({ rowHeight, scrollTop, onWidthCalculated }: MSALabelsProps) {
-  const dispatch                    = useAppDispatch();
-  const sequences                   = useAppSelector(selectOrderedSequences);
-  const selectedId                  = useAppSelector(selectSelectedSequenceId);
-  const containerRef                = useRef<HTMLDivElement>(null);
-  const measureRef                  = useRef<HTMLDivElement>(null);
+export function MSALabels({ sequences, rowHeight, scrollTop, onWidthCalculated }: MSALabelsProps) {
+  const dispatch = useAppDispatch();
+  const selectedId = useAppSelector(selectSelectedSequenceId);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
   const [labelWidth, setLabelWidth] = useState(0);
 
-  // Measure the widest label
   useEffect(() => {
     if (!measureRef.current || sequences.length === 0) return;
 
@@ -76,18 +74,14 @@ export function MSALabels({ rowHeight, scrollTop, onWidthCalculated }: MSALabels
       <div
         ref={measureRef}
         style={{
-          position  : 'absolute',
+          position: 'absolute',
           visibility: 'hidden',
           whiteSpace: 'nowrap',
-          fontSize  : '12px',
+          fontSize: '12px',
           fontFamily: 'monospace',
         }}
       />
-      <div
-        style={{
-          transform: `translateY(${-scrollTop}px)`,
-        }}
-      >
+      <div style={{ transform: `translateY(${-scrollTop}px)` }}>
         {sequences.map((seq) => {
           const isSelected = seq.id === selectedId;
           return (

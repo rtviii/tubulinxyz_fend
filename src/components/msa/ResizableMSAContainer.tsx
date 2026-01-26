@@ -3,15 +3,10 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { MSALabels } from './MSALabels';
-
-interface SequenceData {
-  id: string;
-  name: string;
-  sequence: string;
-}
+import { MsaSequence } from '@/store/slices/sequence_registry';
 
 interface ResizableMSAContainerProps {
-  sequences: SequenceData[];
+  sequences: MsaSequence[];
   maxLength: number;
   colorScheme?: string;
   minTileWidth?: number;
@@ -23,7 +18,6 @@ interface ResizableMSAContainerProps {
   onResidueLeave?: () => void;
   onResidueClick?: (seqId: string, position: number) => void;
 }
-
 
 export interface ResizableMSAContainerHandle {
   redraw: () => void;
@@ -48,7 +42,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     const {
       sequences,
       maxLength,
-      colorScheme = 'clustal2',
+      colorScheme = 'custom-position',
       minTileWidth = DEFAULTS.minTileWidth,
       rowHeight = DEFAULTS.rowHeight,
       navHeight = DEFAULTS.navHeight,
@@ -59,6 +53,12 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       onResidueClick,
     } = props;
 
+    // In ResizableMSAContainer, right at the start of the component (after props destructuring):
+    console.log('[ResizableMSAContainer] received sequences:', {
+      count: sequences.length,
+      ids: sequences.map(s => s.id),
+      families: sequences.map(s => s.family),
+    });
     const outerRef = useRef<HTMLDivElement>(null);
     const msaRef = useRef<any>(null);
     const navRef = useRef<any>(null);
@@ -70,6 +70,8 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
 
     const baseColorSchemeRef = useRef(colorScheme);
     const hasCustomColorsRef = useRef(false);
+
+    // Prepare data for Nightingale (only needs name + sequence)
 
     useEffect(() => {
       const msaEl = msaRef.current;
@@ -213,7 +215,6 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       msa.removeAttribute('highlight');
     }, []);
 
-    // Column-based colors (legacy/fallback)
     const applyPositionColors = useCallback((colors: Record<number, string>) => {
       const msa = msaRef.current;
       if (!msa) return;
@@ -234,7 +235,6 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       });
     }, [triggerRedraw]);
 
-    // Cell-based colors (row-column specific)
     const applyCellColors = useCallback((colors: Record<string, string>) => {
       const msa = msaRef.current;
       if (!msa) return;
@@ -259,10 +259,14 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       const msa = msaRef.current;
       if (!msa) return;
 
-      delete window.__nightingaleCustomColors;
-      hasCustomColorsRef.current = false;
+      window.__nightingaleCustomColors = {
+        cellColors: {},
+        positionColors: {},
+        defaultColor: '#ffffff',
+      };
 
-      msa.setAttribute('color-scheme', baseColorSchemeRef.current);
+      hasCustomColorsRef.current = true;
+      msa.setAttribute('color-scheme', 'custom-position');
 
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -271,29 +275,47 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       });
     }, [triggerRedraw]);
 
-useImperativeHandle(ref, () => ({
-  redraw: triggerRedraw,
-  jumpToRange,
-  setColorScheme,
-  setHighlight,
-  clearHighlight,
-  applyPositionColors,
-  applyCellColors,  // <-- This must be here
-  clearPositionColors,
-}), [triggerRedraw, jumpToRange, setColorScheme, setHighlight, clearHighlight, applyPositionColors, applyCellColors, clearPositionColors]);
+    useImperativeHandle(ref, () => ({
+      redraw: triggerRedraw,
+      jumpToRange,
+      setColorScheme,
+      setHighlight,
+      clearHighlight,
+      applyPositionColors,
+      applyCellColors,
+      clearPositionColors,
+    }), [triggerRedraw, jumpToRange, setColorScheme, setHighlight, clearHighlight, applyPositionColors, applyCellColors, clearPositionColors]);
+
     useLayoutEffect(() => {
       if (contentWidth === 0) return;
       requestAnimationFrame(() => syncWidths());
     }, [contentWidth, syncWidths]);
 
+    // In ResizableMSAContainer, replace the initialization effect:
     useEffect(() => {
       if (!msaRef.current || sequences.length === 0 || contentWidth === 0) return;
 
+      // Compute fresh data inside effect
+      const freshData = sequences.map(s => ({
+        name: s.name,
+        sequence: s.sequence,
+      }));
+
+      console.log('[MSA Init] Setting data:', {
+        count: freshData.length,
+        names: freshData.map(d => d.name),
+      });
+
       const timer = setTimeout(() => {
-        msaRef.current.data = sequences.map((s) => ({
-          name: s.name,
-          sequence: s.sequence,
-        }));
+        window.__nightingaleCustomColors = {
+          cellColors: {},
+          positionColors: {},
+          defaultColor: '#ffffff',
+        };
+        hasCustomColorsRef.current = true;
+
+        msaRef.current.data = freshData;
+        msaRef.current.setAttribute('color-scheme', 'custom-position');
 
         requestAnimationFrame(() => {
           syncWidths();
@@ -381,6 +403,7 @@ useImperativeHandle(ref, () => ({
             <div style={{ height: navHeight }} className="flex-shrink-0" />
             <div className="flex-1 overflow-hidden">
               <MSALabels
+                sequences={sequences}
                 rowHeight={rowHeight}
                 scrollTop={scrollTop}
                 onWidthCalculated={handleLabelWidthCalculated}
@@ -413,7 +436,7 @@ useImperativeHandle(ref, () => ({
                 length={maxLength}
                 display-start="1"
                 display-end={maxLength}
-                color-scheme={colorScheme}
+                color-scheme="custom-position"
                 label-width="0"
                 highlight-event="onmouseover"
                 highlight-color="#00FF0044"

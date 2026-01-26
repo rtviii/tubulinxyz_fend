@@ -33,6 +33,7 @@ interface MonomerSidebarProps {
   instance: MolstarInstance | null;
   pdbId: string | null;
   profile: StructureProfile | null;
+  loadedStructure: string | null; // <-- ADD THIS
   
   // Annotation Data
   ligandSites: LigandSite[];

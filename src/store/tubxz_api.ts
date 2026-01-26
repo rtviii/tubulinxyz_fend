@@ -155,6 +155,9 @@ const injectedRtkApi = api
           url: `/msa/sequence`,
           method: "POST",
           body: queryArg.alignmentRequest,
+          params: {
+            family: queryArg.family,
+          },
         }),
         invalidatesTags: ["MSA Alignment"],
       }),
@@ -162,7 +165,12 @@ const injectedRtkApi = api
         GetMasterProfileApiResponse,
         GetMasterProfileApiArg
       >({
-        query: () => ({ url: `/msa/master` }),
+        query: (queryArg) => ({
+          url: `/msa/master`,
+          params: {
+            family: queryArg.family,
+          },
+        }),
         providesTags: ["MSA Alignment"],
       }),
       getVariantsAtPosition: build.query<
@@ -311,11 +319,16 @@ export type GetPolymerLigandNeighborhoodsApiArg = {
 export type AlignSequenceApiResponse =
   /** status 200 Successful Response */ AlignmentResponse;
 export type AlignSequenceApiArg = {
+  /** Which master alignment to align against */
+  family: TubulinFamily;
   alignmentRequest: AlignmentRequest;
 };
 export type GetMasterProfileApiResponse =
   /** status 200 Successful Response */ MasterProfileInfo;
-export type GetMasterProfileApiArg = void;
+export type GetMasterProfileApiArg = {
+  /** Which master alignment to return */
+  family: TubulinFamily;
+};
 export type GetVariantsAtPositionApiResponse =
   /** status 200 Successful Response */ PositionAnnotationsResponse;
 export type GetVariantsAtPositionApiArg = {
@@ -749,7 +762,7 @@ export type AlignmentRequest = {
         [key: string]: any;
       }[]
     | null;
-  /** The PDB auth_seq_ids corresponding 1:1 to the sequence characters. */
+  /** PDB auth_seq_ids, 1:1 with sequence */
   auth_seq_ids?: number[] | null;
 };
 export type MasterProfileInfo = {

@@ -7,6 +7,8 @@ import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useAppSelector, useAppDispatch } from '@/store/store';
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
+
+import { selectSequencesForFamily } from '@/store/slices/sequence_registry';
 import {
   selectLoadedStructure,
   selectPolymerComponents,
@@ -90,14 +92,57 @@ export default function StructureProfilePage() {
 
   // MSA data
   const { areLoaded: nglLoaded } = useNightingaleComponents();
-  const { data: masterData } = useGetMasterProfileQuery();
-  const masterSequences = useAppSelector(selectMasterSequences);
-  const pdbSequences = useAppSelector(selectPdbSequences);
 
-  // Chain key for current view
-  const chainKey = loadedStructure && activeChainId
-    ? `${loadedStructure}_${activeChainId}`
-    : '';
+  // ========================================
+  // Active family + keys
+  // ========================================
+
+  const activeFamily = useMemo(() => {
+    if (!activeChainId || !profile) return undefined;
+    const poly = profile.polypeptides.find(
+      p => p.auth_asym_id === activeChainId
+    );
+    return poly ? profile.entities[poly.entity_id]?.family : undefined;
+  }, [activeChainId, profile]);
+
+
+  const fam = activeFamily ?? 'tubulin_alpha';
+  const { data: masterData } = useGetMasterProfileQuery(
+    { family: fam },
+    { skip: !activeFamily }
+  );
+
+  const chainKey =
+    loadedStructure && activeChainId
+      ? `${loadedStructure}_${activeChainId}`
+      : '';
+
+  const alignmentKey =
+    loadedStructure && activeChainId
+      ? `${loadedStructure}_${activeChainId}__${activeFamily ?? 'unknown'}`
+      : '';
+
+
+
+  const familySequences = useAppSelector(state =>
+    selectSequencesForFamily(state, activeFamily)
+  );
+
+  const masterSequences = useMemo(
+    () => familySequences.filter(s => s.originType === 'master'),
+    [familySequences]
+  );
+
+  const pdbSequences = useMemo(
+    () => familySequences.filter(s => s.originType === 'pdb'),
+    [familySequences]
+  );
+
+const allVisibleSequenceIds = useMemo(
+  () => [...masterSequences, ...pdbSequences].map(s => s.id),
+  [masterSequences, pdbSequences]
+);
+
 
   // Position mapping for current chain
   const positionMapping = useAppSelector(state =>
@@ -141,16 +186,19 @@ export default function StructureProfilePage() {
   // Viewer synchronization
   // ============================================================
 
-  const {
-    handleMSAHover,
-    handleMSAHoverEnd,
-    focusLigandSite,
-    focusMutation,
-  } = useViewerSync({
-    chainKey,
-    molstarInstance: instance,
-    msaRef,
-  });
+const {
+  handleMSAHover,
+  handleMSAHoverEnd,
+  focusLigandSite,
+  focusMutation,
+} = useViewerSync({
+  chainKey,
+  molstarInstance: instance,
+  msaRef,
+  visibleSequenceIds: allVisibleSequenceIds,  // <-- Fixed
+});
+  ;
+
 
   // ============================================================
   // Structure loading
@@ -189,13 +237,19 @@ export default function StructureProfilePage() {
   // ============================================================
 
   useEffect(() => {
-    if (!masterData?.sequences || masterSequencesInitialized.current) return;
+    if (!masterData?.sequences) return;
+
     masterData.sequences.forEach((seq: any) => {
-      const name = seq.id.split('|')[0];
-      dispatch(addSequence({ id: name, name, sequence: seq.sequence, originType: 'master' }));
+      dispatch(addSequence({
+        id: `master__${fam}__${seq.id}`,     // unique per family
+        name: seq.id,
+        sequence: seq.sequence,
+        originType: 'master',
+        family: fam,
+      }));
     });
-    masterSequencesInitialized.current = true;
-  }, [masterData, dispatch]);
+  }, [masterData, fam, dispatch]);
+
 
   // ============================================================
   // Resize handling
@@ -263,6 +317,8 @@ export default function StructureProfilePage() {
                   alignedStructures={alignedStructures}
                   instance={instance}
                   pdbId={loadedStructure}
+
+                  loadedStructure={loadedStructure}   // <-- ADD THIS
                   profile={profile}
                   // Annotation controls
 
@@ -307,7 +363,7 @@ export default function StructureProfilePage() {
                     <MonomerMSAPanel
                       pdbId={loadedStructure}
                       chainId={activeChainId}
-                      family={getFamilyForChain(activeChainId)}
+                      family={activeFamily}
                       instance={instance}
                       masterSequences={masterSequences}
                       pdbSequences={pdbSequences}
@@ -318,6 +374,7 @@ export default function StructureProfilePage() {
                       onResidueLeave={handleMSAHoverEnd}
                       onClearColors={clearAll}
                     />
+
                   </div>
                 </ResizablePanel>
               </>
@@ -402,6 +459,7 @@ interface MonomerSidebarProps {
   instance: MolstarInstance | null;
   pdbId: string | null;
   profile: StructureProfile | null;
+  loadedStructure: string | null; // <-- ADD THIS
   // Annotations
   ligandSites: Array<LigandSite>;
   variants: Array<Variant>;
@@ -427,6 +485,7 @@ function MonomerSidebar({
   variants,
   visibleLigandIds,
   showVariants,
+  loadedStructure,
   onToggleLigand,
   onFocusLigand,
   onToggleVariants,
@@ -451,7 +510,17 @@ function MonomerSidebar({
   };
 
   const activeFamily = activeChainId ? getFamilyForChain(activeChainId) : undefined;
-  const formattedFamily = activeFamily ? formatFamilyShort(activeFamily) : null;
+
+  const formattedFamily = activeFamily
+    ? formatFamilyShort(activeFamily)
+    : null;
+
+  const alignmentKey =
+    loadedStructure && activeChainId
+      ? `${loadedStructure}_${activeChainId}__${activeFamily ?? 'unknown'}`
+      : '';
+
+
 
   return (
     <div className="h-full bg-white border-r border-gray-200 p-4 flex flex-col overflow-hidden">
@@ -607,7 +676,8 @@ function MonomerMSAPanel({
   onClearColors,
 }: MonomerMSAPanelProps) {
   const { alignChain, isAligning } = useChainAlignment();
-  const [colorScheme, setColorScheme] = useState('clustal2');
+  const [colorScheme, setColorScheme] = useState('custom-position');
+
 
   const isAligned = useAppSelector(state =>
     pdbId ? selectIsChainAligned(state, pdbId, chainId) : false
@@ -617,7 +687,10 @@ function MonomerMSAPanel({
 
   // Auto-align on mount
   useEffect(() => {
-    const key = pdbId && chainId ? `${pdbId}_${chainId}` : null;
+    const key = pdbId && chainId
+      ? `${pdbId}_${chainId}__${family ?? 'unknown'}`
+      : null;
+
     if (!instance || !pdbId || !chainId) return;
     if (isAligned || isAligning) return;
     if (key && alignmentAttemptedRef.current.has(key)) return;
@@ -630,21 +703,25 @@ function MonomerMSAPanel({
     });
   }, [instance, pdbId, chainId, family, isAligned, isAligning, alignChain]);
 
+  // In MonomerMSAPanel, change allSequences to just use the full objects:
   const allSequences = useMemo(() => [
-    ...masterSequences.map(seq => ({
-      id: seq.id,
-      name: seq.name,
-      sequence: seq.sequence,
-      originType: seq.originType as 'master',
-    })),
-    ...pdbSequences.map(seq => ({
-      id: seq.id,
-      name: seq.name,
-      sequence: seq.sequence,
-      originType: seq.originType as 'pdb',
-      family: seq.family,
-    })),
+    ...masterSequences,
+    ...pdbSequences,
   ], [masterSequences, pdbSequences]);
+console.log('[MonomerMSAPanel]', {
+  family,
+  allSequencesCount: allSequences.length,
+  allSequences: allSequences.map(s => ({ id: s.id, family: s.family, name: s.name.substring(0, 20) })),
+});
+  useEffect(() => {
+    console.log('[MSAPanel Debug]', {
+      family,
+      masterCount: masterSequences.length,
+      pdbCount: pdbSequences.length,
+      masterFamilies: masterSequences.map(s => ({ id: s.id, family: s.family })),
+      pdbFamilies: pdbSequences.map(s => ({ id: s.id, family: s.family })),
+    });
+  }, [family, masterSequences, pdbSequences]);
 
   const handleSchemeChange = useCallback((scheme: string) => {
     setColorScheme(scheme);
@@ -709,6 +786,7 @@ function MonomerMSAPanel({
       {/* MSA Container */}
       <div className="flex-1 min-h-0 p-2">
         <ResizableMSAContainer
+          key={`msa-${family ?? 'none'}`}
           ref={msaRef}
           sequences={allSequences}
           maxLength={maxLength}
@@ -716,6 +794,7 @@ function MonomerMSAPanel({
           onResidueHover={handleResidueHover}
           onResidueLeave={handleResidueLeave}
         />
+
       </div>
     </div>
   );

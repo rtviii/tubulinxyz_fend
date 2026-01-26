@@ -1,10 +1,18 @@
 // src/hooks/useViewerSync.ts
 import { useEffect, useRef, useCallback } from 'react';
 import { useAppSelector } from '@/store/store';
-import { selectActiveColorRules } from '@/store/slices/colorRulesSelector';
+import { makeSelectActiveColorRulesForSequenceIds, selectActiveColorRules } from '@/store/slices/colorRulesSelector';
 import { selectPositionMapping } from '@/store/slices/sequence_registry';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import { Color } from 'molstar/lib/mol-util/color';
+
+function getAuthAsymIdFromKey(key: string): string {
+  const noFamily = key.split('__')[0];
+  const parts = noFamily.split('_');
+  return parts[parts.length - 1];
+}
+
+
 
 export interface MSAHandle {
     setHighlight: (start: number, end: number) => void;
@@ -21,11 +29,13 @@ interface UseViewerSyncOptions {
     molstarInstance: MolstarInstance | null;
     msaRef: React.RefObject<MSAHandle>;
 }
+const selectRulesForVisible = makeSelectActiveColorRulesForSequenceIds();
 
-export function useViewerSync({ chainKey, molstarInstance, msaRef }: UseViewerSyncOptions) {
-    const colorRules = useAppSelector(selectActiveColorRules);
-    const positionMapping = useAppSelector(state => selectPositionMapping(state, chainKey));
 
+export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequenceIds }: UseViewerSyncOptions & { visibleSequenceIds: string[] }) {
+  const colorRules = useAppSelector(state => selectRulesForVisible(state, visibleSequenceIds));
+  const positionMapping = useAppSelector(state => selectPositionMapping(state, chainKey));
+ 
     // Build reverse mapping for hover coordination
     const authToMasterRef = useRef<Record<number, number>>({});
 
@@ -110,8 +120,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef }: UseViewerSy
         // Nightingale sends 0-based position, positionMapping is keyed 1-based
         const authSeqId = positionMapping[position + 1];
         if (authSeqId !== undefined) {
-            const parts = chainKey.split('_');
-            const authAsymId = parts[parts.length - 1];
+            const authAsymId = getAuthAsymIdFromKey(chainKey);
             molstarInstance.highlightResidue(authAsymId, authSeqId, true);
         }
     }, [molstarInstance, positionMapping, chainKey]);
@@ -166,8 +175,8 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef }: UseViewerSy
         if (molstarInstance && positionMapping) {
             const authSeqId = positionMapping[masterIndex];
             if (authSeqId !== undefined) {
-                const parts = chainKey.split('_');
-                const authAsymId = parts[parts.length - 1];
+const authAsymId = getAuthAsymIdFromKey(chainKey);
+
                 molstarInstance.focusResidue(authAsymId, authSeqId);
             }
         }

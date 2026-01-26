@@ -273,5 +273,15 @@ export const selectIsChainAligned = createSelector(
     );
   }
 );
+export const selectSequencesForFamily = createSelector(
+  [
+    selectOrderedSequences,
+    (_state: RootState, family?: string) => family,
+  ],
+  (sequences, family): MsaSequence[] => {
+    if (!family) return EMPTY_SEQUENCE_ARRAY;
+    return sequences.filter(seq => seq.family === family);
+  }
+);
 
 export default sequenceRegistrySlice.reducer;
