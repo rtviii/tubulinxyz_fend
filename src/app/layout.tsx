@@ -1,16 +1,25 @@
 'use client';
+
 import { useRef } from 'react';
 import { Provider } from 'react-redux';
 import { makeStore, AppStore } from '@/store/store';
 import './globals.css';
 import { MolstarInstanceManagerProvider } from '@/components/molstar/services/MolstarInstanceManager';
+import { IBM_Plex_Sans } from 'next/font/google';
+
+const ibmPlexSans = IBM_Plex_Sans({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-ibm-plex-sans',
+  display: 'swap',
+});
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const storeRef = useRef<AppStore | null>(null)
+  const storeRef = useRef<AppStore | null>(null);
 
   if (!storeRef.current) {
     // Create the store instance only once
@@ -18,14 +27,13 @@ export default function RootLayout({
   }
 
   return (
-    <html lang="en">
-      <body className="bg-white">
+    <html lang="en" className={ibmPlexSans.variable}>
+      <body className="bg-white font-sans">
         <Provider store={storeRef.current}>
-          <MolstarInstanceManagerProvider>
-            {children}
-          </MolstarInstanceManagerProvider>
+          <MolstarInstanceManagerProvider>{children}</MolstarInstanceManagerProvider>
         </Provider>
       </body>
     </html>
   );
 }
+

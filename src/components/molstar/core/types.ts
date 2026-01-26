@@ -6,7 +6,7 @@ import { Color } from 'molstar/lib/mol-util/color';
 
 // export type MolstarInstanceId = 'structure' | 'monomer' | 'msalite';
 // ...
-export type MolstarInstanceId = 'structure' | 'monomer' | 'msalite' | 'landing_1jff' | 'landing_9g0t';
+export type MolstarInstanceId = 'structure' | 'monomer' | 'msalite' | 'landing_1jff' | 'landing_9f3b';
 
 
 // ============================================================
