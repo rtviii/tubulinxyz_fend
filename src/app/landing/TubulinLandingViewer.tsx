@@ -8,11 +8,23 @@ import { Color } from 'molstar/lib/mol-util/color';
 import { PluginCommands } from 'molstar/lib/mol-plugin/commands';
 import { StateTransforms } from 'molstar/lib/mol-plugin-state/transforms';
 import { STYLIZED_POSTPROCESSING } from '@/components/molstar/rendering/postprocessing-config';
-import { AnimateCameraSpin } from 'molstar/lib/mol-plugin-state/animation/built-in/camera-spin';
+import type { MolstarInstanceId } from '@/components/molstar/core/types';
 
-export default function TubulinLandingViewer() {
+type Props = {
+    pdbId: string; // e.g. '1JFF' | '9G0T'
+    instanceId: MolstarInstanceId; // e.g. 'landing_1jff' | 'landing_9g0t'
+    onViewer?: (viewer: any | null) => void;
+};
+
+export default function TubulinLandingViewer({ pdbId, instanceId, onViewer }: Props) {
     const containerRef = useRef<HTMLDivElement | null>(null);
-    const { instance, isInitialized } = useMolstarInstance(containerRef, 'structure', landingSpec);
+    const { instance, isInitialized } = useMolstarInstance(containerRef, instanceId, landingSpec);
+
+    useEffect(() => {
+        if (!isInitialized || !instance) return;
+        onViewer?.(instance.viewer);
+        return () => onViewer?.(null);
+    }, [isInitialized, instance, onViewer]);
 
     useEffect(() => {
         if (!isInitialized || !instance) return;
@@ -26,10 +38,9 @@ export default function TubulinLandingViewer() {
 
             await viewer.clear();
 
-            const pdbId = '1JFF';
-            const url = `https://models.rcsb.org/${pdbId}.bcif`;
-            const structure = await viewer.loadFromUrl(url, true, pdbId);
-
+            const upper = pdbId.toUpperCase();
+            const url = `https://models.rcsb.org/${upper}.bcif`;
+            const structure = await viewer.loadFromUrl(url, true, upper);
             if (cancelled) return;
 
             await plugin.builders.structure.representation.addRepresentation(structure, {
@@ -62,8 +73,6 @@ export default function TubulinLandingViewer() {
             });
 
             // camera setup
-
-
             plugin.managers.camera.reset();
             plugin.canvas3d?.setProps({
                 camera: {
@@ -72,24 +81,18 @@ export default function TubulinLandingViewer() {
                 },
                 trackball: {
                     ...plugin.canvas3d.props.trackball,
-                    animate: {
-                        name: 'spin',
-                        params: { speed: 0.15 }
-                    }
-                }
+                    animate: { name: 'spin', params: { speed: 0.15 } },
+                },
             });
         })();
 
         return () => {
             cancelled = true;
         };
-    }, [isInitialized, instance]);
+    }, [isInitialized, instance, pdbId]);
 
     return (
-        <div
-            ref={containerRef}
-            className="molstar-embed molstar-landing w-full h-full relative overflow-hidden"
-        />
+        <div ref={containerRef} className="molstar-embed molstar-landing w-full h-full relative overflow-hidden" />
     );
 }
 
