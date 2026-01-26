@@ -4,6 +4,8 @@ import { MolstarViewer } from '../core/MolstarViewer';
 import { MolstarInstance } from './MolstarInstance';
 import { MolstarInstanceId } from '../core/types';
 import { AppStore, useAppDispatch } from '@/store/store';
+import { PluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
+
 
 // ============================================================
 // Context Type
@@ -21,10 +23,13 @@ interface MolstarInstanceManagerContextValue {
     id: MolstarInstanceId,
     container: HTMLDivElement,
     dispatch: any,
-    getState: () => any
+
+    getState: () => any,
+    spec?: PluginUISpec
   ) => Promise<MolstarInstance | null>;
   disposeInstance: (id: MolstarInstanceId) => void;
 }
+
 
 const MolstarInstanceManagerContext = createContext<MolstarInstanceManagerContextValue | null>(null);
 
@@ -41,6 +46,7 @@ export function MolstarInstanceManagerProvider({ children }: { children: React.R
 
     initializeInstance: async (id, container, dispatch, getState) => {
       // If already initializing, wait and return existing
+
       if (initializingRef.current.has(id)) {
         console.log(`[MolstarManager] ${id} already initializing, waiting...`);
         // Poll until ready (simple approach)
@@ -114,7 +120,8 @@ export function MolstarInstanceManagerProvider({ children }: { children: React.R
 
 export function useMolstarInstance(
   containerRef: React.RefObject<HTMLDivElement | null>,
-  instanceId: MolstarInstanceId
+  instanceId: MolstarInstanceId,
+  spec?: PluginUISpec
 ) {
   const context = useContext(MolstarInstanceManagerContext);
   const dispatch = useAppDispatch();
@@ -145,7 +152,8 @@ export function useMolstarInstance(
     const init = async () => {
       console.log(`[${instanceId}] Requesting instance...`);
 
-      const inst = await context.initializeInstance(instanceId, container, dispatch, getState);
+      const inst = await context.initializeInstance(instanceId, container, dispatch, getState, spec);
+
 
       if (cancelled) {
         console.log(`[${instanceId}] Init completed but cancelled`);

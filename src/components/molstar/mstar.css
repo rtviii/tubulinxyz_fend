@@ -17,3 +17,52 @@
   font-weight: 600;
   margin-bottom: 8px;
 }
+
+
+/* Keep Mol* strictly inside its mount node */
+.molstar-embed {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Mol* root sometimes uses absolute positioning */
+.molstar-embed .msp-plugin {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Avoid the plugin trying to impose viewport-like height */
+.molstar-embed .msp-viewport {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Landing: hide any remaining Mol* viewport UI */
+.molstar-landing .msp-viewport-controls,
+.molstar-landing .msp-viewport-top-left,
+.molstar-landing .msp-viewport-top-right,
+.molstar-landing .msp-viewport-bottom-left,
+.molstar-landing .msp-viewport-bottom-right {
+  display: none !important;
+}
+/* FINAL kill: animation + viewport icons */
+.molstar-landing .msp-animation,
+.molstar-landing .msp-animation-panel,
+.molstar-landing .msp-animation-toolbar,
+.molstar-landing .msp-viewport-controls,
+.molstar-landing .msp-hover-box-wrapper {
+  display: none !important;
+}
+
+.molstar-landing .msp-btn msp-btn-icon msp-btn-link-toggle-off msp-transparent-bg{
+  display: none !important;
+
+}
+.msp-animation-viewport-controls {
+  display: none !important;
+
+}
