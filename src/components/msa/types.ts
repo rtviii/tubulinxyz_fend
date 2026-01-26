@@ -1,20 +1,11 @@
 // src/components/msa/types.ts
-
 export interface MSAHandle {
-  // Navigation
+  redraw: () => void;
   jumpToRange: (start: number, end: number) => void;
-  
-  // Hover highlighting (ephemeral, doesn't persist)
+  setColorScheme: (scheme: string) => void;
   setHighlight: (start: number, end: number) => void;
   clearHighlight: () => void;
-  
-  // Color schemes
-  setColorScheme: (scheme: string) => void;
-  
-  // Position-based coloring (for annotations)
   applyPositionColors: (colors: Record<number, string>) => void;
+  applyCellColors: (colors: Record<string, string>) => void;
   clearPositionColors: () => void;
-  
-  // Redraw
-  redraw: () => void;
 }

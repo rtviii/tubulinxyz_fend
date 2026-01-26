@@ -1,4 +1,4 @@
-// src/hooks/useMultiChainAnnotations.ts
+// src/hooks/useMultiChainAnnotations.tsx
 import { useEffect, useMemo } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/store';
 import { selectPdbSequences } from '@/store/slices/sequence_registry';
@@ -9,7 +9,8 @@ import {
     selectChainEntry,
     ChainAnnotationData,
     LigandSite,
-    Mutation,
+    Variant,
+    VariantType,
 } from '@/store/slices/annotationsSlice';
 import {
     useGetPolymerAnnotationsQuery,
@@ -38,16 +39,12 @@ export interface ChainToFetch {
     chainKey: string;
 }
 
-/**
- * Determines which chains need annotation fetching.
- */
 export function useMultiChainAnnotations(primaryRcsbId: string | null, primaryAuthAsymId: string | null) {
     const pdbSequences = useAppSelector(selectPdbSequences);
 
     const chainsToFetch = useMemo((): ChainToFetch[] => {
         const chains: ChainToFetch[] = [];
 
-        // Primary chain
         if (primaryRcsbId && primaryAuthAsymId) {
             chains.push({
                 rcsbId: primaryRcsbId.toUpperCase(),
@@ -56,7 +53,6 @@ export function useMultiChainAnnotations(primaryRcsbId: string | null, primaryAu
             });
         }
 
-        // Aligned chains from sequence registry
         for (const seq of pdbSequences) {
             if (seq.chainRef) {
                 const chainKey = `${seq.chainRef.pdbId}_${seq.chainRef.chainId}`;
@@ -70,7 +66,6 @@ export function useMultiChainAnnotations(primaryRcsbId: string | null, primaryAu
             }
         }
 
-        console.log('[useMultiChainAnnotations] Chains to fetch:', chains);
         return chains;
     }, [primaryRcsbId, primaryAuthAsymId, pdbSequences]);
 
@@ -82,9 +77,6 @@ export function useMultiChainAnnotations(primaryRcsbId: string | null, primaryAu
     };
 }
 
-/**
- * Component that fetches annotations for a single chain.
- */
 export function ChainAnnotationFetcher({
     rcsbId,
     authAsymId,
@@ -95,15 +87,7 @@ export function ChainAnnotationFetcher({
     const existingEntry = useAppSelector(state => selectChainEntry(state, chainKey));
     const positionMapping = useAppSelector(state => selectPositionMapping(state, chainKey));
 
-    // FIX: Skip only if we already have data loaded
     const shouldSkip = !!existingEntry?.data;
-
-    console.log(`[ChainAnnotationFetcher] ${chainKey}:`, {
-        existingEntry: !!existingEntry,
-        hasData: !!existingEntry?.data,
-        shouldSkip,
-        positionMapping: !!positionMapping,
-    });
 
     const variantsQuery = useGetPolymerAnnotationsQuery(
         { rcsbId, authAsymId },
@@ -115,34 +99,9 @@ export function ChainAnnotationFetcher({
         { skip: shouldSkip }
     );
 
-    // Debug: Log query states
-    useEffect(() => {
-        console.log(`[ChainAnnotationFetcher] ${chainKey} query states:`, {
-            variantsLoading: variantsQuery.isLoading,
-            variantsSuccess: variantsQuery.isSuccess,
-            variantsError: variantsQuery.isError,
-            variantsData: !!variantsQuery.data,
-            ligandsLoading: ligandsQuery.isLoading,
-            ligandsSuccess: ligandsQuery.isSuccess,
-            ligandsError: ligandsQuery.isError,
-            ligandsData: !!ligandsQuery.data,
-        });
-    }, [
-        chainKey,
-        variantsQuery.isLoading,
-        variantsQuery.isSuccess,
-        variantsQuery.isError,
-        variantsQuery.data,
-        ligandsQuery.isLoading,
-        ligandsQuery.isSuccess,
-        ligandsQuery.isError,
-        ligandsQuery.data,
-    ]);
-
     // Track loading
     useEffect(() => {
         if ((variantsQuery.isLoading || ligandsQuery.isLoading) && !existingEntry?.data) {
-            console.log(`[ChainAnnotationFetcher] ${chainKey} - Setting loading state`);
             dispatch(setChainLoading(chainKey));
         }
     }, [chainKey, variantsQuery.isLoading, ligandsQuery.isLoading, existingEntry?.data, dispatch]);
@@ -154,14 +113,8 @@ export function ChainAnnotationFetcher({
         }
 
         if (existingEntry?.data) {
-            console.log(`[ChainAnnotationFetcher] ${chainKey} - Already have data, skipping`);
             return;
         }
-
-        console.log(`[ChainAnnotationFetcher] ${chainKey} - Processing data:`, {
-            variantsCount: variantsQuery.data.variants?.length ?? 0,
-            ligandsCount: ligandsQuery.data.neighborhoods?.length ?? 0,
-        });
 
         const authToMaster: Record<number, number> = {};
         if (positionMapping) {
@@ -178,28 +131,29 @@ export function ChainAnnotationFetcher({
             ligandAuthSeqId: n.ligand_auth_seq_id ?? 0,
             color: getLigandColor(n.ligand_id),
             neighborhoodAuthSeqIds: n.residues?.map(r => r.observed_index) ?? [],
+            drugbankId: n.drugbank_id ?? null,
+            residueCount: n.residue_count,
         }));
 
-        const mutations: Mutation[] = (variantsQuery.data.variants ?? [])
-            .filter(v => v.type === 'substitution' && v.master_index != null)
+        // Include ALL variant types, not just substitutions
+        const variants: Variant[] = (variantsQuery.data.variants ?? [])
+            .filter(v => v.master_index != null)
             .map(v => ({
+                type: (v.type as VariantType) ?? 'substitution',
                 masterIndex: v.master_index!,
                 authSeqId: positionMapping?.[v.master_index!] ?? null,
                 fromResidue: v.wild_type ?? '?',
                 toResidue: v.observed ?? '?',
                 phenotype: v.phenotype ?? null,
+                source: v.source ?? null,
+                uniprotId: v.uniprot_id ?? null,
             }));
 
         const data: ChainAnnotationData = {
             ligandSites,
-            mutations,
+            variants,
             family: variantsQuery.data.family ?? null,
         };
-
-        console.log(`[ChainAnnotationFetcher] ${chainKey} - Dispatching annotations:`, {
-            ligandSites: ligandSites.length,
-            mutations: mutations.length,
-        });
 
         dispatch(setChainAnnotations({ chainKey, data }));
     }, [chainKey, variantsQuery.data, ligandsQuery.data, positionMapping, existingEntry?.data, dispatch]);
@@ -208,7 +162,6 @@ export function ChainAnnotationFetcher({
     useEffect(() => {
         const error = variantsQuery.error || ligandsQuery.error;
         if (error && !existingEntry?.data) {
-            console.error(`[ChainAnnotationFetcher] ${chainKey} - Error:`, error);
             dispatch(setChainError({
                 chainKey,
                 error: 'message' in error ? (error as any).message : 'Failed to fetch annotations',

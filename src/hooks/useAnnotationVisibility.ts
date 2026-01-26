@@ -2,7 +2,7 @@
 import { useCallback, useMemo } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/store';
 import {
-    setMutationsVisible,
+    setVariantsVisible,
     toggleLigandSite,
     showAllLigands,
     hideAllLigands,
@@ -16,22 +16,14 @@ export function useAnnotationVisibility(chainKey: string) {
     const data = useAppSelector(state => selectChainData(state, chainKey));
     const visibility = useAppSelector(state => selectChainVisibility(state, chainKey));
 
-    // Debug logging
-    console.log(`[useAnnotationVisibility] ${chainKey}:`, {
-        hasData: !!data,
-        ligandSites: data?.ligandSites?.length ?? 0,
-        mutations: data?.mutations?.length ?? 0,
-        visibility: visibility,
-    });
-
     const visibleLigandIds = useMemo(
         () => new Set(visibility?.visibleLigandIds ?? []),
         [visibility?.visibleLigandIds]
     );
 
     const actions = useMemo(() => ({
-        setShowMutations: (visible: boolean) =>
-            dispatch(setMutationsVisible({ chainKey, visible })),
+        setShowVariants: (visible: boolean) =>
+            dispatch(setVariantsVisible({ chainKey, visible })),
 
         toggleLigand: (siteId: string) =>
             dispatch(toggleLigandSite({ chainKey, siteId })),
@@ -41,16 +33,16 @@ export function useAnnotationVisibility(chainKey: string) {
         hideAll: () => dispatch(hideAllLigands(chainKey)),
 
         clearAll: () => {
-            dispatch(setMutationsVisible({ chainKey, visible: false }));
+            dispatch(setVariantsVisible({ chainKey, visible: false }));
             dispatch(hideAllLigands(chainKey));
         },
     }), [dispatch, chainKey]);
 
     return {
         ligandSites: data?.ligandSites ?? [],
-        mutations: data?.mutations ?? [],
+        variants: data?.variants ?? [],
         family: data?.family ?? null,
-        showMutations: visibility?.showMutations ?? false,
+        showVariants: visibility?.showVariants ?? false,
         visibleLigandIds,
         ...actions,
     };

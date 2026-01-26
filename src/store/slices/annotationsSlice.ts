@@ -6,6 +6,8 @@ import { RootState } from '../store';
 // Types
 // ============================================================
 
+export type VariantType = 'substitution' | 'insertion' | 'deletion';
+
 export interface LigandSite {
   id: string;                    // "GTP_A_501" format
   ligandId: string;
@@ -14,24 +16,29 @@ export interface LigandSite {
   ligandAuthSeqId: number;
   color: string;
   neighborhoodAuthSeqIds: number[];
+  drugbankId: string | null;
+  residueCount: number;
 }
 
-export interface Mutation {
+export interface Variant {
+  type: VariantType;
   masterIndex: number;
   authSeqId: number | null;      // Resolved from mapping
   fromResidue: string;
   toResidue: string;
   phenotype: string | null;
+  source: string | null;
+  uniprotId: string | null;
 }
 
 export interface ChainAnnotationData {
   ligandSites: LigandSite[];
-  mutations: Mutation[];
+  variants: Variant[];
   family: string | null;
 }
 
 export interface ChainVisibility {
-  showMutations: boolean;
+  showVariants: boolean;
   visibleLigandIds: string[];    // Array for Redux serialization
 }
 
@@ -43,10 +50,7 @@ export interface ChainAnnotationEntry {
 }
 
 interface AnnotationsState {
-  // Primary chain being viewed (drives which annotations are "active")
   primaryChainKey: string | null;
-
-  // Per-chain storage, keyed by `${RCSB_ID}_${authAsymId}`
   chains: Record<string, ChainAnnotationEntry>;
 }
 
@@ -60,7 +64,7 @@ const initialState: AnnotationsState = {
 };
 
 const DEFAULT_VISIBILITY: ChainVisibility = {
-  showMutations: true,
+  showVariants: true,
   visibleLigandIds: [],
 };
 
@@ -76,7 +80,6 @@ export const annotationsSlice = createSlice({
       state.primaryChainKey = action.payload;
     },
 
-    // Called when starting to fetch annotations
     setChainLoading: (state, action: PayloadAction<string>) => {
       const key = action.payload;
       if (!state.chains[key]) {
@@ -92,7 +95,6 @@ export const annotationsSlice = createSlice({
       }
     },
 
-    // Called when annotations are fetched successfully
     setChainAnnotations: (state, action: PayloadAction<{
       chainKey: string;
       data: ChainAnnotationData;
@@ -103,8 +105,8 @@ export const annotationsSlice = createSlice({
       state.chains[chainKey] = {
         data,
         visibility: existing?.visibility ?? {
-          showMutations: true,
-          visibleLigandIds: data.ligandSites.map(s => s.id), // Show all by default
+          showVariants: true,
+          visibleLigandIds: data.ligandSites.map(s => s.id),
         },
         isLoading: false,
         error: null,
@@ -119,11 +121,10 @@ export const annotationsSlice = createSlice({
       }
     },
 
-    // Visibility toggles
-    setMutationsVisible: (state, action: PayloadAction<{ chainKey: string; visible: boolean }>) => {
+    setVariantsVisible: (state, action: PayloadAction<{ chainKey: string; visible: boolean }>) => {
       const chain = state.chains[action.payload.chainKey];
       if (chain) {
-        chain.visibility.showMutations = action.payload.visible;
+        chain.visibility.showVariants = action.payload.visible;
       }
     },
 
@@ -169,7 +170,7 @@ export const {
   setChainLoading,
   setChainAnnotations,
   setChainError,
-  setMutationsVisible,
+  setVariantsVisible,
   toggleLigandSite,
   showAllLigands,
   hideAllLigands,
@@ -181,7 +182,7 @@ export const {
 // Selectors
 // ============================================================
 
-const selectAnnotationsState = (state: RootState) => state.annotations;
+export const selectAnnotationsState = (state: RootState) => state.annotations;
 
 export const selectPrimaryChainKey = (state: RootState) =>
   state.annotations.primaryChainKey;
@@ -198,7 +199,6 @@ export const selectChainVisibility = (state: RootState, chainKey: string): Chain
 export const selectChainIsLoading = (state: RootState, chainKey: string): boolean =>
   state.annotations.chains[chainKey]?.isLoading ?? false;
 
-// All chain keys that have been loaded (for multi-chain scenarios)
 export const selectLoadedChainKeys = createSelector(
   [selectAnnotationsState],
   (annotations): string[] => Object.keys(annotations.chains).filter(

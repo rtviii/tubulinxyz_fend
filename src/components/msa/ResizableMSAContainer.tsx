@@ -24,6 +24,7 @@ interface ResizableMSAContainerProps {
   onResidueClick?: (seqId: string, position: number) => void;
 }
 
+
 export interface ResizableMSAContainerHandle {
   redraw: () => void;
   jumpToRange: (start: number, end: number) => void;
@@ -31,6 +32,7 @@ export interface ResizableMSAContainerHandle {
   setHighlight: (start: number, end: number) => void;
   clearHighlight: () => void;
   applyPositionColors: (colors: Record<number, string>) => void;
+  applyCellColors: (colors: Record<string, string>) => void;
   clearPositionColors: () => void;
 }
 
@@ -66,12 +68,9 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     const [scrollTop, setScrollTop] = useState(0);
     const [isInitialized, setIsInitialized] = useState(false);
 
-    // Track the base color scheme (before custom colors are applied)
     const baseColorSchemeRef = useRef(colorScheme);
-    // Track whether we have custom colors active
     const hasCustomColorsRef = useRef(false);
 
-    // Track MSA scroll position for label sync
     useEffect(() => {
       const msaEl = msaRef.current;
       if (!msaEl || !isInitialized) return;
@@ -105,7 +104,6 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       return () => observer.disconnect();
     }, []);
 
-    // Calculate widths
     const msaAreaWidth = showLabels ? availableWidth - labelWidth : availableWidth;
     const minContentWidth = maxLength * minTileWidth;
     const contentWidth = Math.max(msaAreaWidth, minContentWidth);
@@ -187,11 +185,8 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       const msa = msaRef.current;
       if (!msa) return;
 
-      // Update base scheme reference
       baseColorSchemeRef.current = scheme;
-      
-      // If we have custom colors, don't actually change the scheme
-      // (custom colors take precedence)
+
       if (hasCustomColorsRef.current) return;
 
       msa.setAttribute('color-scheme', scheme);
@@ -218,23 +213,39 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       msa.removeAttribute('highlight');
     }, []);
 
-    // ============================================================
-    // Custom Position Colors
-    // ============================================================
-
+    // Column-based colors (legacy/fallback)
     const applyPositionColors = useCallback((colors: Record<number, string>) => {
       const msa = msaRef.current;
       if (!msa) return;
 
-      // Store colors globally for the custom color scheme to read
       window.__nightingaleCustomColors = {
         positionColors: colors,
+        cellColors: {},
         defaultColor: '#ffffff',
       };
 
       hasCustomColorsRef.current = true;
+      msa.setAttribute('color-scheme', 'custom-position');
 
-      // Switch to custom color scheme
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          triggerRedraw();
+        });
+      });
+    }, [triggerRedraw]);
+
+    // Cell-based colors (row-column specific)
+    const applyCellColors = useCallback((colors: Record<string, string>) => {
+      const msa = msaRef.current;
+      if (!msa) return;
+
+      window.__nightingaleCustomColors = {
+        cellColors: colors,
+        positionColors: {},
+        defaultColor: '#ffffff',
+      };
+
+      hasCustomColorsRef.current = true;
       msa.setAttribute('color-scheme', 'custom-position');
 
       requestAnimationFrame(() => {
@@ -248,11 +259,9 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       const msa = msaRef.current;
       if (!msa) return;
 
-      // Clear global colors
       delete window.__nightingaleCustomColors;
       hasCustomColorsRef.current = false;
 
-      // Revert to base color scheme
       msa.setAttribute('color-scheme', baseColorSchemeRef.current);
 
       requestAnimationFrame(() => {
@@ -262,22 +271,21 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       });
     }, [triggerRedraw]);
 
-    useImperativeHandle(ref, () => ({
-      redraw: triggerRedraw,
-      jumpToRange,
-      setColorScheme,
-      setHighlight,
-      clearHighlight,
-      applyPositionColors,
-      clearPositionColors,
-    }), [triggerRedraw, jumpToRange, setColorScheme, setHighlight, clearHighlight, applyPositionColors, clearPositionColors]);
-
+useImperativeHandle(ref, () => ({
+  redraw: triggerRedraw,
+  jumpToRange,
+  setColorScheme,
+  setHighlight,
+  clearHighlight,
+  applyPositionColors,
+  applyCellColors,  // <-- This must be here
+  clearPositionColors,
+}), [triggerRedraw, jumpToRange, setColorScheme, setHighlight, clearHighlight, applyPositionColors, applyCellColors, clearPositionColors]);
     useLayoutEffect(() => {
       if (contentWidth === 0) return;
       requestAnimationFrame(() => syncWidths());
     }, [contentWidth, syncWidths]);
 
-    // Load data into MSA
     useEffect(() => {
       if (!msaRef.current || sequences.length === 0 || contentWidth === 0) return;
 
@@ -296,14 +304,11 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       return () => clearTimeout(timer);
     }, [sequences, contentWidth, syncWidths]);
 
-    // Handle color scheme prop changes
     useEffect(() => {
       if (!msaRef.current || !isInitialized) return;
-      
-      // Update base scheme
+
       baseColorSchemeRef.current = colorScheme;
-      
-      // Only apply if we don't have custom colors
+
       if (!hasCustomColorsRef.current) {
         msaRef.current.setAttribute('color-scheme', colorScheme);
         requestAnimationFrame(() => {
@@ -312,7 +317,6 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       }
     }, [colorScheme, isInitialized, triggerRedraw]);
 
-    // Event handlers
     useEffect(() => {
       const msa = msaRef.current;
       if (!msa || !isInitialized) return;
@@ -348,7 +352,6 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       setLabelWidth(width);
     }, []);
 
-    // Cleanup on unmount
     useEffect(() => {
       return () => {
         delete window.__nightingaleCustomColors;
@@ -373,12 +376,9 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
 
     return (
       <div ref={outerRef} className="w-full h-full flex">
-        {/* Labels column - positioned to align with MSA rows (below nav) */}
         {showLabels && (
           <div className="flex-shrink-0 flex flex-col" style={{ width: labelWidth }}>
-            {/* Spacer for navigation height */}
             <div style={{ height: navHeight }} className="flex-shrink-0" />
-            {/* Labels that scroll with MSA */}
             <div className="flex-1 overflow-hidden">
               <MSALabels
                 rowHeight={rowHeight}
@@ -389,7 +389,6 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
           </div>
         )}
 
-        {/* MSA area - navigation and MSA inside same manager */}
         <div
           className="flex-1 min-w-0"
           style={{

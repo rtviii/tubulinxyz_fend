@@ -58,7 +58,12 @@ class CanvasTilingGridComponent {
     const text = sequence[column];
     if (text !== undefined) {
 
-      const colorSchemeName = this.props.colorScheme.getColor(text, column, row);
+const colorSchemeName = this.props.colorScheme.getColor(
+  text, 
+  column + 1, // Change to 1-based index if your map keys are 1-based (standard)
+  null,       // Placeholder for conservation
+  row         // The row index
+);
       const overlayFactor = this.getOverlayFactor(text, column);
       const key = `${text}-${colorSchemeName}-${overlayFactor}`;
       const canvasTile = this.props.residueTileCache.createTile({

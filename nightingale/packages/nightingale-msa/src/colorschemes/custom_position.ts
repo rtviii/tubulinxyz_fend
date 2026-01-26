@@ -16,26 +16,34 @@ declare global {
 const customPosition: ColorStructure = {
   init: function () { },
 
-  run: function (
+run: function (
     base: string,
     position: number,
     _conservation?: unknown,
     row?: number
   ): string {
     const config = typeof window !== 'undefined' ? window.__nightingaleCustomColors : undefined;
-
-
+    
+    // Debug: log every 100th call to avoid spam
+    if (position === 339 || position === 340) {
+      console.log('[custom_position.run]', { base, position, row, hasConfig: !!config, cellColors: config?.cellColors });
+    }
+    
     if (!config) {
-      console.warn('[custom_position.run] NO CONFIG');
       return "#ffffff";
     }
-
+    
     // Check cell-specific coloring first (row+position)
     if (row !== undefined && config.cellColors) {
       const cellKey = `${row}-${position}`;
       const cellColor = config.cellColors instanceof Map
         ? config.cellColors.get(cellKey)
         : config.cellColors[cellKey];
+        
+      if (position === 339 || position === 340) {
+        console.log('[custom_position.run] Cell lookup:', { cellKey, cellColor, allKeys: Object.keys(config.cellColors || {}) });
+      }
+      
       if (cellColor) {
         return cellColor;
       }

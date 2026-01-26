@@ -1,6 +1,8 @@
 // src/app/structures/[rcsb_id]/page.tsx
 'use client';
 
+import { VariantsPanel } from '@/components/annotations/VariantsPanel';
+import { LigandsPanel } from '@/components/annotations/LigandsPanel';
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useAppSelector, useAppDispatch } from '@/store/store';
@@ -27,7 +29,7 @@ import {
   selectPositionMapping,
   selectIsChainAligned,
 } from '@/store/slices/sequence_registry';
-import { setPrimaryChain } from '@/store/slices/annotationsSlice';
+import { LigandSite, setPrimaryChain, Variant } from '@/store/slices/annotationsSlice';
 import { useGetMasterProfileQuery } from '@/store/tubxz_api';
 import { useChainAlignment } from '@/hooks/useChainAlignment';
 import { useNightingaleComponents } from '@/hooks/useNightingaleComponents';
@@ -126,16 +128,15 @@ export default function StructureProfilePage() {
 
   const {
     ligandSites,
-    mutations,
-    showMutations,
+    variants,
+    showVariants,
     visibleLigandIds,
-    setShowMutations,
+    setShowVariants,
     toggleLigand,
     showAll,
     hideAll,
     clearAll,
   } = useAnnotationVisibility(chainKey);
-
   // ============================================================
   // Viewer synchronization
   // ============================================================
@@ -264,13 +265,15 @@ export default function StructureProfilePage() {
                   pdbId={loadedStructure}
                   profile={profile}
                   // Annotation controls
+
                   ligandSites={ligandSites}
-                  mutations={mutations}
+                  variants={variants}
                   visibleLigandIds={visibleLigandIds}
-                  showMutations={showMutations}
+                  showVariants={showVariants}
                   onToggleLigand={toggleLigand}
                   onFocusLigand={focusLigandSite}
-                  onToggleMutations={setShowMutations}
+                  onToggleVariants={setShowVariants}
+                  onFocusVariant={focusMutation}
                   onShowAllLigands={showAll}
                   onHideAllLigands={hideAll}
                   onClearAll={clearAll}
@@ -400,13 +403,14 @@ interface MonomerSidebarProps {
   pdbId: string | null;
   profile: StructureProfile | null;
   // Annotations
-  ligandSites: Array<{ id: string; ligandId: string; ligandName: string; color: string }>;
-  mutations: Array<{ masterIndex: number; fromResidue: string; toResidue: string; phenotype: string | null }>;
+  ligandSites: Array<LigandSite>;
+  variants: Array<Variant>;
   visibleLigandIds: Set<string>;
-  showMutations: boolean;
+  showVariants: boolean;
   onToggleLigand: (siteId: string) => void;
   onFocusLigand: (siteId: string) => void;
-  onToggleMutations: (enabled: boolean) => void;
+  onToggleVariants: (enabled: boolean) => void;
+  onFocusVariant: (masterIndex: number) => void;
   onShowAllLigands: () => void;
   onHideAllLigands: () => void;
   onClearAll: () => void;
@@ -420,15 +424,16 @@ function MonomerSidebar({
   pdbId,
   profile,
   ligandSites,
-  mutations,
+  variants,
   visibleLigandIds,
-  showMutations,
+  showVariants,
   onToggleLigand,
   onFocusLigand,
-  onToggleMutations,
+  onToggleVariants,
+  onFocusVariant,
   onShowAllLigands,
   onHideAllLigands,
-  onClearAll,
+  onClearAll
 }: MonomerSidebarProps) {
   const [showAlignForm, setShowAlignForm] = useState(false);
   const { alignChain } = useChainAlignment();
@@ -479,8 +484,8 @@ function MonomerSidebar({
                 key={chain.chainId}
                 onClick={() => handleChainSwitch(chain.chainId)}
                 className={`px-2 py-1 text-xs font-mono rounded ${chain.chainId === activeChainId
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
               >
                 {chain.chainId}
@@ -526,6 +531,7 @@ function MonomerSidebar({
       </div>
 
       {/* Annotations panel */}
+      {/* Annotations panel */}
       <section className="flex-1 min-h-0 border-t pt-4 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
@@ -540,64 +546,23 @@ function MonomerSidebar({
         </div>
 
         <div className="flex-1 overflow-y-auto space-y-4">
-          {/* Mutations toggle */}
-          {mutations.length > 0 && (
-            <div className="flex items-center justify-between py-2 px-2 rounded bg-gray-50">
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: '#ff6b6b' }}
-                />
-                <span className="text-sm">Mutations ({mutations.length})</span>
-              </div>
-              <button
-                onClick={() => onToggleMutations(!showMutations)}
-                className="p-1 text-gray-400 hover:text-gray-700"
-              >
-                {showMutations ? <Eye size={14} /> : <EyeOff size={14} />}
-              </button>
-            </div>
-          )}
+          <VariantsPanel
+            variants={variants}
+            showVariants={showVariants}
+            onToggleVariants={onToggleVariants}
+            onFocusVariant={onFocusVariant}
+          />
 
-          {/* Ligand sites */}
-          {ligandSites.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">
-                  Ligand Sites ({ligandSites.length})
-                </span>
-                <div className="flex gap-1">
-                  <button
-                    onClick={onShowAllLigands}
-                    className="text-xs text-blue-600 hover:text-blue-800"
-                  >
-                    Show all
-                  </button>
-                  <span className="text-gray-300">|</span>
-                  <button
-                    onClick={onHideAllLigands}
-                    className="text-xs text-gray-500 hover:text-gray-700"
-                  >
-                    Hide all
-                  </button>
-                </div>
-              </div>
+          <LigandsPanel
+            ligandSites={ligandSites}
+            visibleLigandIds={visibleLigandIds}
+            onToggleLigand={onToggleLigand}
+            onFocusLigand={onFocusLigand}
+            onShowAll={onShowAllLigands}
+            onHideAll={onHideAllLigands}
+          />
 
-              <div className="space-y-1">
-                {ligandSites.map(site => (
-                  <LigandSiteRow
-                    key={site.id}
-                    site={site}
-                    isVisible={visibleLigandIds.has(site.id)}
-                    onToggle={() => onToggleLigand(site.id)}
-                    onFocus={() => onFocusLigand(site.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {ligandSites.length === 0 && mutations.length === 0 && (
+          {ligandSites.length === 0 && variants.length === 0 && (
             <p className="text-sm text-gray-400 text-center py-4">
               No annotations available
             </p>

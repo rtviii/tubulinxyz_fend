@@ -13,25 +13,25 @@ export interface AlignmentResult {
 
 function formatFamily(family: string | undefined): string | undefined {
   if (!family) return undefined;
-  
+
   const tubulinMatch = family.match(/^tubulin_(\w+)$/);
   if (tubulinMatch) {
     const type = tubulinMatch[1];
     return type.charAt(0).toUpperCase() + type.slice(1);
   }
-  
+
   const mapMatch = family.match(/^map_(\w+)/);
   if (mapMatch) {
     return mapMatch[1].toUpperCase();
   }
-  
+
   return family;
 }
 
 export function useChainAlignment() {
   const dispatch = useAppDispatch();
   const [alignSequence] = useAlignSequenceMutation();
-  
+
   const [isAligning, setIsAligning] = useState(false);
   const [currentChain, setCurrentChain] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,9 +81,11 @@ export function useChainAlignment() {
             positionMapping[msaPos] = observed.authSeqIds[idx];
           }
         });
+        console.log('Alignment result.mapping (first 10):', result.mapping.slice(0, 10));
+        console.log('Observed authSeqIds (first 10):', observed.authSeqIds.slice(0, 10));
 
         const formattedFamily = formatFamily(family);
-        const displayName = formattedFamily 
+        const displayName = formattedFamily
           ? `${pdbId}:${chainId} (${formattedFamily})`
           : `${pdbId}:${chainId}`;
 
