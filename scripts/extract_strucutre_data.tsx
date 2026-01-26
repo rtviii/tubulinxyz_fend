@@ -141,10 +141,9 @@ function extractObservedSequences(structure: Structure): ObservedSequenceData[] 
 // ============================================================
 
 const SKIP_LIGANDS = new Set([
-    'HOH', 'DOD', 'WAT', 'NA', 'CL', 'K', 'MG', 'CA', 'ZN', 'FE',
-    'MN', 'CO', 'NI', 'CU', 'SO4', 'PO4', 'NO3', 'CO3', 'GOL', 'EDO',
-    'PEG', 'PGE', 'ACT', 'FMT', 'MES', 'TRS', 'HEP', 'EPE', 'CIT',
-    'TAR', 'DMS', 'DMF', 'BME', 'DTT'
+    'HOH', 'DOD', 'WAT', 'NA', 'CL', 'K', 'MG', 'CA', 'ZN', 'FE', "MG",
+    'MN', 'CO', 'NI', 'CU', 'SO4', 'PO4', 'NO3', 'CO3', 'GOL', 
+    
 ]);
 
 interface LigandInstance {
