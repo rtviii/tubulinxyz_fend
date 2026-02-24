@@ -11,7 +11,6 @@ type TilingGridOptions = {
   tileWidth: number;
   tileHeight: number;
   sequences: SequencesType;
-  //TODO: correct this types when migrated
   residueTileCache: CanvasCache;
   colorScheme: ColorScheme;
   overlayConservation?: boolean;
@@ -21,6 +20,7 @@ type TilingGridOptions = {
   borderColor: string;
   textColor: string;
   textFont: string;
+  cellColors?: Record<string, string>;   // <-- add this
 };
 
 const aLetterOffset = "A".charCodeAt(0);
@@ -57,10 +57,18 @@ class CanvasTilingGridComponent {
     if (column >= sequence.length) return undefined;
     const text = sequence[column];
     if (text !== undefined) {
+      const cellKey = `${row}-${column}`;
+      const cellOverride = this.props.cellColors?.[cellKey];
+      if (cellOverride) {
+        console.log('[TilingGrid] cell override hit:', cellKey, cellOverride);
+      }
 
-      const colorSchemeName = this.props.colorScheme.getColor(text, column, row);
-      const overlayFactor = this.getOverlayFactor(text, column);
-      const key = `${text}-${colorSchemeName}-${overlayFactor}`;
+      const colorSchemeName = cellOverride ?? this.props.colorScheme.getColor(text, column, row);
+      const overlayFactor = cellOverride ? 1 : this.getOverlayFactor(text, column);
+      const key = cellOverride
+        ? `cell-${cellKey}-${text}`
+        : `${text}-${colorSchemeName}-${overlayFactor}`;
+
       const canvasTile = this.props.residueTileCache.createTile({
         key,
         tileWidth,

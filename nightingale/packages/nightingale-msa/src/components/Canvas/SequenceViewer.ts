@@ -41,6 +41,16 @@ class SequenceViewerComponent extends DraggingComponent {
   private redrawStarted = 0;
   private redrawnTiles = 0;
   private colorSchemeManager = new ColorScheme(DEFAULT_COLOR_SCHEME);
+  private _cellColors: Record<string, string> = {};
+
+  set cellColors(val: Record<string, string>) {
+    this._cellColors = val;
+    this.invalidateAndRedraw();
+  }
+
+  get cellColors(): Record<string, string> {
+    return this._cellColors;
+  }
 
   @property({
     type: Number,
@@ -281,9 +291,6 @@ class SequenceViewerComponent extends DraggingComponent {
       tileHeight: this.tileHeight * this.props.yGridSize,
       create: ({ ctx }) => {
         if (!this.sequences) return;
-        if (debug) {
-          this.redrawnTiles++;
-        }
         this.tilingGridManager.draw({
           ctx,
           startYTile: row,
@@ -302,6 +309,7 @@ class SequenceViewerComponent extends DraggingComponent {
           borderColor: this.props.borderColor,
           overlayConservation: this.overlayConservation,
           conservation: this.props.conservation,
+          cellColors: this._cellColors,   // <-- add this
         });
       },
     });

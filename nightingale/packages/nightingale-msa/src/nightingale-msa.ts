@@ -80,6 +80,15 @@ class NightingaleMSA extends withManager(
     };
   }
 
+  private _cellColors: Record<string, string> = {};
+
+set cellColors(val: Record<string, string>) {
+  this._cellColors = val;
+  console.log('[NightingaleMSA] cellColors set, sequenceViewer:', !!this.sequenceViewer, 'keys:', Object.keys(val).length);
+  if (this.sequenceViewer) {
+    this.sequenceViewer.cellColors = val;
+  }
+}
   set data(sequences: SequencesMSA) {
     this.length = Math.max(...sequences.map(({ sequence }) => sequence.length));
     const seqs = {
@@ -182,6 +191,11 @@ class NightingaleMSA extends withManager(
     this.labelPanel = this.renderRoot.querySelector("msa-labels");
 
     if (!this.sequenceViewer) return;
+
+    // flush any cellColors set before we were ready
+    if (Object.keys(this._cellColors).length > 0) {
+      this.sequenceViewer.cellColors = this._cellColors;
+    }
 
     this.sequenceViewer.position = {
       xPos: 0,

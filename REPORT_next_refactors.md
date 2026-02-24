@@ -43,6 +43,107 @@ This is correct as long as the format is strictly `RCSBID_CHAINID` where RCSB ID
 
 ---
 
+
+
+### 2. Nightingale cellColors extension
+
+**Problem:** Cell coloring currently goes through `window.__nightingaleCustomColors`, a global singleton. Any second MSA instance would clobber the first. Forcing redraws requires toggling the `color-scheme` attribute. The whole mechanism is fragile.
+
+**Fix:** Thread `cellColors` as an instance property through the rendering stack. Four files:
+
+`CanvasTilingGrid.ts` - add `cellColors?: Record<string, string>` to `TilingGridOptions`. In `drawTile`, check for a cell override before calling `colorScheme.getColor`:
+
+```ts
+const cellKey = `${row}-${column}`;
+const cellOverride = this.props.cellColors?.[cellKey];
+const colorSchemeName = cellOverride ?? this.props.colorScheme.getColor(text, column, row);
+const overlayFactor = cellOverride ? 1 : this.getOverlayFactor(text, column);
+const key = cellOverride
+  ? `cell-${cellKey}-${text}`
+  : `${text}-${colorSchemeName}-${overlayFactor}`;
+```
+
+`SequenceViewer.ts` - add `@state() cellColors: Record<string, string> = {}` and pass it into the `tilingGridManager.draw()` call inside `renderTile`.
+
+`nightingale-msa.ts` - add a setter that pushes to the inner viewer and triggers invalidation:
+
+```ts
+private _cellColors: Record<string, string> = {};
+
+set cellColors(val: Record<string, string>) {
+  this._cellColors = val;
+  if (this.sequenceViewer) {
+    this.sequenceViewer.cellColors = val;
+    this.sequenceViewer.invalidateAndRedraw();
+  }
+}
+```
+
+`ResizableMSAContainer.tsx` - simplify `applyCellColors` and `clearPositionColors`, remove `hasCustomColorsRef`, remove all `window.__nightingaleCustomColors` assignments, remove the cleanup effect:
+
+```ts
+const applyCellColors = useCallback((colors: Record<string, string>) => {
+  (msaRef.current as any)?.cellColors = colors;
+}, []);
+
+const clearPositionColors = useCallback(() => {
+  (msaRef.current as any)?.cellColors = {};
+}, []);
+```
+
+`custom_position.ts` can be kept as a no-op fallback or deleted. The `color-scheme="custom-position"` attribute still needs to be set on the element for the scheme to be active, but it no longer needs to be toggled to force redraws.
+
+
+### 2. Nightingale cellColors extension
+
+**Problem:** Cell coloring currently goes through `window.__nightingaleCustomColors`, a global singleton. Any second MSA instance would clobber the first. Forcing redraws requires toggling the `color-scheme` attribute. The whole mechanism is fragile.
+
+**Fix:** Thread `cellColors` as an instance property through the rendering stack. Four files:
+
+`CanvasTilingGrid.ts` - add `cellColors?: Record<string, string>` to `TilingGridOptions`. In `drawTile`, check for a cell override before calling `colorScheme.getColor`:
+
+```ts
+const cellKey = `${row}-${column}`;
+const cellOverride = this.props.cellColors?.[cellKey];
+const colorSchemeName = cellOverride ?? this.props.colorScheme.getColor(text, column, row);
+const overlayFactor = cellOverride ? 1 : this.getOverlayFactor(text, column);
+const key = cellOverride
+  ? `cell-${cellKey}-${text}`
+  : `${text}-${colorSchemeName}-${overlayFactor}`;
+```
+
+`SequenceViewer.ts` - add `@state() cellColors: Record<string, string> = {}` and pass it into the `tilingGridManager.draw()` call inside `renderTile`.
+
+`nightingale-msa.ts` - add a setter that pushes to the inner viewer and triggers invalidation:
+
+```ts
+private _cellColors: Record<string, string> = {};
+
+set cellColors(val: Record<string, string>) {
+  this._cellColors = val;
+  if (this.sequenceViewer) {
+    this.sequenceViewer.cellColors = val;
+    this.sequenceViewer.invalidateAndRedraw();
+  }
+}
+```
+
+`ResizableMSAContainer.tsx` - simplify `applyCellColors` and `clearPositionColors`, remove `hasCustomColorsRef`, remove all `window.__nightingaleCustomColors` assignments, remove the cleanup effect:
+
+```ts
+const applyCellColors = useCallback((colors: Record<string, string>) => {
+  (msaRef.current as any)?.cellColors = colors;
+}, []);
+
+const clearPositionColors = useCallback(() => {
+  (msaRef.current as any)?.cellColors = {};
+}, []);
+```
+
+`custom_position.ts` can be kept as a no-op fallback or deleted. The `color-scheme="custom-position"` attribute still needs to be set on the element for the scheme to be active, but it no longer needs to be toggled to force redraws.
+
+---
+
 ### 3. Split page.tsx
 
 **Problem:** `src/app/structures/[rcsb_id]/page.tsx` is ~600 lines containing the page orchestration, two sidebar components, the MSA panel, and ~6 helper components all in one file. Logic and presentation are mixed throughout.
