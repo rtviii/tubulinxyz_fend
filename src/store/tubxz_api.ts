@@ -637,7 +637,7 @@ export type AssemblyInstancesMap = {
 };
 export type BindingSiteResidue = {
   auth_asym_id: string;
-  observed_index: number;
+  auth_seq_id: number;
   comp_id: string;
   master_index?: number | null;
 };
@@ -713,17 +713,12 @@ export type LigandListResponse = {
   /** Whether more results exist */
   has_more: boolean;
 };
-export type BindingSiteResidue2 = {
-  auth_asym_id: string;
-  observed_index: number;
-  comp_id: string;
-  master_index?: number | null;
-};
 export type LigandNeighborhood = {
   ligand_id: string;
   ligand_name?: string | null;
   ligand_auth_asym_id: string;
-  residues?: BindingSiteResidue2[];
+  ligand_auth_seq_id: number;
+  residues?: BindingSiteResidue[];
   residue_count: number;
   drugbank_id?: string | null;
 };

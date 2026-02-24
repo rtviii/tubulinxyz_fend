@@ -4,4 +4,6 @@
 
 
 Code quality:
-- 
+- fix indices
+- fix and verify ligands
+- extend nightingale, 

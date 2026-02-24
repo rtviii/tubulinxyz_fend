@@ -4,6 +4,7 @@ import { useAppDispatch } from '@/store/store';
 import { addSequence, setPositionMapping, PositionMapping } from '@/store/slices/sequence_registry';
 import { useAlignSequenceMutation } from '@/store/tubxz_api';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
+import { formatFamilyShort } from '@/lib/formatters';
 
 export interface AlignmentResult {
   sequenceId: string;
@@ -11,22 +12,6 @@ export interface AlignmentResult {
   mapping: PositionMapping;
 }
 
-function formatFamily(family: string | undefined): string | undefined {
-  if (!family) return undefined;
-
-  const tubulinMatch = family.match(/^tubulin_(\w+)$/);
-  if (tubulinMatch) {
-    const type = tubulinMatch[1];
-    return type.charAt(0).toUpperCase() + type.slice(1);
-  }
-
-  const mapMatch = family.match(/^map_(\w+)/);
-  if (mapMatch) {
-    return mapMatch[1].toUpperCase();
-  }
-
-  return family;
-}
 
 export function useChainAlignment() {
   const dispatch = useAppDispatch();
@@ -92,17 +77,17 @@ const fam = family ?? 'unknown';          // keep family only as metadata
         console.log('Alignment result.mapping (first 10):', result.mapping.slice(0, 10));
         console.log('Observed authSeqIds (first 10):', observed.authSeqIds.slice(0, 10));
 
-        const formattedFamily = formatFamily(family);
+        const formattedFamily = formatFamilyShort(family);
         const displayName = formattedFamily
           ? `${pdbId}:${chainId} (${formattedFamily})`
           : `${pdbId}:${chainId}`;
 
         dispatch(addSequence({
-          id: key,
-          name: displayName,
-          sequence: result.aligned_sequence,
+          id        : key,
+          name      : displayName,
+          sequence  : result.aligned_sequence,
           originType: 'pdb',
-          chainRef: { pdbId, chainId },
+          chainRef  : { pdbId, chainId },
           family,
         }));
 

@@ -17,8 +17,8 @@ export interface LigandSite {
   color: string;
   drugbankId: string | null;
   residueCount: number;
-  masterIndices: number[];   // from backend residue.master_index, for MSA column lookup
-  authSeqIds: number[];      // from backend residue.auth_seq_id (new field), for Molstar
+  masterIndices: number[];
+  authSeqIds: number[];
 }
 
 export interface Variant {

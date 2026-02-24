@@ -117,11 +117,11 @@ export function ChainAnnotationFetcher({
         }
 
         const ligandSites: LigandSite[] = (ligandsQuery.data.neighborhoods ?? []).map(n => ({
-            id: `${n.ligand_id}_${n.ligand_auth_asym_id}_${n.ligand_auth_seq_id ?? 0}`,
+            id: `${n.ligand_id}_${n.ligand_auth_asym_id}_${n.ligand_auth_seq_id}`,
+            ligandAuthSeqId: n.ligand_auth_seq_id,
             ligandId: n.ligand_id,
             ligandName: n.ligand_name ?? n.ligand_id,
             ligandChain: n.ligand_auth_asym_id,
-            ligandAuthSeqId: n.ligand_auth_seq_id ?? 0,
             color: getLigandColor(n.ligand_id),
             drugbankId: n.drugbank_id ?? null,
             residueCount: n.residue_count,
