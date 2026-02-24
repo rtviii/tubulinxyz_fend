@@ -7,7 +7,6 @@ import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useAppSelector, useAppDispatch } from '@/store/store';
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
-
 import { selectSequencesForFamily } from '@/store/slices/sequence_registry';
 import {
   selectLoadedStructure,
@@ -958,6 +957,7 @@ function LigandSiteRow({
     </div>
   );
 }
+
 
 function AlignedStructureRow({
   aligned,

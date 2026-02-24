@@ -26,6 +26,35 @@ import {
 } from "@/store/slices/slice_structures";
 import { set_polymers_filter as set_poly_filter_real } from "@/store/slices/slice_polymers";
 import { getHexColor } from "@/components/molstar/colors/tubulin-color-theme";
+function formatFamilyLabel(f: string) {
+    const special: Record<string, string> = {
+        tubulin_alpha: "α-tubulin",
+        tubulin_beta: "β-tubulin",
+        tubulin_gamma: "γ-tubulin",
+        tubulin_delta: "δ-tubulin",
+        tubulin_epsilon: "ε-tubulin",
+        map_eb_family: "EB family",
+        map_ckap5_chtog: "CKAP5 / ch-TOG",
+        map_ttll_glutamylase_short: "TTLL glutamylase (short)",
+        map_ttll_glutamylase_long: "TTLL glutamylase (long)",
+        map_ccp_deglutamylase: "CCP deglutamylase",
+    };
+    if (special[f]) return special[f];
+
+    // fallback: map_x_y -> "X Y"
+    return f
+        .replace(/^tubulin_/, "")
+        .replace(/^map_/, "")
+        .split("_")
+        .map((w) => (w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1)))
+        .join(" ");
+}
+
+function formatLigandLabel(id: string, name?: string | null, count?: number) {
+    const n = name ? name.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : "";
+    return count != null ? `${id} — ${n} (${count})` : `${id} — ${n}`;
+}
+
 
 const tagRender = (props: any) => {
     const { label, value, closable, onClose } = props;
@@ -35,19 +64,19 @@ const tagRender = (props: any) => {
             closable={closable}
             onClose={onClose}
             style={{
-                marginRight    : 4,
-                marginTop      : 2,
-                marginBottom   : 2,
-                borderRadius   : '2px',                
+                marginRight: 4,
+                marginTop: 2,
+                marginBottom: 2,
+                borderRadius: '2px',
                 backgroundColor: color,
-                border         : `1px solid rgba(0,0,0,0.2)`,   
-                fontWeight     : 700,
-                color          : '#fff',
-                fontSize       : '10px',
-                textTransform  : 'uppercase',
-                padding        : '0px 6px',
-                display        : 'inline-flex',
-                alignItems     : 'center'
+                border: `1px solid rgba(0,0,0,0.2)`,
+                fontWeight: 700,
+                color: '#fff',
+                fontSize: '10px',
+                textTransform: 'uppercase',
+                padding: '0px 6px',
+                display: 'inline-flex',
+                alignItems: 'center'
             }}
         >
             {label}
@@ -65,10 +94,10 @@ const FilterSection = ({ label, children }: { label: string; children: React.Rea
 );
 
 export const StructureFiltersComponent = ({ update_state }: { update_state: "structures" | "polymers" }) => {
-    const dispatch                 = useAppDispatch();
+    const dispatch = useAppDispatch();
     const { data: sourceTaxaTree } = useGetTaxonomyTreeQuery({ taxType: "source" });
-    const { data: familiesData }   = useListFamiliesQuery();
-    const { data: facets }         = useGetStructureFacetsQuery();
+    const { data: familiesData } = useListFamiliesQuery();
+    const { data: facets } = useGetStructureFacetsQuery();
 
     const filters = useAppSelector((state) => (update_state === "structures" ? state.structures_page.filters : state.polymers_page.filters));
     const total_count = useAppSelector((state) => (update_state === "structures" ? state.structures_page?.total_count : state.polymers_page?.total_count) || 0);
@@ -79,14 +108,14 @@ export const StructureFiltersComponent = ({ update_state }: { update_state: "str
         dispatch(action({ filter_type: filterType as any, value }));
     };
 
-    const familyOptions = (familiesData ?? []).map((fam: any) => ({
-        value: fam.family,
-        label: fam.family.replace('tubulin_', '').replace('map_', '').toUpperCase(),
+    const familyOptions = (facets?.tubulin_families ?? []).map((f) => ({
+        value: f.value,
+        label: `${formatFamilyLabel(f.value)} (${f.count})`,
     }));
 
     const ligandOptions = (facets?.top_ligands ?? []).map((lig) => ({
         value: lig.chemical_id,
-        label: lig.chemical_id,
+        label: formatLigandLabel(lig.chemical_id, lig.chemical_name, lig.count),
     }));
 
     return (
@@ -95,7 +124,7 @@ export const StructureFiltersComponent = ({ update_state }: { update_state: "str
                 <CollapsibleTrigger className="w-full px-3 py-2 flex items-center justify-between border-b border-gray-200 bg-gray-50">
                     <div className="flex items-center gap-2">
                         <span className="font-bold text-gray-900 text-xs uppercase tracking-tighter">Filters</span>
-                        <Tooltip 
+                        <Tooltip
                             title="Total count of unique PDB structures. Note: Multi-species complexes are counted once here but appear in multiple organism facets."
                             placement="right"
                         >
@@ -224,3 +253,4 @@ export const StructureFiltersComponent = ({ update_state }: { update_state: "str
         </div>
     );
 };
+

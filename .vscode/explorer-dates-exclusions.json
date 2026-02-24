@@ -1,0 +1,18 @@
+{
+  "exclusions": [
+    ".git",
+    "logs",
+    "pack",
+    "node_modules",
+    "tmp",
+    "swc-darwin-arm64",
+    "bin",
+    "dist",
+    "build",
+    "out",
+    ".idea",
+    ".vscode"
+  ],
+  "updatedAt": "2026-02-24T09:02:45.248Z",
+  "version": 1
+}

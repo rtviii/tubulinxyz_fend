@@ -21,12 +21,12 @@ import type { Structure } from 'molstar/lib/mol-model/structure';
 type Family = string;
 
 const TubulinFamilyColors: Record<string, Color> = {
-    tubulin_alpha: Color(0x3784F0),   // Strong Blue
-    tubulin_beta: Color(0xEB6134),    // Deep Red/Orange
-    tubulin_gamma: Color(0x884EA0),   // Royal Purple
-    tubulin_delta: Color(0x1D8348),   // Forest Green
-    tubulin_epsilon: Color(0xD4AC0D), // Golden Yellow
-    Default: Color(0xBDC3C7),
+    tubulin_alpha  : Color(0x3784F0),   // Strong Blue
+    tubulin_beta   : Color(0xEB6134),   // Deep Red/Orange
+    tubulin_gamma  : Color(0x884EA0),   // Royal Purple
+    tubulin_delta  : Color(0x1D8348),   // Forest Green
+    tubulin_epsilon: Color(0xD4AC0D),   // Golden Yellow
+    Default        : Color(0xBDC3C7),
 };
 
 const MapFamilyColors: Record<string, Color> = {
