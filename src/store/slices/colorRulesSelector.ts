@@ -61,18 +61,13 @@ export const makeSelectActiveColorRulesForSequenceIds = () =>
         for (const site of entry.data.ligandSites) {
           if (!visibility.visibleLigandIds.includes(site.id)) continue;
 
-          const msaCells: Array<{ row: number; column: number }> = [];
-          const residues: Array<{ chainId: string; authSeqId: number }> = [];
-
-          for (const authSeqId of site.neighborhoodAuthSeqIds) {
-            residues.push({ chainId: authAsymId, authSeqId });
-            const masterIdx = authToMaster[authSeqId];
-            if (masterIdx !== undefined) {
-              msaCells.push({ row: rowIndex, column: masterIdx - 1 }); // 0-based column
-            }
-          }
-
-          rules.push({ id: site.id, type: 'ligand', color: site.color, msaCells, residues });
+          rules.push({
+            id: site.id,
+            type: 'ligand',
+            color: site.color,
+            msaCells: site.masterIndices.map(mi => ({ row: rowIndex, column: mi - 1 })),
+            residues: site.authSeqIds.map(id => ({ chainId: authAsymId, authSeqId: id })),
+          });
         }
 
         // Variants
@@ -164,24 +159,12 @@ export const selectActiveColorRules = createSelector(
       for (const site of entry.data.ligandSites) {
         if (!visibility.visibleLigandIds.includes(site.id)) continue;
 
-        const msaCells: Array<{ row: number; column: number }> = [];
-        const residues: Array<{ chainId: string; authSeqId: number }> = [];
-
-        for (const authSeqId of site.neighborhoodAuthSeqIds) {
-          residues.push({ chainId: authAsymId, authSeqId });
-          const masterIdx = authToMaster[authSeqId];
-          if (masterIdx !== undefined) {
-            // masterIdx is 1-based, Nightingale position is 0-based
-            msaCells.push({ row: rowIndex, column: masterIdx - 1 });
-          }
-        }
-
         rules.push({
           id: site.id,
           type: 'ligand',
           color: site.color,
-          msaCells,
-          residues,
+          msaCells: site.masterIndices.map(mi => ({ row: rowIndex, column: mi - 1 })),
+          residues: site.authSeqIds.map(id => ({ chainId: authAsymId, authSeqId: id })),
         });
       }
 

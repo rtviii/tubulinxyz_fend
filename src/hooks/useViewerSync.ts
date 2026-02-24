@@ -5,23 +5,12 @@ import { makeSelectActiveColorRulesForSequenceIds, selectActiveColorRules } from
 import { selectPositionMapping } from '@/store/slices/sequence_registry';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import { Color } from 'molstar/lib/mol-util/color';
+import { MSAHandle } from '@/components/msa/types';
 
 function getAuthAsymIdFromKey(key: string): string {
   const noFamily = key.split('__')[0];
   const parts = noFamily.split('_');
   return parts[parts.length - 1];
-}
-
-
-
-export interface MSAHandle {
-    setHighlight: (start: number, end: number) => void;
-    clearHighlight: () => void;
-    jumpToRange: (start: number, end: number) => void;
-    setColorScheme: (scheme: string) => void;
-    applyPositionColors: (colors: Record<number, string>) => void;
-    applyCellColors: (colors: Record<string, string>) => void;
-    clearPositionColors: () => void;
 }
 
 interface UseViewerSyncOptions {

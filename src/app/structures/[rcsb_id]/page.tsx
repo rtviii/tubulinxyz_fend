@@ -917,46 +917,7 @@ function LigandRow({
   );
 }
 
-function LigandSiteRow({
-  site,
-  isVisible,
-  onToggle,
-  onFocus,
-}: {
-  site: { id: string; ligandId: string; ligandName: string; color: string };
-  isVisible: boolean;
-  onToggle: () => void;
-  onFocus: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-50">
-      <div className="flex items-center gap-2">
-        <div
-          className="w-3 h-3 rounded-full flex-shrink-0"
-          style={{ backgroundColor: site.color }}
-        />
-        <span className="text-sm truncate" title={site.ligandName}>
-          {site.ligandId}
-        </span>
-      </div>
-      <div className="flex items-center gap-1">
-        <button
-          onClick={onFocus}
-          className="p-1 text-gray-400 hover:text-blue-600"
-          title="Focus"
-        >
-          <Focus size={14} />
-        </button>
-        <button
-          onClick={onToggle}
-          className="p-1 text-gray-400 hover:text-gray-700"
-        >
-          {isVisible ? <Eye size={14} /> : <EyeOff size={14} />}
-        </button>
-      </div>
-    </div>
-  );
-}
+
 
 
 function AlignedStructureRow({

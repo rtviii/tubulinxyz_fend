@@ -116,13 +116,6 @@ export function ChainAnnotationFetcher({
             return;
         }
 
-        const authToMaster: Record<number, number> = {};
-        if (positionMapping) {
-            for (const [masterStr, authSeqId] of Object.entries(positionMapping)) {
-                authToMaster[authSeqId] = parseInt(masterStr, 10);
-            }
-        }
-
         const ligandSites: LigandSite[] = (ligandsQuery.data.neighborhoods ?? []).map(n => ({
             id: `${n.ligand_id}_${n.ligand_auth_asym_id}_${n.ligand_auth_seq_id ?? 0}`,
             ligandId: n.ligand_id,
@@ -130,9 +123,12 @@ export function ChainAnnotationFetcher({
             ligandChain: n.ligand_auth_asym_id,
             ligandAuthSeqId: n.ligand_auth_seq_id ?? 0,
             color: getLigandColor(n.ligand_id),
-            neighborhoodAuthSeqIds: n.residues?.map(r => r.observed_index) ?? [],
             drugbankId: n.drugbank_id ?? null,
             residueCount: n.residue_count,
+            masterIndices: n.residues
+                ?.map(r => r.master_index)
+                .filter((i): i is number => i != null) ?? [],
+            authSeqIds: n.residues?.map(r => r.auth_seq_id) ?? [],
         }));
 
         // Include ALL variant types, not just substitutions

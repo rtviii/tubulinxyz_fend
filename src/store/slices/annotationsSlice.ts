@@ -9,15 +9,16 @@ import { RootState } from '../store';
 export type VariantType = 'substitution' | 'insertion' | 'deletion';
 
 export interface LigandSite {
-  id: string;                    // "GTP_A_501" format
+  id: string;
   ligandId: string;
   ligandName: string;
   ligandChain: string;
   ligandAuthSeqId: number;
   color: string;
-  neighborhoodAuthSeqIds: number[];
   drugbankId: string | null;
   residueCount: number;
+  masterIndices: number[];   // from backend residue.master_index, for MSA column lookup
+  authSeqIds: number[];      // from backend residue.auth_seq_id (new field), for Molstar
 }
 
 export interface Variant {
@@ -106,7 +107,7 @@ export const annotationsSlice = createSlice({
         data,
         visibility: existing?.visibility ?? {
           showVariants: true,
-          visibleLigandIds: data.ligandSites.map(s => s.id),
+          visibleLigandIds: [],  
         },
         isLoading: false,
         error: null,

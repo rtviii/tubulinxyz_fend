@@ -6,35 +6,36 @@
  */
 
 export interface ResidueInteraction {
-  authSeqId: number;
-  masterIndex: number | null;
+  authSeqId      : number;
+  masterIndex    : number | null;
   interactionType: string;
-  residueCompId: string;
-  residueAtomId: string;
+  residueCompId  : string;
+  residueAtomId  : string;
 }
 
 export interface LigandSite {
-  ligandId: string;
-  ligandName: string;
-  ligandChain: string;
-  ligandAuthSeqId: number;
-  drugbankId: string | null;
-  smiles: string | null;
+  ligandId              : string;
+  ligandName            : string;
+  ligandChain           : string;
+  ligandAuthSeqId       : number;
+  drugbankId            : string | null;
+  smiles                : string | null;
   neighborhoodAuthSeqIds: number[];
-  interactions: ResidueInteraction[];
+  interactions          : ResidueInteraction[];
+
 }
 
 export interface MutationAnnotation {
-  masterIndex: number;
-  fromResidue: string;
-  toResidue: string;
-  uniprotId: string | null;
-  species: string | null;
-  tubulinType: string | null;
-  phenotype: string | null;
-  keywords: string | null;
+  masterIndex   : number;
+  fromResidue   : string;
+  toResidue     : string;
+  uniprotId     : string | null;
+  species       : string | null;
+  tubulinType   : string | null;
+  phenotype     : string | null;
+  keywords      : string | null;
   databaseSource: string | null;
-  referenceLink: string | null;
+  referenceLink : string | null;
 }
 
 export interface ChainAnnotations {
