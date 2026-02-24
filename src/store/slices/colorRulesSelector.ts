@@ -1,6 +1,8 @@
 import { createSelector } from '@reduxjs/toolkit';
 import { RootState } from '../store';
 import { VariantType } from './annotationsSlice';
+import { authAsymIdFromChainKey } from '@/lib/chain_key';
+
 
 export const VARIANT_COLORS: Record<VariantType, string> = {
   substitution: '#f97316',
@@ -40,8 +42,8 @@ export const makeSelectActiveColorRulesForSequenceIds = () =>
         if (rowIndex === undefined) continue;
 
         const visibility = entry.visibility;
-        const parts = chainKey.split('_');
-        const authAsymId = parts[parts.length - 1];
+
+        const authAsymId = authAsymIdFromChainKey(chainKey);
 
         for (const site of entry.data.ligandSites) {
           if (!visibility.visibleLigandIds.includes(site.id)) continue;

@@ -32,6 +32,7 @@ import { MonomerSidebar } from '@/components/monomer/MonomerSidebar';
 import { MonomerMSAPanel } from '@/components/monomer/MonomerMSAPanel';
 import { API_BASE_URL } from '@/config';
 import type { MSAHandle } from '@/components/msa/types';
+import { makeChainKey } from '@/lib/chain_key';
 
 // ============================================================
 // Loading overlay
@@ -89,10 +90,10 @@ export default function StructureProfilePage() {
     { skip: !activeFamily }
   );
 
-  // Chain key for annotation + position mapping lookups
-  const chainKey = loadedStructure && activeChainId
-    ? `${loadedStructure}_${activeChainId}`
-    : '';
+const chainKey = loadedStructure && activeChainId
+  ? makeChainKey(loadedStructure, activeChainId)
+  : '';
+
 
   // Sequences scoped to the active family
   const familySequences = useAppSelector(state => selectSequencesForFamily(state, activeFamily));

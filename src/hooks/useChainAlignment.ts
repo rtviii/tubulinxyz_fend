@@ -5,6 +5,10 @@ import { addSequence, setPositionMapping, PositionMapping } from '@/store/slices
 import { useAlignSequenceMutation } from '@/store/tubxz_api';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import { formatFamilyShort } from '@/lib/formatters';
+import { makeChainKey } from '@/lib/chain_key';
+
+
+// delete the shadowed inner const inside the try block entirely
 
 export interface AlignmentResult {
   sequenceId: string;
@@ -32,7 +36,7 @@ export function useChainAlignment() {
       instance: MolstarInstance,
       family?: string
     ): Promise<AlignmentResult> => {
-      const key = `${pdbId}_${chainId}`;
+const key = makeChainKey(pdbId, chainId);
 
       // Guard: Already aligning this chain
       if (inFlightRef.current.has(key)) {

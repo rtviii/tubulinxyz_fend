@@ -17,6 +17,10 @@ import {
     useGetPolymerLigandNeighborhoodsQuery,
 } from '@/store/tubxz_api';
 import { selectPositionMapping } from '@/store/slices/sequence_registry';
+import { makeChainKey } from '@/lib/chain_key';
+
+
+
 
 const LIGAND_COLORS: Record<string, string> = {
     GTP: '#4363d8', GDP: '#FFD700', TAX: '#3cb44b', TXL: '#3cb44b',
@@ -49,13 +53,13 @@ export function useMultiChainAnnotations(primaryRcsbId: string | null, primaryAu
             chains.push({
                 rcsbId: primaryRcsbId.toUpperCase(),
                 authAsymId: primaryAuthAsymId,
-                chainKey: `${primaryRcsbId.toUpperCase()}_${primaryAuthAsymId}`,
+                chainKey: makeChainKey(primaryRcsbId, primaryAuthAsymId),
             });
         }
 
         for (const seq of pdbSequences) {
             if (seq.chainRef) {
-                const chainKey = `${seq.chainRef.pdbId}_${seq.chainRef.chainId}`;
+                const chainKey = makeChainKey(seq.chainRef.pdbId, seq.chainRef.chainId);
                 if (!chains.some(c => c.chainKey === chainKey)) {
                     chains.push({
                         rcsbId: seq.chainRef.pdbId,
@@ -72,7 +76,7 @@ export function useMultiChainAnnotations(primaryRcsbId: string | null, primaryAu
     return {
         chainsToFetch,
         primaryChainKey: primaryRcsbId && primaryAuthAsymId
-            ? `${primaryRcsbId.toUpperCase()}_${primaryAuthAsymId}`
+            ? makeChainKey(primaryRcsbId, primaryAuthAsymId)
             : null,
     };
 }
