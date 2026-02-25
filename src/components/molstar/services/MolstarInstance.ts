@@ -60,6 +60,7 @@ import {
 const ALIGNED_CHAIN_COLOR = Color(0xE57373);
 const GHOST_ALPHA = 0.12;
 const LIGAND_PROXIMITY_RADIUS = 8; // angstroms
+const STRUCTURE_GHOST_TRANSPARENCY = 0.55;
 
 export class MolstarInstance {
   constructor(
@@ -137,6 +138,68 @@ export class MolstarInstance {
     );
   }
 
+
+
+
+  async setStructureGhostColors(enabled: boolean): Promise<void> {
+    const plugin = this.viewer.ctx;
+    if (!plugin) return;
+
+    const hierarchy = plugin.managers.structure.hierarchy.current;
+    if (hierarchy.structures.length === 0) return;
+
+    const components = this.instanceState.components;
+    const builder = plugin.build();
+
+    for (const [, component] of Object.entries(components)) {
+      if (!isPolymerComponent(component)) continue;
+
+      const family = this.getChainFamily(component.chainId);
+      const isAlphaBeta = family === 'tubulin_alpha' || family === 'tubulin_beta';
+
+      const color = (enabled && isAlphaBeta)
+        ? getMolstarGhostColor(family)
+        : getMolstarColorForFamily(family);
+
+      const reprCells = this.findReprCells(component.ref);
+      for (const cell of reprCells) {
+        builder.to(cell.transform.ref).update(
+          StateTransforms.Representation.StructureRepresentation3D,
+          old => ({ ...old, colorTheme: { name: 'uniform', params: { value: color } } })
+        );
+      }
+    }
+
+    await builder.commit();
+
+    // Now handle transparency per-component to avoid cross-contamination
+    for (const [, component] of Object.entries(components)) {
+      if (!isPolymerComponent(component)) continue;
+
+      const family = this.getChainFamily(component.chainId);
+      const isAlphaBeta = family === 'tubulin_alpha' || family === 'tubulin_beta';
+      const transparency = (enabled && isAlphaBeta) ? STRUCTURE_GHOST_TRANSPARENCY : 0;
+
+      const chainComponents = hierarchy.structures[0].components.filter(
+        c => c.cell.transform.ref === component.ref
+      );
+      if (chainComponents.length === 0) continue;
+
+      try {
+        await setStructureTransparency(
+          plugin,
+          chainComponents,
+          transparency,
+          async (structure) => {
+            const loci = executeQuery(buildChainQuery(component.chainId), structure);
+            return loci ?? StructureElement.Loci.none(structure);
+          }
+        );
+      } catch (err) {
+        console.error(`[${this.id}] Failed to set transparency for ${component.chainId}:`, err);
+      }
+    }
+  }
   /**
    * Apply ghost appearance (very low alpha, muted color) to the active chain's
    * representation when entering monomer view.

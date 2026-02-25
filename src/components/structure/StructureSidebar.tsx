@@ -5,6 +5,7 @@ import { formatFamilyShort } from '@/lib/formatters';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { PolymerComponent, LigandComponent } from '@/components/molstar/core/types';
 import { Eye, EyeOff, Focus, Microscope } from 'lucide-react';
+import { useState } from 'react';
 
 interface StructureSidebarProps {
   loadedStructure: string | null;
@@ -15,17 +16,32 @@ interface StructureSidebarProps {
   profile: StructureProfile | null;
 }
 
-export function StructureSidebar({
-  loadedStructure,
-  polymerComponents,
-  ligandComponents,
-  instance,
-  error,
-  profile,
-}: StructureSidebarProps) {
+export function StructureSidebar({ loadedStructure, polymerComponents, ligandComponents, instance, error, profile }: StructureSidebarProps) {
+  const [ghostMode, setGhostMode] = useState(false);
+
+  const toggleGhost = () => {
+    const next = !ghostMode;
+    setGhostMode(next);
+    instance?.setStructureGhostColors(next);
+  };
+
   return (
     <div className="h-full bg-white border-r border-gray-200 p-4 overflow-y-auto">
-      <h1 className="text-lg font-semibold mb-4">{loadedStructure ?? 'No Structure'}</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-lg font-semibold">{loadedStructure ?? 'No Structure'}</h1>
+        {loadedStructure && (
+          <button
+            onClick={toggleGhost}
+            title={ghostMode ? 'Restore colors' : 'Ghostly α/β'}
+            className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${ghostMode
+                ? 'bg-stone-100 border-stone-300 text-stone-700'
+                : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300'
+              }`}
+          >
+            {ghostMode ? 'Vivid' : 'Ghost'}
+          </button>
+        )}
+      </div>
 
       {error && (
         <div className="text-red-500 text-sm mb-4 p-2 bg-red-50 rounded">{error}</div>
