@@ -171,6 +171,8 @@ export default function StructureProfilePage() {
         const ok = await instance.loadStructure(pdbIdFromUrl, classification);
         if (ok) {
           loadedFromUrlRef.current = pdbIdFromUrl;
+
+          await instance.setStructureGhostColors(true);  // add this
         } else {
           throw new Error('Failed to load structure');
         }
