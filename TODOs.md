@@ -3,11 +3,12 @@ Molstar:
 - [x] alpha/beta colors
 - [x] correct ligands initialization in monomer view
 - [x] standardize color variables across the repo 
+- [x] hiding model on the MSA range
+- [x] override default click behaviours
+- [ ] fix slider color interactions
 
-
-- overrid default click behaviours
-- nonpolymer initalization with congruent colors
-- hiding model on the MSA range
+- nonpolymer initalization with congruent colors 
+- focusing on nonpoly -- hide others..
 
 - on residue hover, on click focus (within a sensible range)
 - flesh out the ligand panel (WHERE THE FUCK DOES TAXOL BIND?)

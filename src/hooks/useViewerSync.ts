@@ -181,18 +181,37 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         if (windowMaskTimerRef.current) clearTimeout(windowMaskTimerRef.current);
         windowMaskTimerRef.current = setTimeout(() => {
             const authAsymId = authAsymIdFromChainKey(chainKey);
-            const visibleAuthSeqIds = Object.entries(positionMapping)
+
+            const mappedAuthSeqIds = new Set(Object.values(positionMapping));
+
+            const visibleFromMapping = Object.entries(positionMapping)
                 .filter(([masterStr]) => {
                     const idx = parseInt(masterStr, 10);
                     return idx >= masterStart && idx <= masterEnd;
                 })
                 .map(([, authSeqId]) => authSeqId);
 
-            console.log('[handleDisplayRangeChange] firing mask', { masterStart, masterEnd, visibleCount: visibleAuthSeqIds.length });
+            // Residues that exist in the structure but have no alignment position
+            // can't be windowed by master index - always keep them visible
+            const unmappedAuthSeqIds = (molstarInstance.getObservedSequence(authAsymId)?.authSeqIds ?? [])
+                .filter(id => !mappedAuthSeqIds.has(id));
 
-            molstarInstance.applyWindowMask(authAsymId, visibleAuthSeqIds);
-        }, 25);
-    }, [molstarInstance, positionMapping, chainKey]);
+            const visibleAuthSeqIds = [...visibleFromMapping, ...unmappedAuthSeqIds];
+            const visibleSet = new Set(visibleAuthSeqIds);
+
+            // Only pin annotated residues that are inside the current window -
+            // ones outside should be hidden just like any other out-of-range residue
+            const pinnedAuthSeqIds = colorRules
+                .flatMap(rule =>
+                    rule.residues
+                        .filter(r => r.chainId === authAsymId)
+                        .map(r => r.authSeqId)
+                )
+                .filter(id => visibleSet.has(id));
+
+            molstarInstance.applyWindowMask(authAsymId, visibleAuthSeqIds, pinnedAuthSeqIds);
+        }, 40);
+    }, [molstarInstance, positionMapping, chainKey, colorRules]);
 
     const clearWindowMask = useCallback(() => {
         if (!molstarInstance) return;
@@ -201,8 +220,24 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
             windowMaskTimerRef.current = null;
         }
         const authAsymId = authAsymIdFromChainKey(chainKey);
-        molstarInstance.clearWindowMask(authAsymId);
-    }, [molstarInstance, chainKey]);
+
+        // applyGhostToChain restores uniform 0.75 transparency but wipes the
+        // annotation punch-throughs, so re-apply colorscheme afterwards
+        molstarInstance.clearWindowMask(authAsymId).then(() => {
+            const molstarColorings = colorRules.flatMap(rule =>
+                rule.residues.map(r => ({
+                    chainId: r.chainId,
+                    authSeqId: r.authSeqId,
+                    color: Color(parseInt(rule.color.replace('#', ''), 16)),
+                }))
+            );
+            if (molstarColorings.length > 0) {
+                molstarInstance.applyColorscheme('annotations', molstarColorings);
+            }
+        });
+    }, [molstarInstance, chainKey, colorRules]);
+
+
 
     // ============================================================
     // Subscribe to Molstar hover events

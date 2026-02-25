@@ -121,51 +121,58 @@ export class MolstarInstance {
     }
   }
 
-  async applyWindowMask(chainId: string, visibleAuthSeqIds: number[]): Promise<void> {
-    console.log('[applyWindowMask] called', { chainId, visibleCount: visibleAuthSeqIds.length });
+  async applyWindowMask(chainId: string, visibleAuthSeqIds: number[], pinnedAuthSeqIds: number[] = []): Promise<void> {
+  const plugin = this.viewer.ctx;
+  if (!plugin) return;
 
-    const plugin = this.viewer.ctx;
-    if (!plugin) return;
+  const component = this.getComponent(chainId);
+  if (!component || !isPolymerComponent(component)) return;
 
-    const component = this.getComponent(chainId);
-    if (!component || !isPolymerComponent(component)) return;
+  const hierarchy = plugin.managers.structure.hierarchy.current;
+  if (hierarchy.structures.length === 0) return;
 
-    const hierarchy = plugin.managers.structure.hierarchy.current;
-    if (hierarchy.structures.length === 0) return;
+  const chainComponents = hierarchy.structures[0].components.filter(
+    c => c.cell.transform.ref === component.ref
+  );
+  if (chainComponents.length === 0) return;
 
-    const chainComponents = hierarchy.structures[0].components.filter(
-      c => c.cell.transform.ref === component.ref
+  const structure = this.viewer.getCurrentStructure();
+  if (!structure) return;
+
+  const observed = extractObservedSequence(structure, chainId);
+  if (!observed) return;
+
+  const visibleSet = new Set(visibleAuthSeqIds);
+  const outOfRange = observed.authSeqIds.filter(id => !visibleSet.has(id));
+
+  if (outOfRange.length > 0) {
+    await setStructureTransparency(
+      plugin, chainComponents, 1,
+      async (s) => executeQuery(buildMultiResidueQuery(chainId, outOfRange), s)
+        ?? StructureElement.Loci.none(s)
     );
-    if (chainComponents.length === 0) return;
-
-    const structure = this.viewer.getCurrentStructure();
-    if (!structure) return;
-
-    const observed = extractObservedSequence(structure, chainId);
-    if (!observed) return;
-
-    const visibleSet = new Set(visibleAuthSeqIds);
-    const outOfRange = observed.authSeqIds.filter(id => !visibleSet.has(id));
-
-    if (outOfRange.length > 0) {
-      await setStructureTransparency(
-        plugin, chainComponents, 1,
-        async (s) => executeQuery(buildMultiResidueQuery(chainId, outOfRange), s)
-          ?? StructureElement.Loci.none(s)
-      );
-    }
-
-    if (visibleAuthSeqIds.length > 0) {
-      await setStructureTransparency(
-        plugin, chainComponents, 0.75,
-        async (s) => executeQuery(buildMultiResidueQuery(chainId, visibleAuthSeqIds), s)
-          ?? StructureElement.Loci.none(s)
-      );
-
-      const focusLoci = executeQuery(buildMultiResidueQuery(chainId, visibleAuthSeqIds), structure);
-      if (focusLoci) this.viewer.focusLoci(focusLoci);
-    }
   }
+
+  if (visibleAuthSeqIds.length > 0) {
+    await setStructureTransparency(
+      plugin, chainComponents, 0.75,
+      async (s) => executeQuery(buildMultiResidueQuery(chainId, visibleAuthSeqIds), s)
+        ?? StructureElement.Loci.none(s)
+    );
+  }
+
+  // Re-pin annotated residues to full opacity regardless of where they fall in the window
+  if (pinnedAuthSeqIds.length > 0) {
+    await setStructureTransparency(
+      plugin, chainComponents, 0,
+      async (s) => executeQuery(buildMultiResidueQuery(chainId, pinnedAuthSeqIds), s)
+        ?? StructureElement.Loci.none(s)
+    );
+  }
+
+  const focusLoci = executeQuery(buildMultiResidueQuery(chainId, visibleAuthSeqIds), structure);
+  if (focusLoci) this.viewer.focusLoci(focusLoci);
+}
 
   async clearWindowMask(chainId: string): Promise<void> {
     // Restores uniform ghost transparency across the whole chain.
