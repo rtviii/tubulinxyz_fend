@@ -182,7 +182,6 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         windowMaskTimerRef.current = setTimeout(() => {
             const authAsymId = authAsymIdFromChainKey(chainKey);
 
-            const mappedAuthSeqIds = new Set(Object.values(positionMapping));
 
             const visibleFromMapping = Object.entries(positionMapping)
                 .filter(([masterStr]) => {
@@ -191,10 +190,18 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
                 })
                 .map(([, authSeqId]) => authSeqId);
 
+            if (visibleFromMapping.length === 0) {
+                molstarInstance.applyWindowMask(authAsymId, [], []);
+                return;
+            }
+            const mappedAuthSeqIds = new Set(Object.values(positionMapping));
             // Residues that exist in the structure but have no alignment position
             // can't be windowed by master index - always keep them visible
+            const minVisible = Math.min(...visibleFromMapping);
+            const maxVisible = Math.max(...visibleFromMapping);
+
             const unmappedAuthSeqIds = (molstarInstance.getObservedSequence(authAsymId)?.authSeqIds ?? [])
-                .filter(id => !mappedAuthSeqIds.has(id));
+                .filter(id => !mappedAuthSeqIds.has(id) && id >= minVisible && id <= maxVisible);
 
             const visibleAuthSeqIds = [...visibleFromMapping, ...unmappedAuthSeqIds];
             const visibleSet = new Set(visibleAuthSeqIds);

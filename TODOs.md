@@ -1,22 +1,25 @@
 
-Molstar:
+## Molstar:
+
+- [x] extend nightingale
 - [x] alpha/beta colors
 - [x] correct ligands initialization in monomer view
 - [x] standardize color variables across the repo 
 - [x] hiding model on the MSA range
 - [x] override default click behaviours
-- [ ] fix slider color interactions
+- [x] fix slider color interactions
+- [x] nonpolymer initalization with congruent colors 
+- [x] focusing on nonpoly -- hide others..
+- [x] on residue hover, on click focus (within a sensible range)
 
-- nonpolymer initalization with congruent colors 
-- focusing on nonpoly -- hide others..
+- [ ] residue display hover
 
-- on residue hover, on click focus (within a sensible range)
-- flesh out the ligand panel (WHERE THE FUCK DOES TAXOL BIND?)
+## Indels and mutations:
 
 - Establish correctness of annotations!
 - fix and verify ligands
-- [x] extend nightingale
 
+- flesh out the ligand panel (WHERE THE FUCK DOES TAXOL BIND?)
 - Enrich the easy mode with metadata and such
 - links and popups to other structures everywhere
 - Rework the ui for the "expert mode" to be more like a toolbox as opposed to a single panel
@@ -29,7 +32,6 @@ Molstar:
                 - MAPs                  | no non-tubulin polymers
                 - mutations             | no mutations
                 - mutations[position]   | overview of those that are present in the setting present so far
-
 
 
 # Bugs:

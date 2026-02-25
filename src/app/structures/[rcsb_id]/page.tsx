@@ -33,6 +33,7 @@ import { MonomerMSAPanel } from '@/components/monomer/MonomerMSAPanel';
 import { API_BASE_URL } from '@/config';
 import type { MSAHandle } from '@/components/msa/types';
 import { makeChainKey } from '@/lib/chain_key';
+import { ResidueInfoOverlay } from '@/components/molstar/overlay/ResidueInfoOverlay';
 
 // ============================================================
 // Loading overlay
@@ -264,6 +265,15 @@ export default function StructureProfilePage() {
             <ResizablePanel defaultSize={isMonomerView ? 50 : 100} minSize={30}>
               <div className="relative w-full h-full min-h-0 bg-gray-200">
                 <div ref={containerRef} className="w-full h-full" />
+
+                {/* <ResidueInfoOverlay
+                  instance={instance}
+                  getLabel={(info) => {
+                    // hook this up to whatever you want - variants, annotations, etc.
+                    // returning null just shows the chain/residue line above
+                    return null;
+                  }}
+                /> */}
                 {(!isInitialized || isLoading) && (
                   <LoadingOverlay
                     text={isLoading ? 'Loading structure...' : 'Initializing viewer...'}
