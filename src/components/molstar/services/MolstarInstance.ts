@@ -104,12 +104,17 @@ export class MolstarInstance {
   private async applyStylizedLighting() {
     const plugin = this.viewer.ctx;
     if (!plugin) return;
+
     plugin.managers.structure.component.setOptions({
       ...plugin.managers.structure.component.state.options,
       ignoreLight: true,
     });
+
     if (plugin.canvas3d) {
-      plugin.canvas3d.setProps({ postprocessing: STYLIZED_POSTPROCESSING });
+      plugin.canvas3d.setProps({
+        postprocessing: STYLIZED_POSTPROCESSING,
+        renderer: { pickingAlphaThreshold: 0.1 },
+      });
     }
   }
 
