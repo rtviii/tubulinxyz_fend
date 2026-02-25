@@ -85,6 +85,9 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
     // Subscribe to Molstar click events (single + double)
     // ============================================================
 
+    const windowMaskTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+
     const lastClickTimeRef = useRef<number>(0);
     const lastClickInfoRef = useRef<{ chainId: string; authSeqId: number } | null>(null);
     const DOUBLE_CLICK_MS = 300;
@@ -170,6 +173,37 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         molstarInstance?.clearHighlight();
     }, [molstarInstance]);
 
+
+
+    const handleDisplayRangeChange = useCallback((masterStart: number, masterEnd: number) => {
+        if (!molstarInstance || !positionMapping) return;
+
+        if (windowMaskTimerRef.current) clearTimeout(windowMaskTimerRef.current);
+        windowMaskTimerRef.current = setTimeout(() => {
+            const authAsymId = authAsymIdFromChainKey(chainKey);
+            const visibleAuthSeqIds = Object.entries(positionMapping)
+                .filter(([masterStr]) => {
+                    const idx = parseInt(masterStr, 10);
+                    return idx >= masterStart && idx <= masterEnd;
+                })
+                .map(([, authSeqId]) => authSeqId);
+
+            console.log('[handleDisplayRangeChange] firing mask', { masterStart, masterEnd, visibleCount: visibleAuthSeqIds.length });
+
+            molstarInstance.applyWindowMask(authAsymId, visibleAuthSeqIds);
+        }, 25);
+    }, [molstarInstance, positionMapping, chainKey]);
+
+    const clearWindowMask = useCallback(() => {
+        if (!molstarInstance) return;
+        if (windowMaskTimerRef.current) {
+            clearTimeout(windowMaskTimerRef.current);
+            windowMaskTimerRef.current = null;
+        }
+        const authAsymId = authAsymIdFromChainKey(chainKey);
+        molstarInstance.clearWindowMask(authAsymId);
+    }, [molstarInstance, chainKey]);
+
     // ============================================================
     // Subscribe to Molstar hover events
     // ============================================================
@@ -228,5 +262,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         handleMSAHoverEnd,
         focusLigandSite,
         focusMutation,
+        handleDisplayRangeChange,
+        clearWindowMask,
     };
 }

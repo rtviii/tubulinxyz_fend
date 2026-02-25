@@ -21,6 +21,8 @@ interface MonomerMSAPanelProps {
   onResidueHover: (position: number) => void;
   onResidueLeave: () => void;
   onClearColors: () => void;
+  onWindowMaskChange?: (masterStart: number, masterEnd: number) => void;
+  onWindowMaskClear?: () => void;
 }
 
 export function MonomerMSAPanel({
@@ -36,9 +38,16 @@ export function MonomerMSAPanel({
   onResidueHover,
   onResidueLeave,
   onClearColors,
+  onWindowMaskChange,
+  onWindowMaskClear,
 }: MonomerMSAPanelProps) {
   const { alignChain, isAligning } = useChainAlignment();
   const [colorScheme, setColorScheme] = useState('custom-position');
+  const [inRangeOnly, setInRangeOnly] = useState(false);
+
+  // Track the current nightingale display range so we can apply the mask
+  // immediately when the checkbox is toggled on, even if no drag has happened.
+  const currentRangeRef = useRef<[number, number] | null>(null);
 
   const isAligned = useAppSelector(state =>
     pdbId ? selectIsChainAligned(state, pdbId, chainId) : false
@@ -65,6 +74,28 @@ export function MonomerMSAPanel({
     () => [...masterSequences, ...pdbSequences],
     [masterSequences, pdbSequences]
   );
+
+  // ----------------------------------------------------------------
+  // Range mask handlers
+  // ----------------------------------------------------------------
+
+  const handleDisplayRangeChange = useCallback((start: number, end: number) => {
+    currentRangeRef.current = [start, end];
+    if (inRangeOnly) onWindowMaskChange?.(start, end);
+  }, [inRangeOnly, onWindowMaskChange]);
+
+  const handleInRangeToggle = useCallback((checked: boolean) => {
+    setInRangeOnly(checked);
+    if (!checked) {
+      onWindowMaskClear?.();
+    } else if (currentRangeRef.current) {
+      onWindowMaskChange?.(currentRangeRef.current[0], currentRangeRef.current[1]);
+    }
+  }, [onWindowMaskChange, onWindowMaskClear]);
+
+  // ----------------------------------------------------------------
+  // Toolbar handlers
+  // ----------------------------------------------------------------
 
   const handleSchemeChange = useCallback(
     (scheme: string) => {
@@ -93,6 +124,10 @@ export function MonomerMSAPanel({
     [onResidueHover]
   );
 
+  // ----------------------------------------------------------------
+  // Loading state
+  // ----------------------------------------------------------------
+
   if (!nglLoaded || maxLength === 0 || isAligning) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -113,6 +148,15 @@ export function MonomerMSAPanel({
           <span className="text-sm font-semibold text-gray-800">Sequence Alignment</span>
           <span className="text-xs text-gray-400 font-mono">{pdbId}:{chainId}</span>
         </div>
+        <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={inRangeOnly}
+            onChange={e => handleInRangeToggle(e.target.checked)}
+            className="rounded"
+          />
+          In-range only
+        </label>
       </div>
 
       <div className="flex-shrink-0 px-3 py-1.5 border-b bg-white">
@@ -135,6 +179,7 @@ export function MonomerMSAPanel({
           colorScheme={colorScheme}
           onResidueHover={handleResidueHover}
           onResidueLeave={onResidueLeave}
+          onDisplayRangeChange={handleDisplayRangeChange}
         />
       </div>
     </div>

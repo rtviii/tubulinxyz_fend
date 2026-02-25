@@ -1,4 +1,3 @@
-// src/components/msa/ResizableMSAContainer.tsx
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
@@ -17,6 +16,7 @@ interface ResizableMSAContainerProps {
   onResidueHover?: (seqId: string, position: number) => void;
   onResidueLeave?: () => void;
   onResidueClick?: (seqId: string, position: number) => void;
+  onDisplayRangeChange?: (start: number, end: number) => void;
 }
 
 export interface ResizableMSAContainerHandle {
@@ -51,6 +51,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       onResidueHover,
       onResidueLeave,
       onResidueClick,
+      onDisplayRangeChange,
     } = props;
 
     console.log('[ResizableMSAContainer] received sequences:', {
@@ -60,14 +61,19 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     });
 
     const outerRef = useRef<HTMLDivElement>(null);
-    const msaRef   = useRef<any>(null);
-    const navRef   = useRef<any>(null);
+    const msaRef = useRef<any>(null);
+    const navRef = useRef<any>(null);
+    const managerRef = useRef<any>(null);
 
     const [availableWidth, setAvailableWidth] = useState(0);
-    const [labelWidth, setLabelWidth]         = useState(0);
-    const [scrollTop, setScrollTop]           = useState(0);
-    const [isInitialized, setIsInitialized]   = useState(false);
-    const baseColorSchemeRef                  = useRef(colorScheme);
+    const [labelWidth, setLabelWidth] = useState(0);
+    const [scrollTop, setScrollTop] = useState(0);
+    const [isInitialized, setIsInitialized] = useState(false);
+    const baseColorSchemeRef = useRef(colorScheme);
+
+    // ----------------------------------------------------------------
+    // Scroll sync for labels
+    // ----------------------------------------------------------------
 
     useEffect(() => {
       const msaEl = msaRef.current;
@@ -89,6 +95,10 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       };
     }, [isInitialized]);
 
+    // ----------------------------------------------------------------
+    // Container resize observer
+    // ----------------------------------------------------------------
+
     useEffect(() => {
       const el = outerRef.current;
       if (!el) return;
@@ -102,11 +112,63 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       return () => observer.disconnect();
     }, []);
 
-    const msaAreaWidth    = showLabels ? availableWidth - labelWidth : availableWidth;
+    // ----------------------------------------------------------------
+    // Manager change event -> display range
+    // ----------------------------------------------------------------
+
+    useEffect(() => {
+      const manager = managerRef.current;
+      if (!manager || !isInitialized || !onDisplayRangeChange) return;
+
+      const handler = (e: Event) => {
+        const { 'display-start': rawStart, 'display-end': rawEnd } = (e as CustomEvent).detail ?? {};
+        const start = Math.round(typeof rawStart === 'number' ? rawStart : parseFloat(rawStart));
+        const end = Math.round(typeof rawEnd === 'number' ? rawEnd : parseFloat(rawEnd));
+        if (!Number.isNaN(start) && !Number.isNaN(end)) {
+          onDisplayRangeChange(start, end);
+        }
+      };
+
+      manager.addEventListener('change', handler);
+      return () => manager.removeEventListener('change', handler);
+    }, [isInitialized, onDisplayRangeChange]);
+
+    useEffect(() => {
+      if (!isInitialized) return;
+
+      const manager = managerRef.current;
+      const nav = navRef.current;
+
+      const logAny = (label: string) => (e: Event) => {
+        console.log(`[MSA event] ${label}`, e.type, (e as CustomEvent).detail);
+      };
+
+      // Cast the net wide - listen on both elements for any likely event name
+      ['change', 'display-start-change', 'position-change', 'updated'].forEach(name => {
+        manager?.addEventListener(name, logAny(`manager:${name}`));
+        nav?.addEventListener(name, logAny(`nav:${name}`));
+      });
+
+      return () => {
+        ['change', 'display-start-change', 'position-change', 'updated'].forEach(name => {
+          manager?.removeEventListener(name, logAny(`manager:${name}`));
+          nav?.removeEventListener(name, logAny(`nav:${name}`));
+        });
+      };
+    }, [isInitialized]);
+    // ----------------------------------------------------------------
+    // Derived layout
+    // ----------------------------------------------------------------
+
+    const msaAreaWidth = showLabels ? availableWidth - labelWidth : availableWidth;
     const minContentWidth = maxLength * minTileWidth;
-    const contentWidth    = Math.max(msaAreaWidth, minContentWidth);
-    const needsScroll     = msaAreaWidth > 0 && contentWidth > msaAreaWidth;
-    const msaHeight       = Math.min(sequences.length * rowHeight, maxMsaHeight);
+    const contentWidth = Math.max(msaAreaWidth, minContentWidth);
+    const needsScroll = msaAreaWidth > 0 && contentWidth > msaAreaWidth;
+    const msaHeight = Math.min(sequences.length * rowHeight, maxMsaHeight);
+
+    // ----------------------------------------------------------------
+    // Imperative helpers
+    // ----------------------------------------------------------------
 
     const getSequenceViewer = useCallback((): any | null => {
       const msa = msaRef.current;
@@ -127,7 +189,6 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
 
       if (nav) {
         nav.setAttribute('width', String(contentWidth));
-
         nav.width = contentWidth;
         nav.style.width = `${contentWidth}px`;
         nav.style.minWidth = `${contentWidth}px`;
@@ -140,12 +201,8 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
           svg.style.minWidth = `${contentWidth}px`;
         }
 
-        if (typeof nav.onDimensionsChange === 'function') {
-          nav.onDimensionsChange();
-        }
-        if (typeof nav.renderD3 === 'function') {
-          nav.renderD3();
-        }
+        if (typeof nav.onDimensionsChange === 'function') nav.onDimensionsChange();
+        if (typeof nav.renderD3 === 'function') nav.renderD3();
       }
 
       if (msa) {
@@ -155,9 +212,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
         msa.style.minWidth = `${contentWidth}px`;
         msa.style.maxWidth = `${contentWidth}px`;
 
-        if (typeof msa.onDimensionsChange === 'function') {
-          msa.onDimensionsChange();
-        }
+        if (typeof msa.onDimensionsChange === 'function') msa.onDimensionsChange();
 
         const seqViewer = getSequenceViewer();
         if (seqViewer) {
@@ -217,7 +272,6 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     }, []);
 
     const applyPositionColors = useCallback((colors: Record<number, string>) => {
-      // Convert position-keyed map to cell colors across all rows
       const cellColors: Record<string, string> = {};
       for (const [position, color] of Object.entries(colors)) {
         for (let row = 0; row < sequences.length; row++) {
@@ -245,10 +299,18 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       clearPositionColors,
     }), [triggerRedraw, jumpToRange, setColorScheme, setHighlight, clearHighlight, applyPositionColors, applyCellColors, clearPositionColors]);
 
+    // ----------------------------------------------------------------
+    // Width sync
+    // ----------------------------------------------------------------
+
     useLayoutEffect(() => {
       if (contentWidth === 0) return;
       requestAnimationFrame(() => syncWidths());
     }, [contentWidth, syncWidths]);
+
+    // ----------------------------------------------------------------
+    // Data init
+    // ----------------------------------------------------------------
 
     useEffect(() => {
       if (!msaRef.current || sequences.length === 0 || contentWidth === 0) return;
@@ -276,6 +338,10 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       return () => clearTimeout(timer);
     }, [sequences, contentWidth, syncWidths]);
 
+    // ----------------------------------------------------------------
+    // Color scheme changes after init
+    // ----------------------------------------------------------------
+
     useEffect(() => {
       if (!msaRef.current || !isInitialized) return;
       baseColorSchemeRef.current = colorScheme;
@@ -284,6 +350,10 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
         requestAnimationFrame(() => triggerRedraw());
       });
     }, [colorScheme, isInitialized, triggerRedraw]);
+
+    // ----------------------------------------------------------------
+    // Residue interaction events
+    // ----------------------------------------------------------------
 
     useEffect(() => {
       const msa = msaRef.current;
@@ -316,9 +386,17 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       };
     }, [sequences, isInitialized, onResidueClick, onResidueHover, onResidueLeave]);
 
+    // ----------------------------------------------------------------
+    // Label width callback
+    // ----------------------------------------------------------------
+
     const handleLabelWidthCalculated = useCallback((width: number) => {
       setLabelWidth(width);
     }, []);
+
+    // ----------------------------------------------------------------
+    // Early returns
+    // ----------------------------------------------------------------
 
     if (sequences.length === 0) {
       return (
@@ -335,6 +413,10 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
         </div>
       );
     }
+
+    // ----------------------------------------------------------------
+    // Render
+    // ----------------------------------------------------------------
 
     return (
       <div ref={outerRef} className="w-full h-full flex">
@@ -360,7 +442,10 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
           }}
         >
           <div style={{ width: contentWidth, minWidth: contentWidth }}>
-            <nightingale-manager style={{ display: 'block', width: contentWidth, minWidth: contentWidth }}>
+            <nightingale-manager
+              ref={managerRef}
+              style={{ display: 'block', width: contentWidth, minWidth: contentWidth }}
+            >
               <nightingale-navigation
                 ref={navRef}
                 height={navHeight}

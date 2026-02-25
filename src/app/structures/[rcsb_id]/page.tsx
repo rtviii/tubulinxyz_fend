@@ -90,9 +90,9 @@ export default function StructureProfilePage() {
     { skip: !activeFamily }
   );
 
-const chainKey = loadedStructure && activeChainId
-  ? makeChainKey(loadedStructure, activeChainId)
-  : '';
+  const chainKey = loadedStructure && activeChainId
+    ? makeChainKey(loadedStructure, activeChainId)
+    : '';
 
 
   // Sequences scoped to the active family
@@ -137,12 +137,19 @@ const chainKey = loadedStructure && activeChainId
     clearAll,
   } = useAnnotationVisibility(chainKey);
 
-  const { handleMSAHover, handleMSAHoverEnd, focusLigandSite, focusMutation } = useViewerSync({
+  const { handleMSAHover, handleMSAHoverEnd, focusLigandSite, focusMutation, handleDisplayRangeChange, clearWindowMask } = useViewerSync({
     chainKey,
     molstarInstance: instance,
     msaRef,
     visibleSequenceIds: allVisibleSequenceIds,
   });
+
+  // const { handleMSAHover, handleMSAHoverEnd, focusLigandSite, focusMutation } = useViewerSync({
+  //   chainKey,
+  //   molstarInstance: instance,
+  //   msaRef,
+  //   visibleSequenceIds: allVisibleSequenceIds,
+  // });
 
   const { areLoaded: nglLoaded } = useNightingaleComponents();
 
@@ -283,6 +290,9 @@ const chainKey = loadedStructure && activeChainId
                       onResidueHover={handleMSAHover}
                       onResidueLeave={handleMSAHoverEnd}
                       onClearColors={clearAll}
+
+                      onWindowMaskChange={handleDisplayRangeChange}
+                      onWindowMaskClear={clearWindowMask}
                     />
                   </div>
                 </ResizablePanel>
