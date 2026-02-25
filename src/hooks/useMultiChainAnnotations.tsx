@@ -1,4 +1,3 @@
-// src/hooks/useMultiChainAnnotations.tsx
 import { useEffect, useMemo } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/store';
 import { selectPdbSequences } from '@/store/slices/sequence_registry';
@@ -18,24 +17,7 @@ import {
 } from '@/store/tubxz_api';
 import { selectPositionMapping } from '@/store/slices/sequence_registry';
 import { makeChainKey } from '@/lib/chain_key';
-
-
-
-
-const LIGAND_COLORS: Record<string, string> = {
-    GTP: '#4363d8', GDP: '#FFD700', TAX: '#3cb44b', TXL: '#3cb44b',
-    EPO: '#f58231', VLB: '#e6194b', COL: '#911eb4', MG: '#42d4f4',
-    CA: '#f032e6', ZN: '#bfef45',
-};
-
-function getLigandColor(ligandId: string): string {
-    if (LIGAND_COLORS[ligandId]) return LIGAND_COLORS[ligandId];
-    let hash = 0;
-    for (let i = 0; i < ligandId.length; i++) {
-        hash = ligandId.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return `hsl(${Math.abs(hash) % 360}, 70%, 50%)`;
-}
+import { getHexForLigand } from '@/components/molstar/colors/palette';
 
 export interface ChainToFetch {
     rcsbId: string;
@@ -81,11 +63,7 @@ export function useMultiChainAnnotations(primaryRcsbId: string | null, primaryAu
     };
 }
 
-export function ChainAnnotationFetcher({
-    rcsbId,
-    authAsymId,
-    chainKey,
-}: ChainToFetch) {
+export function ChainAnnotationFetcher({ rcsbId, authAsymId, chainKey }: ChainToFetch) {
     const dispatch = useAppDispatch();
 
     const existingEntry = useAppSelector(state => selectChainEntry(state, chainKey));
@@ -103,22 +81,15 @@ export function ChainAnnotationFetcher({
         { skip: shouldSkip }
     );
 
-    // Track loading
     useEffect(() => {
         if ((variantsQuery.isLoading || ligandsQuery.isLoading) && !existingEntry?.data) {
             dispatch(setChainLoading(chainKey));
         }
     }, [chainKey, variantsQuery.isLoading, ligandsQuery.isLoading, existingEntry?.data, dispatch]);
 
-    // Process data when ready
     useEffect(() => {
-        if (!variantsQuery.data || !ligandsQuery.data) {
-            return;
-        }
-
-        if (existingEntry?.data) {
-            return;
-        }
+        if (!variantsQuery.data || !ligandsQuery.data) return;
+        if (existingEntry?.data) return;
 
         const ligandSites: LigandSite[] = (ligandsQuery.data.neighborhoods ?? []).map(n => ({
             id: `${n.ligand_id}_${n.ligand_auth_asym_id}_${n.ligand_auth_seq_id}`,
@@ -126,7 +97,7 @@ export function ChainAnnotationFetcher({
             ligandId: n.ligand_id,
             ligandName: n.ligand_name ?? n.ligand_id,
             ligandChain: n.ligand_auth_asym_id,
-            color: getLigandColor(n.ligand_id),
+            color: getHexForLigand(n.ligand_id),   // single source of truth
             drugbankId: n.drugbank_id ?? null,
             residueCount: n.residue_count,
             masterIndices: n.residues
@@ -135,7 +106,6 @@ export function ChainAnnotationFetcher({
             authSeqIds: n.residues?.map(r => r.auth_seq_id) ?? [],
         }));
 
-        // Include ALL variant types, not just substitutions
         const variants: Variant[] = (variantsQuery.data.variants ?? [])
             .filter(v => v.master_index != null)
             .map(v => ({
@@ -149,16 +119,12 @@ export function ChainAnnotationFetcher({
                 uniprotId: v.uniprot_id ?? null,
             }));
 
-        const data: ChainAnnotationData = {
-            ligandSites,
-            variants,
-            family: variantsQuery.data.family ?? null,
-        };
-
-        dispatch(setChainAnnotations({ chainKey, data }));
+        dispatch(setChainAnnotations({
+            chainKey,
+            data: { ligandSites, variants, family: variantsQuery.data.family ?? null },
+        }));
     }, [chainKey, variantsQuery.data, ligandsQuery.data, positionMapping, existingEntry?.data, dispatch]);
 
-    // Handle errors
     useEffect(() => {
         const error = variantsQuery.error || ligandsQuery.error;
         if (error && !existingEntry?.data) {

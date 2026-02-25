@@ -6,9 +6,11 @@ import { ParamDefinition as PD } from 'molstar/lib/mol-util/param-definition';
 import { getLigandInstances, getResidueSequence, ResidueData } from './preset-helpers';
 import { MapFamily, TubulinFamily } from '@/store/tubxz_api';
 import {
+    LIGAND_IGNORE_IDS,
     getMolstarColorForFamily,
     getMolstarLigandColor,
 } from './palette';
+
 
 export type TubulinClassification = Record<string, TubulinFamily | MapFamily | string>;
 
@@ -82,6 +84,8 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
         // Ligands
         const ligandInstances = getLigandInstances(structure);
         for (const instance of ligandInstances) {
+            if (LIGAND_IGNORE_IDS.has(instance.compId)) continue;
+
             const ligandSelection = MS.struct.generator.atomGroups({
                 'residue-test': MS.core.logic.and([
                     MS.core.rel.eq([MS.struct.atomProperty.macromolecular.label_comp_id(), instance.compId]),

@@ -3,6 +3,7 @@
 
 import { Eye, EyeOff, Focus, ExternalLink } from 'lucide-react';
 import { LigandSite } from '@/store/slices/annotationsSlice';
+import { LIGAND_IGNORE_IDS } from '../molstar/colors/palette';
 
 interface LigandsPanelProps {
   ligandSites: LigandSite[];
@@ -49,7 +50,9 @@ export function LigandsPanel({
 
       {/* Ligand list */}
       <div className="space-y-1">
-        {ligandSites.map(site => (
+        {ligandSites
+        .filter(n=>!LIGAND_IGNORE_IDS.has(n.ligandId))
+        .map(site => (
           <LigandSiteRow
             key={site.id}
             site={site}
