@@ -82,6 +82,11 @@ export class MolstarViewer {
 
   // --- Visual Operations ---
 
+  resetCamera(durationMs = 250): void {
+    if (!this.ctx) return;
+    PluginCommands.Camera.Reset(this.ctx, { durationMs });
+  }
+
   setSubtreeVisibility(ref: string, visible: boolean): void {
     if (!this.ctx) return;
     setSubtreeVisibility(this.ctx.state.data, ref, !visible);
@@ -129,56 +134,56 @@ export class MolstarViewer {
 
 
   subscribeToHover(
-  callback: (info: { chainId: string; authSeqId: number } | null) => void
-): () => void {
-  if (!this.ctx) {
-    console.warn('[MolstarViewer] Cannot subscribe to hover - not initialized');
-    return () => {};
+    callback: (info: { chainId: string; authSeqId: number } | null) => void
+  ): () => void {
+    if (!this.ctx) {
+      console.warn('[MolstarViewer] Cannot subscribe to hover - not initialized');
+      return () => { };
+    }
+
+    const subscription = this.ctx.behaviors.interaction.hover.subscribe((e) => {
+      if (StructureElement.Loci.is(e.current.loci) && !StructureElement.Loci.isEmpty(e.current.loci)) {
+        // Extract first residue's info
+        let emitted = false;
+        StructureElement.Loci.forEachLocation(e.current.loci, (location) => {
+          if (emitted) return; // Only emit first
+          const chainId = StructureProperties.chain.auth_asym_id(location);
+          const authSeqId = StructureProperties.residue.auth_seq_id(location);
+          callback({ chainId, authSeqId });
+          emitted = true;
+        });
+      } else {
+        callback(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }
 
-  const subscription = this.ctx.behaviors.interaction.hover.subscribe((e) => {
-    if (StructureElement.Loci.is(e.current.loci) && !StructureElement.Loci.isEmpty(e.current.loci)) {
-      // Extract first residue's info
-      let emitted = false;
-      StructureElement.Loci.forEachLocation(e.current.loci, (location) => {
-        if (emitted) return; // Only emit first
-        const chainId = StructureProperties.chain.auth_asym_id(location);
-        const authSeqId = StructureProperties.residue.auth_seq_id(location);
-        callback({ chainId, authSeqId });
-        emitted = true;
-      });
-    } else {
-      callback(null);
+  subscribeToClick(
+    callback: (info: { chainId: string; authSeqId: number } | null) => void
+  ): () => void {
+    if (!this.ctx) {
+      return () => { };
     }
-  });
 
-  return () => subscription.unsubscribe();
-}
+    const subscription = this.ctx.behaviors.interaction.click.subscribe((e) => {
+      if (StructureElement.Loci.is(e.current.loci) && !StructureElement.Loci.isEmpty(e.current.loci)) {
+        let emitted = false;
+        StructureElement.Loci.forEachLocation(e.current.loci, (location) => {
+          if (emitted) return;
+          const chainId = StructureProperties.chain.auth_asym_id(location);
+          const authSeqId = StructureProperties.residue.auth_seq_id(location);
+          callback({ chainId, authSeqId });
+          emitted = true;
+        });
+      } else {
+        callback(null);
+      }
+    });
 
-subscribeToClick(
-  callback: (info: { chainId: string; authSeqId: number } | null) => void
-): () => void {
-  if (!this.ctx) {
-    return () => {};
+    return () => subscription.unsubscribe();
   }
-
-  const subscription = this.ctx.behaviors.interaction.click.subscribe((e) => {
-    if (StructureElement.Loci.is(e.current.loci) && !StructureElement.Loci.isEmpty(e.current.loci)) {
-      let emitted = false;
-      StructureElement.Loci.forEachLocation(e.current.loci, (location) => {
-        if (emitted) return;
-        const chainId = StructureProperties.chain.auth_asym_id(location);
-        const authSeqId = StructureProperties.residue.auth_seq_id(location);
-        callback({ chainId, authSeqId });
-        emitted = true;
-      });
-    } else {
-      callback(null);
-    }
-  });
-
-  return () => subscription.unsubscribe();
-}
   // --- Selection ---
 
   clearSelection(): void {

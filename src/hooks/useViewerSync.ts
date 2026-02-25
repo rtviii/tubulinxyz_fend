@@ -80,6 +80,64 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         }
     }, [colorRules, molstarInstance, msaRef]);
 
+
+    // ============================================================
+    // Subscribe to Molstar click events (single + double)
+    // ============================================================
+
+    const lastClickTimeRef = useRef<number>(0);
+    const lastClickInfoRef = useRef<{ chainId: string; authSeqId: number } | null>(null);
+    const DOUBLE_CLICK_MS = 300;
+
+    const handleMolstarSingleClick = useCallback((chainId: string, authSeqId: number) => {
+        const masterIdx = authToMasterRef.current[authSeqId];
+        if (masterIdx === undefined || !msaRef.current) return;
+
+        const WINDOW = 25;
+        const start = Math.max(1, masterIdx - WINDOW);
+        const end = masterIdx + WINDOW;
+        msaRef.current.jumpToRange(start, end);
+
+        console.log('[ViewerSync] Single click residue:', { chainId, authSeqId, masterIdx });
+    }, [msaRef]);
+
+    const handleMolstarDoubleClick = useCallback((chainId: string, authSeqId: number) => {
+        molstarInstance?.triggerNeighborhoodFocus(chainId, authSeqId);
+    }, [molstarInstance]);
+
+    useEffect(() => {
+        if (!molstarInstance?.viewer) return;
+
+        const unsubscribe = molstarInstance.viewer.subscribeToClick((info) => {
+            if (!info) {
+                molstarInstance.clearFocus();
+                molstarInstance.viewer.resetCamera();
+                return;
+            }
+
+            const now = Date.now();
+            const last = lastClickTimeRef.current;
+            const lastInfo = lastClickInfoRef.current;
+
+            const isDoubleClick =
+                now - last < DOUBLE_CLICK_MS &&
+                lastInfo?.chainId === info.chainId &&
+                lastInfo?.authSeqId === info.authSeqId;
+
+            lastClickTimeRef.current = now;
+            lastClickInfoRef.current = info;
+
+            if (isDoubleClick) {
+                handleMolstarDoubleClick(info.chainId, info.authSeqId);
+            } else {
+                handleMolstarSingleClick(info.chainId, info.authSeqId);
+            }
+        });
+
+        return unsubscribe;
+    }, [molstarInstance, handleMolstarSingleClick, handleMolstarDoubleClick]);
+
+
     // ============================================================
     // Hover Handlers
     // ============================================================

@@ -56,6 +56,7 @@ import {
   getMolstarColorForFamily,
   getMolstarGhostColor,
 } from '../colors/palette';
+import { StructureProperties } from 'molstar/lib/mol-model/structure';
 
 const ALIGNED_CHAIN_COLOR = Color(0xE57373);
 const GHOST_ALPHA = 0.12;
@@ -74,6 +75,7 @@ export class MolstarInstance {
   // State Access
   // ============================================================
 
+  private focusColorOverrideSetup = false;
   private get instanceState() {
     return this.getState().molstarInstances.instances[this.id];
   }
@@ -345,6 +347,65 @@ export class MolstarInstance {
     }
   }
 
+
+
+
+  private setupFocusColorOverride(): void {
+    if (this.focusColorOverrideSetup) return;
+    const plugin = this.viewer.ctx;
+    if (!plugin) return;
+    this.focusColorOverrideSetup = true;
+
+    plugin.managers.structure.focus.behaviors.current.subscribe(async (entry) => {
+      if (!entry) return;
+      // StructureFocusRepresentationBehavior doesn't await its own async work,
+      // so we yield to let it finish building the SurrSel/SurrRepr nodes.
+      await new Promise<void>(r => setTimeout(r, 50));
+      await this.colorFocusSurroundings();
+    });
+  }
+
+  private async colorFocusSurroundings(): Promise<void> {
+    const plugin = this.viewer.ctx;
+    if (!plugin) return;
+
+    const hierarchy = plugin.managers.structure.hierarchy.current;
+    if (hierarchy.structures.length === 0) return;
+
+    // The focus behavior tags its surroundings selection component with this string.
+    const surrComponents = hierarchy.structures[0].components.filter(c =>
+      (c.cell.transform.tags ?? []).includes('structure-focus-surr-sel')
+    );
+    if (surrComponents.length === 0) return;
+
+    const surrStructure = surrComponents[0].cell.obj?.data as Structure | undefined;
+    if (!surrStructure) return;
+
+    // Collect which chains ended up in the surroundings.
+    const chainsInSurroundings = new Set<string>();
+    for (const unit of surrStructure.units) {
+      const loc = StructureElement.Location.create(surrStructure, unit, unit.elements[0]);
+      chainsInSurroundings.add(StructureProperties.chain.auth_asym_id(loc));
+    }
+
+    // Overpaint each chain with its family color.
+    for (const chainId of chainsInSurroundings) {
+      const family = this.getChainFamily(chainId);
+      const color = getMolstarColorForFamily(family);
+
+      await setStructureOverpaint(
+        plugin,
+        surrComponents,
+        color,
+        async (structure) => {
+          const loci = executeQuery(buildChainQuery(chainId), structure);
+          return loci ?? StructureElement.Loci.none(structure);
+        }
+      );
+    }
+  }
+
+
   // ============================================================
   // Structure Loading
   // ============================================================
@@ -381,6 +442,7 @@ export class MolstarInstance {
       this.dispatch(registerComponents({ instanceId: this.id, components }));
 
       await this.applyStylizedLighting();
+      this.setupFocusColorOverride();
       return true;
     } catch (error) {
       console.error(`[${this.id}] Failed to load structure:`, error);
@@ -753,6 +815,15 @@ export class MolstarInstance {
     if (!structure) return;
     const loci = executeQuery(buildResidueQuery(chainId, authSeqId), structure);
     if (loci) this.viewer.focusLoci(loci);
+  }
+
+  triggerNeighborhoodFocus(chainId: string, authSeqId: number): void {
+    const structure = this.viewer.getCurrentStructure();
+    if (!structure) return;
+    const loci = executeQuery(buildResidueQuery(chainId, authSeqId), structure);
+    if (!loci) return;
+    this.viewer.setFocusFromLoci(loci);
+    this.viewer.focusLoci(loci);
   }
 
   focusResidueRange(chainId: string, start: number, end: number): void {

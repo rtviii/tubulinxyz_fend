@@ -14,8 +14,8 @@ export const ribxzSpec: PluginUISpec = {
   behaviors: [
     PluginSpec.Behavior(PluginBehaviors.Representation.HighlightLoci, { mark: true }),
     PluginSpec.Behavior(PluginBehaviors.Representation.DefaultLociLabelProvider),
-    PluginSpec.Behavior(PluginBehaviors.Camera.FocusLoci),
-    PluginSpec.Behavior(PluginBehaviors.Representation.FocusLoci),
+    // PluginSpec.Behavior(PluginBehaviors.Camera.FocusLoci),
+    // PluginSpec.Behavior(PluginBehaviors.Representation.FocusLoci),
     PluginSpec.Behavior(PluginBehaviors.Representation.HighlightLoci),
     PluginSpec.Behavior(PluginBehaviors.Representation.SelectLoci),
     PluginSpec.Behavior(PluginBehaviors.Camera.CameraAxisHelper),

@@ -1,11 +1,13 @@
-- standardize color variables across the repo 
 
 Molstar:
-- alpha/beta colors
-- correct ligands initialization in monomer view
+- [x] alpha/beta colors
+- [x] correct ligands initialization in monomer view
+- [x] standardize color variables across the repo 
 
 
-
+- overrid default click behaviours
+- nonpolymer initalization with congruent colors
+- hiding model on the MSA range
 
 - on residue hover, on click focus (within a sensible range)
 - flesh out the ligand panel (WHERE THE FUCK DOES TAXOL BIND?)
@@ -29,6 +31,10 @@ Molstar:
 
 
 
+# Bugs:
+
+
+- http://localhost:3000/structures/9C6S annotations dont display
 
 
 
@@ -36,3 +42,5 @@ Molstar:
 
 
 - The goddamned feedback box
+
+
