@@ -28,6 +28,7 @@ interface MolstarInstanceManagerContextValue {
     spec?: PluginUISpec
   ) => Promise<MolstarInstance | null>;
   disposeInstance: (id: MolstarInstanceId) => void;
+  scheduleDispose: (id: MolstarInstanceId, delayMs: number) => void;
 }
 
 
@@ -40,16 +41,23 @@ const MolstarInstanceManagerContext = createContext<MolstarInstanceManagerContex
 export function MolstarInstanceManagerProvider({ children }: { children: React.ReactNode }) {
   const entriesRef = useRef(new Map<MolstarInstanceId, InstanceEntry>());
   const initializingRef = useRef(new Set<MolstarInstanceId>());
+  const disposeTimersRef = useRef(new Map<MolstarInstanceId, ReturnType<typeof setTimeout>>());
+
+
 
   const value = useMemo<MolstarInstanceManagerContextValue>(() => ({
     getInstance: (id) => entriesRef.current.get(id)?.instance ?? null,
 
     initializeInstance: async (id, container, dispatch, getState) => {
-      // If already initializing, wait and return existing
+      // Cancel any pending dispose for this id
+      const pendingTimer = disposeTimersRef.current.get(id);
+      if (pendingTimer !== undefined) {
+        clearTimeout(pendingTimer);
+        disposeTimersRef.current.delete(id);
+        console.log(`[MolstarManager] Cancelled pending dispose for ${id}`);
+      }
 
       if (initializingRef.current.has(id)) {
-        console.log(`[MolstarManager] ${id} already initializing, waiting...`);
-        // Poll until ready (simple approach)
         for (let i = 0; i < 50; i++) {
           await new Promise(r => setTimeout(r, 100));
           const entry = entriesRef.current.get(id);
@@ -58,14 +66,12 @@ export function MolstarInstanceManagerProvider({ children }: { children: React.R
         return null;
       }
 
-      // If we already have an instance for this container, reuse it
       const existing = entriesRef.current.get(id);
       if (existing && existing.container === container && existing.viewer.ctx) {
         console.log(`[MolstarManager] Reusing existing instance: ${id}`);
         return existing.instance;
       }
 
-      // If we have an instance but different container, dispose old one
       if (existing) {
         console.log(`[MolstarManager] Container changed, disposing old instance: ${id}`);
         existing.viewer.dispose();
@@ -79,15 +85,11 @@ export function MolstarInstanceManagerProvider({ children }: { children: React.R
         const viewer = new MolstarViewer();
         await viewer.init(container);
 
-        if (!viewer.ctx) {
-          throw new Error('Viewer context not created');
-        }
+        if (!viewer.ctx) throw new Error('Viewer context not created');
 
         const instance = new MolstarInstance(id, viewer, dispatch, getState);
-
         entriesRef.current.set(id, { instance, viewer, container });
         console.log(`[MolstarManager] Instance created: ${id}`);
-
         return instance;
       } catch (error) {
         console.error(`[MolstarManager] Failed to create instance ${id}:`, error);
@@ -97,6 +99,20 @@ export function MolstarInstanceManagerProvider({ children }: { children: React.R
       }
     },
 
+    scheduleDispose: (id, delayMs) => {
+      // Don't schedule if already one pending
+      if (disposeTimersRef.current.has(id)) return;
+      const timerId = setTimeout(() => {
+        disposeTimersRef.current.delete(id);
+        const entry = entriesRef.current.get(id);
+        if (entry) {
+          console.log(`[MolstarManager] Deferred dispose: ${id}`);
+          entry.viewer.dispose();
+          entriesRef.current.delete(id);
+        }
+      }, delayMs);
+      disposeTimersRef.current.set(id, timerId);
+    },
     disposeInstance: (id) => {
       const entry = entriesRef.current.get(id);
       if (entry) {
@@ -104,6 +120,7 @@ export function MolstarInstanceManagerProvider({ children }: { children: React.R
         entry.viewer.dispose();
         entriesRef.current.delete(id);
       }
+      disposeTimersRef.current.delete(id);
     },
   }), []);
 
@@ -182,14 +199,7 @@ export function useMolstarInstance(
   // Actual disposal only on page navigation (unmount from DOM tree)
   useEffect(() => {
     return () => {
-      // This runs on true unmount, not StrictMode double-mount
-      // We use a timeout to distinguish - if we remount quickly, don't dispose
-      const timeoutId = setTimeout(() => {
-        console.log(`[${instanceId}] True unmount - disposing`);
-        context?.disposeInstance(instanceId);
-      }, 1000);
-
-      return () => clearTimeout(timeoutId);
+      context?.scheduleDispose(instanceId, 1000);
     };
   }, [instanceId, context]);
 

@@ -10,7 +10,6 @@ import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/sta
 import { StructureElement, StructureProperties } from 'molstar/lib/mol-model/structure';
 import { ribxzSpec } from '../spec';
 import { EnhancedTubulinSplitPreset } from '../colors/preset_structure'; // <-- Add import
-import { MonomerPreset } from '../colors/preset_monomer';
 import { Subscription } from 'rxjs';
 
 /**
@@ -38,7 +37,6 @@ export class MolstarViewer {
 
     // Register custom preset
     this.ctx.builders.structure.representation.registerPreset(EnhancedTubulinSplitPreset);
-    this.ctx.builders.structure.representation.registerPreset(MonomerPreset); // <-- add
 
 
     this.applyDefaultStyling();
