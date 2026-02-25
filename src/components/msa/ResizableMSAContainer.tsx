@@ -54,14 +54,14 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     } = props;
 
     console.log('[ResizableMSAContainer] received sequences:', {
-      count   : sequences.length,
-      ids     : sequences.map(s => s.id),
+      count: sequences.length,
+      ids: sequences.map(s => s.id),
       families: sequences.map(s => s.family),
     });
 
-    const outerRef                            = useRef<HTMLDivElement>(null);
-    const msaRef                              = useRef<any>(null);
-    const navRef                              = useRef<any>(null);
+    const outerRef = useRef<HTMLDivElement>(null);
+    const msaRef   = useRef<any>(null);
+    const navRef   = useRef<any>(null);
 
     const [availableWidth, setAvailableWidth] = useState(0);
     const [labelWidth, setLabelWidth]         = useState(0);
@@ -128,15 +128,15 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       if (nav) {
         nav.setAttribute('width', String(contentWidth));
 
-        nav.width          = contentWidth;
-        nav.style.width    = `${contentWidth}px`;
+        nav.width = contentWidth;
+        nav.style.width = `${contentWidth}px`;
         nav.style.minWidth = `${contentWidth}px`;
         nav.style.maxWidth = `${contentWidth}px`;
 
         const svg = nav.renderRoot?.querySelector('svg');
         if (svg) {
           svg.setAttribute('width', String(contentWidth));
-          svg.style.width    = `${contentWidth}px`;
+          svg.style.width = `${contentWidth}px`;
           svg.style.minWidth = `${contentWidth}px`;
         }
 
