@@ -1,6 +1,7 @@
 import { AppDispatch, RootState } from '@/store/store';
 import { MolstarViewer } from '../core/MolstarViewer';
 import { setStructureTransparency } from 'molstar/lib/mol-plugin-state/helpers/structure-transparency';
+import { setAlignedStructureFamily } from '../state/molstarInstancesSlice';
 import {
   MolstarInstanceId,
   ViewMode,
@@ -122,57 +123,57 @@ export class MolstarInstance {
   }
 
   async applyWindowMask(chainId: string, visibleAuthSeqIds: number[], pinnedAuthSeqIds: number[] = []): Promise<void> {
-  const plugin = this.viewer.ctx;
-  if (!plugin) return;
+    const plugin = this.viewer.ctx;
+    if (!plugin) return;
 
-  const component = this.getComponent(chainId);
-  if (!component || !isPolymerComponent(component)) return;
+    const component = this.getComponent(chainId);
+    if (!component || !isPolymerComponent(component)) return;
 
-  const hierarchy = plugin.managers.structure.hierarchy.current;
-  if (hierarchy.structures.length === 0) return;
+    const hierarchy = plugin.managers.structure.hierarchy.current;
+    if (hierarchy.structures.length === 0) return;
 
-  const chainComponents = hierarchy.structures[0].components.filter(
-    c => c.cell.transform.ref === component.ref
-  );
-  if (chainComponents.length === 0) return;
-
-  const structure = this.viewer.getCurrentStructure();
-  if (!structure) return;
-
-  const observed = extractObservedSequence(structure, chainId);
-  if (!observed) return;
-
-  const visibleSet = new Set(visibleAuthSeqIds);
-  const outOfRange = observed.authSeqIds.filter(id => !visibleSet.has(id));
-
-  if (outOfRange.length > 0) {
-    await setStructureTransparency(
-      plugin, chainComponents, 1,
-      async (s) => executeQuery(buildMultiResidueQuery(chainId, outOfRange), s)
-        ?? StructureElement.Loci.none(s)
+    const chainComponents = hierarchy.structures[0].components.filter(
+      c => c.cell.transform.ref === component.ref
     );
-  }
+    if (chainComponents.length === 0) return;
 
-  if (visibleAuthSeqIds.length > 0) {
-    await setStructureTransparency(
-      plugin, chainComponents, 0.75,
-      async (s) => executeQuery(buildMultiResidueQuery(chainId, visibleAuthSeqIds), s)
-        ?? StructureElement.Loci.none(s)
-    );
-  }
+    const structure = this.viewer.getCurrentStructure();
+    if (!structure) return;
 
-  // Re-pin annotated residues to full opacity regardless of where they fall in the window
-  if (pinnedAuthSeqIds.length > 0) {
-    await setStructureTransparency(
-      plugin, chainComponents, 0,
-      async (s) => executeQuery(buildMultiResidueQuery(chainId, pinnedAuthSeqIds), s)
-        ?? StructureElement.Loci.none(s)
-    );
-  }
+    const observed = extractObservedSequence(structure, chainId);
+    if (!observed) return;
 
-  const focusLoci = executeQuery(buildMultiResidueQuery(chainId, visibleAuthSeqIds), structure);
-  if (focusLoci) this.viewer.focusLoci(focusLoci);
-}
+    const visibleSet = new Set(visibleAuthSeqIds);
+    const outOfRange = observed.authSeqIds.filter(id => !visibleSet.has(id));
+
+    if (outOfRange.length > 0) {
+      await setStructureTransparency(
+        plugin, chainComponents, 1,
+        async (s) => executeQuery(buildMultiResidueQuery(chainId, outOfRange), s)
+          ?? StructureElement.Loci.none(s)
+      );
+    }
+
+    if (visibleAuthSeqIds.length > 0) {
+      await setStructureTransparency(
+        plugin, chainComponents, 0.75,
+        async (s) => executeQuery(buildMultiResidueQuery(chainId, visibleAuthSeqIds), s)
+          ?? StructureElement.Loci.none(s)
+      );
+    }
+
+    // Re-pin annotated residues to full opacity regardless of where they fall in the window
+    if (pinnedAuthSeqIds.length > 0) {
+      await setStructureTransparency(
+        plugin, chainComponents, 0,
+        async (s) => executeQuery(buildMultiResidueQuery(chainId, pinnedAuthSeqIds), s)
+          ?? StructureElement.Loci.none(s)
+      );
+    }
+
+    const focusLoci = executeQuery(buildMultiResidueQuery(chainId, visibleAuthSeqIds), structure);
+    if (focusLoci) this.viewer.focusLoci(focusLoci);
+  }
 
   async clearWindowMask(chainId: string): Promise<void> {
     // Restores uniform ghost transparency across the whole chain.
@@ -199,8 +200,229 @@ export class MolstarInstance {
     );
   }
 
+  /**
+     * Find the hierarchy structure entry that owns a given component ref.
+     * Aligned chains live in separate hierarchy structures from the primary.
+     */
+  private findHierarchyComponentsForRef(componentRef: string) {
+    const plugin = this.viewer.ctx;
+    if (!plugin) return [];
+    const hierarchy = plugin.managers.structure.hierarchy.current;
+    for (const struct of hierarchy.structures) {
+      for (const comp of struct.components) {
+        if (comp.cell.transform.ref === componentRef) {
+          return [comp];
+        }
+      }
+    }
+    return [];
+  }
+  highlightAlignedChain(
+    targetChainId: string,
+    alignedStructureId: string,
+    highlight: boolean
+  ): void {
+    const chainState = this.getMonomerChainState(targetChainId);
+    const aligned = chainState?.alignedStructures[alignedStructureId];
+    if (!aligned) return;
 
+    const structure = this.viewer.getStructureFromRef(aligned.chainComponentRef);
+    if (!structure) {
+      if (!highlight) this.viewer.highlightLoci(null);
+      return;
+    }
 
+    if (highlight) {
+      this.viewer.highlightLoci(structureToLoci(structure));
+    } else {
+      this.viewer.highlightLoci(null);
+    }
+  }
+  async applyWindowMaskToAligned(
+    targetChainId: string,
+    alignedStructureId: string,
+    sourceChainId: string,
+    visibleAuthSeqIds: number[],
+    pinnedAuthSeqIds: number[] = []
+  ): Promise<void> {
+    const plugin = this.viewer.ctx;
+    if (!plugin) return;
+
+    const chainState = this.getMonomerChainState(targetChainId);
+    const aligned = chainState?.alignedStructures[alignedStructureId];
+    if (!aligned) return;
+
+    const components = this.findHierarchyComponentsForRef(aligned.chainComponentRef);
+    if (components.length === 0) return;
+
+    // Get the aligned chain's full structure to find all residues
+    const cell = plugin.state.data.select(
+      StateSelection.Generators.byRef(aligned.chainComponentRef)
+    )[0];
+    const alignedStructure = cell?.obj?.data as Structure | undefined;
+    if (!alignedStructure) return;
+
+    const observed = extractObservedSequence(alignedStructure, sourceChainId);
+    if (!observed) return;
+
+    const visibleSet = new Set(visibleAuthSeqIds);
+    const outOfRange = observed.authSeqIds.filter(id => !visibleSet.has(id));
+
+    // Hide out-of-range residues
+    if (outOfRange.length > 0) {
+      await setStructureTransparency(
+        plugin, components, 1,
+        async (s) => executeQuery(buildMultiResidueQuery(sourceChainId, outOfRange), s)
+          ?? StructureElement.Loci.none(s)
+      );
+    }
+
+    // Ghost in-range residues
+    if (visibleAuthSeqIds.length > 0) {
+      await setStructureTransparency(
+        plugin, components, 0.75,
+        async (s) => executeQuery(buildMultiResidueQuery(sourceChainId, visibleAuthSeqIds), s)
+          ?? StructureElement.Loci.none(s)
+      );
+    }
+
+    // Pinned annotations at full opacity
+    if (pinnedAuthSeqIds.length > 0) {
+      await setStructureTransparency(
+        plugin, components, 0,
+        async (s) => executeQuery(buildMultiResidueQuery(sourceChainId, pinnedAuthSeqIds), s)
+          ?? StructureElement.Loci.none(s)
+      );
+    }
+  }
+
+  async clearWindowMaskForAligned(
+    targetChainId: string,
+    alignedStructureId: string
+  ): Promise<void> {
+    const plugin = this.viewer.ctx;
+    if (!plugin) return;
+
+    const chainState = this.getMonomerChainState(targetChainId);
+    const aligned = chainState?.alignedStructures[alignedStructureId];
+    if (!aligned) return;
+
+    const components = this.findHierarchyComponentsForRef(aligned.chainComponentRef);
+    if (components.length === 0) return;
+
+    await setStructureTransparency(
+      plugin, components, 0.75,
+      async (structure) => Structure.toStructureElementLoci(structure)
+    );
+  }
+
+  /**
+   * Iterate all visible aligned structures for the active chain
+   * and return their Redux entries.
+   */
+  private getActiveAlignedStructures(): AlignedStructure[] {
+    const activeChainId = this.activeMonomerChainId;
+    if (!activeChainId) return [];
+    const chainState = this.getMonomerChainState(activeChainId);
+    if (!chainState) return [];
+    return Object.values(chainState.alignedStructures).filter(a => a.visible);
+  }
+  async clearAlignedOverpaint(
+    targetChainId: string,
+    alignedStructureId: string
+  ): Promise<void> {
+    const plugin = this.viewer.ctx;
+    if (!plugin) return;
+
+    const chainState = this.getMonomerChainState(targetChainId);
+    const aligned = chainState?.alignedStructures[alignedStructureId];
+    if (!aligned) return;
+
+    const components = this.findHierarchyComponentsForRef(aligned.chainComponentRef);
+    if (components.length === 0) return;
+
+    // Clear overpaint
+    try {
+      await setStructureOverpaint(
+        plugin, components, -1 as any,
+        async (structure) => Structure.toStructureElementLoci(structure)
+      );
+    } catch (_) { /* ignore */ }
+
+    // Restore ghost transparency
+    try {
+      await setStructureTransparency(
+        plugin, components, 0.75,
+        async (structure) => Structure.toStructureElementLoci(structure)
+      );
+    } catch (_) { /* ignore */ }
+  }
+
+  async applyColorschemeToAligned(
+    targetChainId: string,
+    alignedStructureId: string,
+    colorings: ResidueColoring[]
+  ): Promise<void> {
+    const plugin = this.viewer.ctx;
+    if (!plugin) return;
+
+    const chainState = this.getMonomerChainState(targetChainId);
+    const aligned = chainState?.alignedStructures[alignedStructureId];
+    if (!aligned) return;
+
+    const components = this.findHierarchyComponentsForRef(aligned.chainComponentRef);
+    if (components.length === 0) return;
+
+    // Group by color for batch application
+    const colorGroups = new Map<number, number[]>();
+    for (const c of colorings) {
+      const key = c.color as number;
+      if (!colorGroups.has(key)) colorGroups.set(key, []);
+      colorGroups.get(key)!.push(c.authSeqId);
+    }
+
+    for (const [color, authSeqIds] of colorGroups.entries()) {
+      const lociGetter = async (structure: Structure) => {
+        const loci = executeQuery(
+          buildMultiResidueQuery(aligned.sourceChainId, authSeqIds),
+          structure
+        );
+        return loci ?? StructureElement.Loci.none(structure);
+      };
+
+      try {
+        await setStructureOverpaint(plugin, components, Color(color), lociGetter);
+        await setStructureTransparency(plugin, components, 0, lociGetter);
+      } catch (err) {
+        console.error(`[${this.id}] Failed to apply colorscheme to aligned ${alignedStructureId}:`, err);
+      }
+    }
+  }
+  async styleAlignedChainAsGhost(
+    targetChainId: string,
+    alignedStructureId: string,
+    family: string
+  ): Promise<void> {
+    const plugin = this.viewer.ctx;
+    if (!plugin) return;
+
+    const chainState = this.getMonomerChainState(targetChainId);
+    const aligned = chainState?.alignedStructures[alignedStructureId];
+    if (!aligned) return;
+
+    const ghostColor = getMolstarGhostColor(family);
+    const reprCells = this.findReprCells(aligned.chainComponentRef);
+    if (reprCells.length === 0) return;
+
+    const builder = plugin.build();
+    for (const cell of reprCells) {
+      builder.to(cell.transform.ref).update(
+        StateTransforms.Representation.StructureRepresentation3D,
+        old => ({ ...old, colorTheme: { name: 'uniform', params: { value: ghostColor } } })
+      );
+    }
+    await builder.commit();
+  }
 
   async setStructureGhostColors(enabled: boolean): Promise<void> {
     const plugin = this.viewer.ctx;
@@ -656,7 +878,8 @@ export class MolstarInstance {
   async loadAlignedStructure(
     targetChainId: string,
     sourcePdbId: string,
-    sourceChainId: string
+    sourceChainId: string,
+    family?: string,
   ): Promise<string | null> {
     const plugin = this.viewer.ctx;
     if (!plugin) return null;
@@ -715,11 +938,22 @@ export class MolstarInstance {
           .commit();
       }
 
+      // Ghost style: family-colored, semi-transparent
+      const ghostColor = getMolstarGhostColor(family);
       await plugin.builders.structure.representation.addRepresentation(chainComponent, {
         type: 'cartoon',
         color: 'uniform',
-        colorParams: { value: ALIGNED_CHAIN_COLOR },
+        colorParams: { value: ghostColor },
       });
+
+      // Apply ghost transparency to match the primary chain's style
+      const alignedComponents = this.findHierarchyComponentsForRef(chainComponent.ref);
+      if (alignedComponents.length > 0) {
+        await setStructureTransparency(
+          plugin, alignedComponents, 0.75,
+          async (structure) => Structure.toStructureElementLoci(structure)
+        );
+      }
 
       const shouldShow =
         this.viewMode === 'monomer' && this.activeMonomerChainId === targetChainId;
@@ -734,6 +968,7 @@ export class MolstarInstance {
         chainComponentRef: chainComponent.ref,
         visible: true,
         rmsd,
+        family,
       };
 
       this.dispatch(addAlignedStructure({ instanceId: this.id, targetChainId, alignedStructure }));

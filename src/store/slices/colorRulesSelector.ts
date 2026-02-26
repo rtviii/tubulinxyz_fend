@@ -12,6 +12,8 @@ export const VARIANT_COLORS: Record<VariantType, string> = {
 
 export interface ColorRule {
   id: string;
+
+  chainKey: string;          // <-- added: e.g. "9OT2_A"
   type: 'ligand' | 'variant';
   variantType?: VariantType;
   color: string;
@@ -28,7 +30,6 @@ export const makeSelectActiveColorRulesForSequenceIds = () =>
     (chains, visibleSeqIds): ColorRule[] => {
       const rules: ColorRule[] = [];
       const visible = new Set(visibleSeqIds);
-
       const chainKeyToRowIndex: Record<string, number> = {};
       visibleSeqIds.forEach((id, idx) => {
         chainKeyToRowIndex[id] = idx;
@@ -37,19 +38,16 @@ export const makeSelectActiveColorRulesForSequenceIds = () =>
       for (const [chainKey, entry] of Object.entries(chains)) {
         if (!entry.data) continue;
         if (!visible.has(chainKey)) continue;
-
         const rowIndex = chainKeyToRowIndex[chainKey];
         if (rowIndex === undefined) continue;
-
         const visibility = entry.visibility;
-
         const authAsymId = authAsymIdFromChainKey(chainKey);
 
         for (const site of entry.data.ligandSites) {
           if (!visibility.visibleLigandIds.includes(site.id)) continue;
-
           rules.push({
             id: site.id,
+            chainKey,                   // <-- added
             type: 'ligand',
             color: site.color,
             msaCells: site.masterIndices.map(mi => ({ row: rowIndex, column: mi - 1 })),
@@ -60,9 +58,9 @@ export const makeSelectActiveColorRulesForSequenceIds = () =>
         if (visibility.showVariants) {
           for (const variant of entry.data.variants) {
             if (variant.authSeqId === null) continue;
-
             rules.push({
               id: `variant_${chainKey}_${variant.masterIndex}`,
+              chainKey,                 // <-- added
               type: 'variant',
               variantType: variant.type,
               color: VARIANT_COLORS[variant.type],

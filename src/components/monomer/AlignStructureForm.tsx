@@ -53,9 +53,8 @@ export function AlignStructureForm({
       return;
     }
 
-    if (!sourceProfile) return; // still loading
+    if (!sourceProfile) return;
 
-    // Profile arrived -- register the MSA row
     const chainId = sourceChainId.trim().toUpperCase();
     const result = alignChainFromProfile(sourceProfile, chainId, masterLength);
 
@@ -64,6 +63,16 @@ export function AlignStructureForm({
         `No alignment mapping found for chain ${chainId} in ${committedPdbId}. ` +
         `The chain may not be a classified tubulin.`
       );
+    } else if (instance && targetChainId) {
+      // Find the family from the source profile and restyle the aligned chain
+      const poly = sourceProfile.polypeptides?.find(p => p.auth_asym_id === chainId);
+      const entity = poly ? sourceProfile.entities?.[poly.entity_id] : null;
+      const family = entity && 'family' in entity ? (entity as any).family : undefined;
+
+      if (family) {
+        const alignedId = `${committedPdbId}_${chainId}_on_${targetChainId}`;
+        instance.styleAlignedChainAsGhost(targetChainId, alignedId, family);
+      }
     }
 
     setLoading(false);
@@ -72,7 +81,8 @@ export function AlignStructureForm({
   }, [
     sourceProfile, profileError, committedPdbId, loading,
     sourceChainId, masterLength, alignChainFromProfile, onClose,
-  ]);
+    instance, targetChainId,
+  ]);;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

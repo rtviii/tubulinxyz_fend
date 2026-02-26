@@ -68,6 +68,7 @@ export interface AlignedStructure {
   chainComponentRef: string;   // ref to chain component (for visibility/transform)
   visible: boolean;
   rmsd: number | null;         // alignment quality
+  family?: string;          // <-- add this
 }
 
 export interface MonomerChainState {

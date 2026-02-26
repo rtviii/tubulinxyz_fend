@@ -173,7 +173,8 @@ export const molstarInstancesSlice = createSlice({
     },
 
     clearAllInstances: () => initialState,
-  },
+  }
+
 });
 
 export const {

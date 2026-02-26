@@ -1,4 +1,3 @@
-// src/store/slices/annotationsSlice.ts
 import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
 import { RootState } from '../store';
 
@@ -24,7 +23,7 @@ export interface LigandSite {
 export interface Variant {
   type: VariantType;
   masterIndex: number;
-  authSeqId: number | null;      // Resolved from mapping
+  authSeqId: number | null;
   fromResidue: string;
   toResidue: string;
   phenotype: string | null;
@@ -40,7 +39,7 @@ export interface ChainAnnotationData {
 
 export interface ChainVisibility {
   showVariants: boolean;
-  visibleLigandIds: string[];    // Array for Redux serialization
+  visibleLigandIds: string[];
 }
 
 export interface ChainAnnotationEntry {
@@ -65,7 +64,7 @@ const initialState: AnnotationsState = {
 };
 
 const DEFAULT_VISIBILITY: ChainVisibility = {
-  showVariants: true,
+  showVariants: false,            // <-- changed from true
   visibleLigandIds: [],
 };
 
@@ -79,6 +78,10 @@ export const annotationsSlice = createSlice({
   reducers: {
     setPrimaryChain: (state, action: PayloadAction<string | null>) => {
       state.primaryChainKey = action.payload;
+      // Auto-enable variants for the new primary if data already loaded
+      if (action.payload && state.chains[action.payload]) {
+        state.chains[action.payload].visibility.showVariants = true;
+      }
     },
 
     setChainLoading: (state, action: PayloadAction<string>) => {
@@ -102,12 +105,13 @@ export const annotationsSlice = createSlice({
     }>) => {
       const { chainKey, data } = action.payload;
       const existing = state.chains[chainKey];
+      const isPrimary = state.primaryChainKey === chainKey;
 
       state.chains[chainKey] = {
         data,
         visibility: existing?.visibility ?? {
-          showVariants: true,
-          visibleLigandIds: [],  
+          showVariants: isPrimary,       // <-- auto-enable only for primary
+          visibleLigandIds: [],
         },
         isLoading: false,
         error: null,
@@ -155,6 +159,14 @@ export const annotationsSlice = createSlice({
       }
     },
 
+    /** Hide all annotation overlays across every chain. */
+    hideAllVisibility: (state) => {
+      for (const chain of Object.values(state.chains)) {
+        chain.visibility.showVariants = false;
+        chain.visibility.visibleLigandIds = [];
+      }
+    },
+
     clearChain: (state, action: PayloadAction<string>) => {
       delete state.chains[action.payload];
       if (state.primaryChainKey === action.payload) {
@@ -175,6 +187,7 @@ export const {
   toggleLigandSite,
   showAllLigands,
   hideAllLigands,
+  hideAllVisibility,
   clearChain,
   clearAllAnnotations,
 } = annotationsSlice.actions;

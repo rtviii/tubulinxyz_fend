@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useEffect, useMemo } from 'react';
+import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { useAppSelector, useAppDispatch } from '@/store/store';
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
@@ -19,10 +19,9 @@ import {
   ResizablePanelGroup,
 } from '@/components/ui/resizable';
 import { addSequence } from '@/store/slices/sequence_registry';
-import { setPrimaryChain } from '@/store/slices/annotationsSlice';
+import { setPrimaryChain, hideAllVisibility } from '@/store/slices/annotationsSlice';
 import { useGetMasterProfileQuery } from '@/store/tubxz_api';
 import { useNightingaleComponents } from '@/hooks/useNightingaleComponents';
-import { useAnnotationVisibility } from '@/hooks/useAnnotationVisibility';
 import { useViewerSync } from '@/hooks/useViewerSync';
 import { useMultiChainAnnotations, ChainAnnotationFetcher } from '@/hooks/useMultiChainAnnotations';
 import { createClassificationFromProfile } from '@/services/profile_service';
@@ -125,18 +124,6 @@ export default function StructureProfilePage() {
     }
   }, [primaryChainKey, viewMode, dispatch]);
 
-  // Annotation visibility + viewer sync
-  const {
-    ligandSites,
-    variants,
-    showVariants,
-    visibleLigandIds,
-    setShowVariants,
-    toggleLigand,
-    showAll,
-    hideAll,
-    clearAll,
-  } = useAnnotationVisibility(chainKey);
 
   const { handleMSAHover, handleMSAHoverEnd, focusLigandSite, focusMutation, handleDisplayRangeChange, clearWindowMask } = useViewerSync({
     chainKey,
@@ -203,6 +190,9 @@ export default function StructureProfilePage() {
   }, [instance]);
 
   const isMonomerView = viewMode === 'monomer';
+  const handleClearAllAnnotations = useCallback(() => {
+    dispatch(hideAllVisibility());
+  }, [dispatch]);
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-gray-100">
@@ -235,18 +225,8 @@ export default function StructureProfilePage() {
                   instance={instance}
                   pdbId={loadedStructure}
                   profile={profile}
-                  masterLength={masterData?.alignment_length ?? 0}   // <-- add this
-                  ligandSites={ligandSites}
-                  variants={variants}
-                  visibleLigandIds={visibleLigandIds}
-                  showVariants={showVariants}
-                  onToggleLigand={toggleLigand}
-                  onFocusLigand={focusLigandSite}
-                  onToggleVariants={setShowVariants}
-                  onFocusVariant={focusMutation}
-                  onShowAllLigands={showAll}
-                  onHideAllLigands={hideAll}
-                  onClearAll={clearAll}
+                  masterLength={masterData?.alignment_length ?? 0}
+                  msaRef={msaRef}
                 />
               </div>
             </div>
@@ -295,7 +275,7 @@ export default function StructureProfilePage() {
                       msaRef={msaRef}
                       onResidueHover={handleMSAHover}
                       onResidueLeave={handleMSAHoverEnd}
-                      onClearColors={clearAll}
+                      onClearColors={handleClearAllAnnotations}
                       onWindowMaskChange={handleDisplayRangeChange}
                       onWindowMaskClear={clearWindowMask}
                     />
@@ -303,7 +283,7 @@ export default function StructureProfilePage() {
                 </ResizablePanel>
               </>
             )}
-          </ResizablePanelGroup>
+          </ResizablePanelGroup>/o
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
