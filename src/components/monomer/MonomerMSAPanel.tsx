@@ -1,14 +1,14 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { useAppSelector } from '@/store/store';
-import { selectIsChainAligned } from '@/store/slices/sequence_registry';
-import { useChainAlignment } from '@/hooks/useChainAlignment';
+import { useState, useMemo, useCallback, useRef } from 'react';
+import { useAutoAlignFromProfile } from '@/hooks/useChainAlignment';
 import { ResizableMSAContainer } from '@/components/msa/ResizableMSAContainer';
 import { MSAToolbar } from '@/components/msa/MSAToolbar';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { MsaSequence } from '@/store/slices/sequence_registry';
 import type { MSAHandle } from '@/components/msa/types';
+import type { TubulinStructure } from '@/store/tubxz_api';
 
 interface MonomerMSAPanelProps {
+  profile?: TubulinStructure;
   pdbId: string | null;
   chainId: string;
   family?: string;
@@ -26,6 +26,7 @@ interface MonomerMSAPanelProps {
 }
 
 export function MonomerMSAPanel({
+  profile,
   pdbId,
   chainId,
   family,
@@ -41,7 +42,6 @@ export function MonomerMSAPanel({
   onWindowMaskChange,
   onWindowMaskClear,
 }: MonomerMSAPanelProps) {
-  const { alignChain, isAligning } = useChainAlignment();
   const [colorScheme, setColorScheme] = useState('custom-position');
   const [inRangeOnly, setInRangeOnly] = useState(false);
 
@@ -49,26 +49,8 @@ export function MonomerMSAPanel({
   // immediately when the checkbox is toggled on, even if no drag has happened.
   const currentRangeRef = useRef<[number, number] | null>(null);
 
-  const isAligned = useAppSelector(state =>
-    pdbId ? selectIsChainAligned(state, pdbId, chainId) : false
-  );
-
-  const alignmentAttemptedRef = useRef<Set<string>>(new Set());
-
-  // Auto-align on mount
-  useEffect(() => {
-    const key = pdbId && chainId ? `${pdbId}_${chainId}` : null;
-    if (!instance || !pdbId || !chainId) return;
-    if (isAligned || isAligning) return;
-    if (key && alignmentAttemptedRef.current.has(key)) return;
-
-    if (key) alignmentAttemptedRef.current.add(key);
-
-    alignChain(pdbId, chainId, instance, family).catch(err => {
-      console.error('Auto-align failed:', err);
-      if (key) alignmentAttemptedRef.current.delete(key);
-    });
-  }, [instance, pdbId, chainId, family, isAligned, isAligning, alignChain]);
+  // Auto-align from profile -- synchronous, no spinner needed
+  const { isAligned } = useAutoAlignFromProfile(profile, chainId, maxLength);
 
   const allSequences = useMemo(
     () => [...masterSequences, ...pdbSequences],
@@ -128,14 +110,12 @@ export function MonomerMSAPanel({
   // Loading state
   // ----------------------------------------------------------------
 
-  if (!nglLoaded || maxLength === 0 || isAligning) {
+  if (!nglLoaded || maxLength === 0 || !isAligned) {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2" />
-          <p className="text-sm text-gray-500">
-            {isAligning ? `Aligning ${pdbId}:${chainId}...` : 'Loading...'}
-          </p>
+          <p className="text-sm text-gray-500">Loading...</p>
         </div>
       </div>
     );

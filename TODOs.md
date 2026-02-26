@@ -12,21 +12,21 @@
 - [x] focusing on nonpoly -- hide others..
 - [x] on residue hover, on click focus (within a sensible range)
 
-## Index and bsite correctness | Indels and mutations:
-  
-- [ ] establish correctness of annotations!
-- [ ] fix and verify ligands
-- [ ] flesh out the ligand panel (WHERE THE FUCK DOES TAXOL BIND?)
-- [ ] ingest morisette database
-
 ## MSA:
-
 
 - [ ] alignemnt functionality (polymer navigator)
 - [ ] UI cleanup:
   - [ ] control panel tools
   - [ ] collapsible master alignment
   - [ ] some logs
+
+## Index and bsite correctness | Indels and mutations:
+  
+- [x] establish correctness of annotations!
+- [x] fix and verify ligands
+- [ ] flesh out the ligand panel (WHERE THE FUCK DOES TAXOL BIND?)
+- [ ] ingest morisette database
+
 
 ## UI Refactoring
 

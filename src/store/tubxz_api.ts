@@ -506,11 +506,19 @@ export type MapFamily =
   | "map_ttll_glutamylase_long"
   | "map_ttll_glutamylase_short"
   | "map_vash_detyrosinase";
-export type IndexMappingData = {
-  observed_to_master: {
+export type EntityIndexMapping = {
+  label_seq_id_to_master: {
     [key: string]: number | null;
   };
-  master_to_observed: {
+  master_to_label_seq_id: {
+    [key: string]: number | null;
+  };
+};
+export type ChainIndexMappingData = {
+  auth_seq_id_to_master: {
+    [key: string]: number | null;
+  };
+  master_to_auth_seq_id: {
     [key: string]: number | null;
   };
 };
@@ -541,7 +549,10 @@ export type PolypeptideEntity = {
   host_organism_ids?: number[];
   family?: TubulinFamily | MapFamily | null;
   uniprot_accessions?: string[];
-  index_mapping?: IndexMappingData | null;
+  entity_index_mapping?: EntityIndexMapping | null;
+  chain_index_mappings?: {
+    [key: string]: ChainIndexMappingData;
+  };
   variants?: SequenceVariant[];
   alignment_stats?: {
     [key: string]: any;

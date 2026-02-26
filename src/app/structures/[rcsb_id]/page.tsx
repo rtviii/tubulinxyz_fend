@@ -282,6 +282,7 @@ export default function StructureProfilePage() {
                 <ResizablePanel defaultSize={50} minSize={20}>
                   <div className="h-full border-t border-gray-300 bg-white min-h-0 flex flex-col overflow-hidden">
                     <MonomerMSAPanel
+                      profile={profile ?? undefined}        
                       pdbId={loadedStructure}
                       chainId={activeChainId}
                       family={activeFamily}
@@ -294,7 +295,6 @@ export default function StructureProfilePage() {
                       onResidueHover={handleMSAHover}
                       onResidueLeave={handleMSAHoverEnd}
                       onClearColors={clearAll}
-
                       onWindowMaskChange={handleDisplayRangeChange}
                       onWindowMaskClear={clearWindowMask}
                     />
