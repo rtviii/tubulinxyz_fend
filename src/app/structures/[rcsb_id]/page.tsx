@@ -235,6 +235,7 @@ export default function StructureProfilePage() {
                   instance={instance}
                   pdbId={loadedStructure}
                   profile={profile}
+                  masterLength={masterData?.alignment_length ?? 0}   // <-- add this
                   ligandSites={ligandSites}
                   variants={variants}
                   visibleLigandIds={visibleLigandIds}
@@ -282,7 +283,7 @@ export default function StructureProfilePage() {
                 <ResizablePanel defaultSize={50} minSize={20}>
                   <div className="h-full border-t border-gray-300 bg-white min-h-0 flex flex-col overflow-hidden">
                     <MonomerMSAPanel
-                      profile={profile ?? undefined}        
+                      profile={profile ?? undefined}
                       pdbId={loadedStructure}
                       chainId={activeChainId}
                       family={activeFamily}

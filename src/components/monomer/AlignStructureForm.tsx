@@ -1,17 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
+import { useChainAlignment } from '@/hooks/useChainAlignment';
+import { useGetStructureProfileQuery } from '@/store/tubxz_api';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 
 interface AlignStructureFormProps {
   targetChainId: string;
   instance: MolstarInstance | null;
   targetFamily?: string;
-  alignChain: (
-    pdbId: string,
-    chainId: string,
-    inst: MolstarInstance,
-    family?: string
-  ) => Promise<any>;
+  masterLength: number;
   onClose: () => void;
 }
 
@@ -19,13 +16,63 @@ export function AlignStructureForm({
   targetChainId,
   instance,
   targetFamily,
-  alignChain,
+  masterLength,
   onClose,
 }: AlignStructureFormProps) {
   const [sourcePdbId, setSourcePdbId] = useState('');
   const [sourceChainId, setSourceChainId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // We only fetch the source profile after the user submits, so track
+  // a "committed" PDB ID separately from the text input.
+  const [committedPdbId, setCommittedPdbId] = useState<string | null>(null);
+
+  const { alignChainFromProfile } = useChainAlignment();
+
+  const {
+    data: sourceProfile,
+    isLoading: profileLoading,
+    error: profileError,
+  } = useGetStructureProfileQuery(
+    { rcsbId: committedPdbId! },
+    { skip: !committedPdbId }
+  );
+
+  // Once the profile arrives (or errors), drive the alignment to completion.
+  useEffect(() => {
+    if (!committedPdbId || !loading) return;
+
+    if (profileError) {
+      setError(
+        'Could not fetch profile for ' + committedPdbId +
+        '. Make sure it has been ingested.'
+      );
+      setLoading(false);
+      setCommittedPdbId(null);
+      return;
+    }
+
+    if (!sourceProfile) return; // still loading
+
+    // Profile arrived -- register the MSA row
+    const chainId = sourceChainId.trim().toUpperCase();
+    const result = alignChainFromProfile(sourceProfile, chainId, masterLength);
+
+    if (!result) {
+      setError(
+        `No alignment mapping found for chain ${chainId} in ${committedPdbId}. ` +
+        `The chain may not be a classified tubulin.`
+      );
+    }
+
+    setLoading(false);
+    setCommittedPdbId(null);
+    if (result) onClose();
+  }, [
+    sourceProfile, profileError, committedPdbId, loading,
+    sourceChainId, masterLength, alignChainFromProfile, onClose,
+  ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,16 +84,19 @@ export function AlignStructureForm({
     setError(null);
 
     try {
+      // Step 1: 3D superposition (this already works)
       const ok = await instance.loadAlignedStructure(targetChainId, pdbId, chainId);
-      if (ok) {
-        await alignChain(pdbId, chainId, instance, targetFamily);
-        onClose();
-      } else {
+      if (!ok) {
         setError('Failed to load or align structure in 3D');
+        setLoading(false);
+        return;
       }
+
+      // Step 2: Kick off profile fetch for MSA registration.
+      // The useEffect above handles the rest once data arrives.
+      setCommittedPdbId(pdbId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error during alignment');
-    } finally {
       setLoading(false);
     }
   };

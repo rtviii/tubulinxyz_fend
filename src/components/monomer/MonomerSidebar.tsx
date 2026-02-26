@@ -5,7 +5,6 @@ import { LigandsPanel } from '@/components/annotations/LigandsPanel';
 import { AlignStructureForm } from './AlignStructureForm';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { formatFamilyShort } from '@/lib/formatters';
-import { useChainAlignment } from '@/hooks/useChainAlignment';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { PolymerComponent, AlignedStructure } from '@/components/molstar/core/types';
 import type { LigandSite, Variant } from '@/store/slices/annotationsSlice';
@@ -17,6 +16,7 @@ export interface MonomerSidebarProps {
   instance: MolstarInstance | null;
   pdbId: string | null;
   profile: StructureProfile | null;
+  masterLength: number;
   // Annotation state
   ligandSites: LigandSite[];
   variants: Variant[];
@@ -38,6 +38,7 @@ export function MonomerSidebar({
   instance,
   pdbId,
   profile,
+  masterLength,
   ligandSites,
   variants,
   visibleLigandIds,
@@ -51,7 +52,6 @@ export function MonomerSidebar({
   onClearAll,
 }: MonomerSidebarProps) {
   const [showAlignForm, setShowAlignForm] = useState(false);
-  const { alignChain } = useChainAlignment();
 
   const activeFamily = activeChainId
     ? getFamilyForChain(profile, activeChainId)
@@ -93,8 +93,8 @@ export function MonomerSidebar({
                 key={chain.chainId}
                 onClick={() => handleChainSwitch(chain.chainId)}
                 className={`px-2 py-1 text-xs font-mono rounded ${chain.chainId === activeChainId
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
               >
                 {chain.chainId}
@@ -121,7 +121,7 @@ export function MonomerSidebar({
               targetChainId={activeChainId}
               instance={instance}
               targetFamily={activeFamily}
-              alignChain={alignChain}
+              masterLength={masterLength}
               onClose={() => setShowAlignForm(false)}
             />
           )}
