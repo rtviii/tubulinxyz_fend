@@ -12,38 +12,58 @@
 - [x] focusing on nonpoly -- hide others..
 - [x] on residue hover, on click focus (within a sensible range)
 
-- [ ] residue display hover
+## Index and bsite correctness | Indels and mutations:
+  
+- [ ] establish correctness of annotations!
+- [ ] fix and verify ligands
+- [ ] flesh out the ligand panel (WHERE THE FUCK DOES TAXOL BIND?)
+- [ ] ingest morisette database
 
-## Indels and mutations:
+## MSA:
 
-- Establish correctness of annotations!
-- fix and verify ligands
 
-- flesh out the ligand panel (WHERE THE FUCK DOES TAXOL BIND?)
-- Enrich the easy mode with metadata and such
-- links and popups to other structures everywhere
-- Rework the ui for the "expert mode" to be more like a toolbox as opposed to a single panel
+- [ ] alignemnt functionality (polymer navigator)
+- [ ] UI cleanup:
+  - [ ] control panel tools
+  - [ ] collapsible master alignment
+  - [ ] some logs
+
+## UI Refactoring
+
+- [ ] Isotype naming (just pull from metadata where present)
+- Start by separating easy and expert modes
+- [ ] Enrich the easy mode with metadata and such
+- [ ] links and popups to other structures everywhere
+- [ ] Rework the ui for the "expert mode" to be more like a toolbox as opposed to a single panel
     - polymer navigator with the filters :
+
                 filters                | Default
                 -----------------------|----------------------
-                - species/taxonomy      | human
-                - isotype               | TUBA1/TUBB2
-                - ligands               | GDP, GTP, MG
-                - MAPs                  | no non-tubulin polymers
-                - mutations             | no mutations
-                - mutations[position]   | overview of those that are present in the setting present so far
+                 species/taxonomy      | human
+                 isotype               | TUBA1/TUBB2
+                 ligands               | GDP, GTP, MG
+                 MAPs                  | no non-tubulin polymers
+                 mutations             | no mutations
+                 mutations[position]   | overview of those that are present in the setting present so far
 
 
-# Bugs:
+## LLM-dispatchable actions
 
+These "actions" should be generic functional and  generally applicable to data across the database s.t. we are able to expose them (and other) to some version of MCP (model context protocol) for the LLM that would follow.
+ 
+- align sequences: MSA and structural (assume an authoritative family MSA )
+- alignment of chains
+- residues/interactions in proximity/neighborhood of _x_[MAP, ligand, contact/interface]
+
+
+## Bugs:
 
 - http://localhost:3000/structures/9C6S annotations dont display
 
+## Lower priority
 
 
-# Lower priority
-
-
-- The goddamned feedback box
+- [ ] residue detail panel hover
+- [ ] the goddamned feedback box
 
 

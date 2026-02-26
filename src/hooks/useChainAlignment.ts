@@ -36,7 +36,7 @@ export function useChainAlignment() {
       instance: MolstarInstance,
       family?: string
     ): Promise<AlignmentResult> => {
-const key = makeChainKey(pdbId, chainId);
+      const key = makeChainKey(pdbId, chainId);
 
       // Guard: Already aligning this chain
       if (inFlightRef.current.has(key)) {
@@ -56,11 +56,8 @@ const key = makeChainKey(pdbId, chainId);
         }
 
 
-const key = `${pdbId}_${chainId}`;        // stable chainKey == sequenceId
-const fam = family ?? 'unknown';          // keep family only as metadata
 
-
-
+        const fam = family ?? 'unknown';          // keep family only as metadata
         const result = await alignSequence({
           family: fam,
           alignmentRequest: {
@@ -87,11 +84,11 @@ const fam = family ?? 'unknown';          // keep family only as metadata
           : `${pdbId}:${chainId}`;
 
         dispatch(addSequence({
-          id        : key,
-          name      : displayName,
-          sequence  : result.aligned_sequence,
+          id: key,
+          name: displayName,
+          sequence: result.aligned_sequence,
           originType: 'pdb',
-          chainRef  : { pdbId, chainId },
+          chainRef: { pdbId, chainId },
           family,
         }));
 

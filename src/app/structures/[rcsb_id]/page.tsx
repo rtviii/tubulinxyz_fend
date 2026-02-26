@@ -145,15 +145,7 @@ export default function StructureProfilePage() {
     visibleSequenceIds: allVisibleSequenceIds,
   });
 
-  // const { handleMSAHover, handleMSAHoverEnd, focusLigandSite, focusMutation } = useViewerSync({
-  //   chainKey,
-  //   molstarInstance: instance,
-  //   msaRef,
-  //   visibleSequenceIds: allVisibleSequenceIds,
-  // });
-
   const { areLoaded: nglLoaded } = useNightingaleComponents();
-
   // Structure loading
   useEffect(() => {
     if (!isInitialized || !instance || !pdbIdFromUrl) return;
