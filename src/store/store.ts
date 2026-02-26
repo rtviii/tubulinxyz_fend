@@ -5,7 +5,6 @@ import { TypedUseSelectorHook, useDispatch, useSelector, useStore } from 'react-
 import { tubxz_api } from './tubxz_api';
 import molstarInstancesReducer from '@/components/molstar/state/molstarInstancesSlice';
 import structuresReducer from './slices/slice_structures';
-import polymersReducer from './slices/slice_polymers';
 import sequenceRegistryReducer from './slices/sequence_registry';
 import annotationsReducer from './slices/annotationsSlice';
 
@@ -16,7 +15,6 @@ export const makeStore = () => {
       annotations: annotationsReducer,
       sequenceRegistry: sequenceRegistryReducer,
       structures_page: structuresReducer,
-      polymers_page: polymersReducer,
       [tubxz_api.reducerPath]: tubxz_api.reducer,
     },
     middleware: getDefaultMiddleware =>

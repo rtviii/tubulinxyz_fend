@@ -14,11 +14,12 @@
 
 ## MSA:
 
-- [ ] alignemnt functionality (polymer navigator)
+- [x] alignemnt functionality (polymer navigator)
 - [ ] UI cleanup:
   - [ ] control panel tools
   - [ ] collapsible master alignment
   - [ ] some logs
+- [ ] Pull correct names into the master MSAs
 
 ## Index and bsite correctness | Indels and mutations:
   

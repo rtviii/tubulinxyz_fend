@@ -1,9 +1,7 @@
-// src/components/annotations/LigandsPanel.tsx
 'use client';
-
-import { Eye, EyeOff, Focus, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { LigandSite } from '@/store/slices/annotationsSlice';
-import { LIGAND_IGNORE_IDS } from '../molstar/colors/palette';
+import { LIGAND_IGNORE_IDS } from '@/components/molstar/colors/palette';
 
 interface LigandsPanelProps {
   ligandSites: LigandSite[];
@@ -22,51 +20,43 @@ export function LigandsPanel({
   onShowAll,
   onHideAll,
 }: LigandsPanelProps) {
-  if (ligandSites.length === 0) return null;
+  const filtered = ligandSites.filter(s => !LIGAND_IGNORE_IDS.has(s.ligandId));
+  if (filtered.length === 0) return null;
 
   return (
-    <div className="space-y-2">
+    <div>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-gray-700">
-          Ligand Sites ({ligandSites.length})
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className="text-[10px] font-medium text-gray-500">
+          Ligands ({filtered.length})
         </span>
-        <div className="flex gap-1 text-xs">
-          <button
-            onClick={onShowAll}
-            className="text-blue-600 hover:text-blue-800"
-          >
-            Show all
-          </button>
-          <span className="text-gray-300">|</span>
-          <button
-            onClick={onHideAll}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            Hide all
-          </button>
+        <div className="ml-auto flex gap-1 text-[9px]">
+          <button onClick={onShowAll} className="text-blue-500 hover:text-blue-700">all</button>
+          <span className="text-gray-200">|</span>
+          <button onClick={onHideAll} className="text-gray-400 hover:text-gray-600">none</button>
         </div>
       </div>
 
-      {/* Ligand list */}
-      <div className="space-y-1">
-        {ligandSites
-        .filter(n=>!LIGAND_IGNORE_IDS.has(n.ligandId))
-        .map(site => (
-          <LigandSiteRow
-            key={site.id}
-            site={site}
-            isVisible={visibleLigandIds.has(site.id)}
-            onToggle={() => onToggleLigand(site.id)}
-            onFocus={() => onFocusLigand(site.id)}
-          />
-        ))}
+      {/* Pill grid */}
+      <div className="flex flex-wrap gap-1">
+        {filtered.map(site => {
+          const isVisible = visibleLigandIds.has(site.id);
+          return (
+            <LigandPill
+              key={site.id}
+              site={site}
+              isVisible={isVisible}
+              onToggle={() => onToggleLigand(site.id)}
+              onFocus={() => onFocusLigand(site.id)}
+            />
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function LigandSiteRow({
+function LigandPill({
   site,
   isVisible,
   onToggle,
@@ -77,57 +67,50 @@ function LigandSiteRow({
   onToggle: () => void;
   onFocus: () => void;
 }) {
+  // Parse hex to rgba for the tinted background
+  const tintBg = isVisible ? hexToRgba(site.color, 0.1) : 'transparent';
+  const borderColor = isVisible ? site.color : hexToRgba(site.color, 0.3);
+
   return (
-    <div className="group flex items-center gap-2 py-1.5 px-2 rounded hover:bg-gray-50">
-      {/* Color indicator */}
-      <div
-        className="w-3 h-3 rounded-full flex-shrink-0"
-        style={{ backgroundColor: site.color }}
-      />
+    <div
+      className={`
+        group relative flex items-center gap-1 px-1.5 py-0.5 rounded-full cursor-pointer
+        border text-[10px] transition-colors select-none
+        ${isVisible ? 'text-gray-700' : 'text-gray-400'}
+      `}
+      style={{
+        borderColor,
+        backgroundColor: tintBg,
+      }}
+      onClick={onToggle}
+      onDoubleClick={(e) => { e.stopPropagation(); onFocus(); }}
+      title={`${site.ligandName} -- ${site.residueCount} residues. Click to toggle, double-click to focus.`}
+    >
+      <span className="font-mono font-medium leading-none">{site.ligandId}</span>
+      <span className="text-[8px] text-gray-400 leading-none">{site.residueCount}</span>
 
-      {/* Main info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-medium truncate">{site.ligandId}</span>
-          {site.ligandName !== site.ligandId && (
-            <span className="text-xs text-gray-400 truncate hidden sm:inline">
-              {site.ligandName}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 text-[10px] text-gray-400">
-          <span>{site.residueCount} residues</span>
-          {site.drugbankId && (
-            
-              <a href={`https://go.drugbank.com/drugs/${site.drugbankId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-0.5 text-blue-500 hover:text-blue-700"
-              onClick={e => e.stopPropagation()}
-            >
-              {site.drugbankId}
-              <ExternalLink size={8} />
-            </a>
-          )}
-        </div>
-      </div>
+      {site.drugbankId && (
 
-      {/* Actions */}
-      <div className="flex items-center gap-1 flex-shrink-0">
-        <button
-          onClick={onFocus}
-          className="p-1 text-gray-300 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
-          title="Focus"
+        <a href = {`https://go.drugbank.com/drugs/${site.drugbankId}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-400 hover:text-blue-600 hidden group-hover:inline-flex"
+      onClick={e => e.stopPropagation()}
+      title={site.drugbankId}
         >
-          <Focus size={14} />
-        </button>
-        <button
-          onClick={onToggle}
-          className="p-1 text-gray-400 hover:text-gray-700"
-        >
-          {isVisible ? <Eye size={14} /> : <EyeOff size={14} />}
-        </button>
-      </div>
-    </div>
+      <ExternalLink size={8} />
+    </a>
+  )
+}
+    </div >
   );
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.substring(0, 2), 16);
+  const g = parseInt(clean.substring(2, 4), 16);
+  const b = parseInt(clean.substring(4, 6), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(128,128,128,${alpha})`;
+  return `rgba(${r},${g},${b},${alpha})`;
 }

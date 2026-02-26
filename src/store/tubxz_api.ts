@@ -107,6 +107,11 @@ const injectedRtkApi = api
             seqLenMin: queryArg.seqLenMin,
             seqLenMax: queryArg.seqLenMax,
             hasVariants: queryArg.hasVariants,
+            ligands: queryArg.ligands,
+            excludeMaps: queryArg.excludeMaps,
+            variantType: queryArg.variantType,
+            variantPosMin: queryArg.variantPosMin,
+            variantPosMax: queryArg.variantPosMax,
           },
         }),
         providesTags: ["Polymers"],
@@ -285,13 +290,18 @@ export type ListPolymersApiArg = {
   resMax?: number | null;
   yearMin?: number | null;
   yearMax?: number | null;
-  sourceTaxa?: number[] | null;
+  sourceTaxa?: string | null;
   family?: string[] | null;
   uniprot?: string | null;
   motif?: string | null;
   seqLenMin?: number | null;
   seqLenMax?: number | null;
   hasVariants?: boolean | null;
+  ligands?: string | null;
+  excludeMaps?: boolean | null;
+  variantType?: string | null;
+  variantPosMin?: number | null;
+  variantPosMax?: number | null;
 };
 export type ListLigandsApiResponse =
   /** status 200 Successful Response */ LigandListResponse;
@@ -697,6 +707,8 @@ export type PolypeptideEntitySummary = {
   src_organism_names?: string[];
   uniprot_accessions?: string[];
   variant_count?: number | null;
+  pdbx_strand_ids?: string[];
+  ligand_ids?: string[];
 };
 export type PolypeptideListResponse = {
   data: PolypeptideEntitySummary[];

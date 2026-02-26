@@ -1,13 +1,17 @@
-import { useState, useMemo } from 'react';
-import { ArrowLeft, Plus } from 'lucide-react';
-import { AlignStructureForm } from './AlignStructureForm';
-import { ChainAnnotationSection } from './ChainAnnotationSection';
+// src/components/monomer/MonomerSidebar.tsx
+
+import { useMemo, useState } from 'react';
+import { ArrowLeft, Plus, EyeOff } from 'lucide-react';
+import { ChainRow } from './ChainRow';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { formatFamilyShort } from '@/lib/formatters';
 import { makeChainKey } from '@/lib/chain_key';
+import { useAppDispatch } from '@/store/store';
+import { hideAllVisibility } from '@/store/slices/annotationsSlice';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { PolymerComponent, AlignedStructure } from '@/components/molstar/core/types';
 import type { MSAHandle } from '@/components/msa/types';
+import { AlignmentDialog } from './AlignmentDialog';
 
 export interface MonomerSidebarProps {
   activeChainId: string | null;
@@ -30,25 +34,21 @@ export function MonomerSidebar({
   masterLength,
   msaRef,
 }: MonomerSidebarProps) {
-  const [showAlignForm, setShowAlignForm] = useState(false);
+  const dispatch = useAppDispatch();
+  const [alignDialogOpen, setAlignDialogOpen] = useState(false);
 
   const activeFamily = activeChainId
     ? getFamilyForChain(profile, activeChainId)
     : undefined;
-
   const formattedFamily = activeFamily ? formatFamilyShort(activeFamily) : null;
 
-  const handleChainSwitch = (chainId: string) => {
-    if (chainId !== activeChainId) instance?.switchMonomerChain(chainId);
-  };
-
-  // Build the list of chain sections: primary first, then aligned
   const chainSections = useMemo(() => {
     const sections: Array<{
       chainKey: string;
       pdbId: string;
       chainId: string;
       isPrimary: boolean;
+      family?: string;
       aligned?: { id: string; targetChainId: string; rmsd: number | null; visible: boolean };
     }> = [];
 
@@ -58,6 +58,7 @@ export function MonomerSidebar({
         pdbId,
         chainId: activeChainId,
         isPrimary: true,
+        family: activeFamily,
       });
     }
 
@@ -67,6 +68,7 @@ export function MonomerSidebar({
         pdbId: a.sourcePdbId,
         chainId: a.sourceChainId,
         isPrimary: false,
+        family: a.family,
         aligned: {
           id: a.id,
           targetChainId: a.targetChainId,
@@ -77,98 +79,103 @@ export function MonomerSidebar({
     }
 
     return sections;
-  }, [pdbId, activeChainId, alignedStructures]);
+  }, [pdbId, activeChainId, activeFamily, alignedStructures]);
 
   return (
-    <div className="h-full bg-white border-r border-gray-200 p-4 flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex-shrink-0">
+    <div className="h-full bg-white border-r border-gray-200 flex flex-col overflow-hidden text-xs">
+      {/* ── Header: single dense row ── */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
         <button
           onClick={() => instance?.exitMonomerView()}
-          className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-4"
+          className="p-1 text-gray-400 hover:text-gray-700 flex-shrink-0"
+          title="Back to structure view"
         >
-          <ArrowLeft size={16} />
-          Back to structure
+          <ArrowLeft size={14} />
         </button>
 
-        <h1 className="text-lg font-semibold mb-1">
-          Chain {activeChainId}
-          {formattedFamily && (
-            <span className="ml-2 text-sm font-normal text-gray-500">({formattedFamily})</span>
-          )}
-        </h1>
-        <p className="text-sm text-gray-500 mb-6">{pdbId}</p>
+        <span className="font-semibold text-sm text-gray-800 truncate">
+          {pdbId}
+          <span className="text-gray-400 mx-0.5">/</span>
+          {activeChainId}
+        </span>
 
-        <section className="mb-6">
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            Switch Chain
-          </h2>
-          <div className="flex flex-wrap gap-1">
-            {polymerComponents.map(chain => (
-              <button
-                key={chain.chainId}
-                onClick={() => handleChainSwitch(chain.chainId)}
-                className={`px-2 py-1 text-xs font-mono rounded ${chain.chainId === activeChainId
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-              >
-                {chain.chainId}
-              </button>
-            ))}
-          </div>
-        </section>
+        {formattedFamily && (
+          <span className="text-[10px] text-gray-400 flex-shrink-0">({formattedFamily})</span>
+        )}
 
-        {/* Align form */}
-        <section className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Add Alignment
-            </h2>
+        <div className="ml-auto flex items-center gap-0.5 flex-shrink-0">
+          {polymerComponents.map(chain => (
             <button
-              onClick={() => setShowAlignForm(s => !s)}
-              className="p-1 text-gray-400 hover:text-blue-600"
+              key={chain.chainId}
+              onClick={() => {
+                if (chain.chainId !== activeChainId) instance?.switchMonomerChain(chain.chainId);
+              }}
+              className={`w-6 h-6 text-[10px] font-mono rounded ${chain.chainId === activeChainId
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
             >
-              <Plus size={14} />
+              {chain.chainId}
             </button>
-          </div>
-          {showAlignForm && activeChainId && (
-            <AlignStructureForm
-              targetChainId={activeChainId}
-              instance={instance}
-              targetFamily={activeFamily}
-              masterLength={masterLength}
-              onClose={() => setShowAlignForm(false)}
-            />
-          )}
-        </section>
+          ))}
+        </div>
       </div>
 
-      {/* Per-chain annotation sections */}
-      <section className="flex-1 min-h-0 border-t pt-4 flex flex-col overflow-hidden">
-        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex-shrink-0">
-          Chain Annotations
-        </h2>
-        <div className="flex-1 overflow-y-auto space-y-2">
-          {chainSections.map(section => (
-            <ChainAnnotationSection
-              key={section.chainKey}
-              chainKey={section.chainKey}
-              pdbId={section.pdbId}
-              chainId={section.chainId}
-              isPrimary={section.isPrimary}
-              aligned={section.aligned}
-              instance={instance}
-              msaRef={msaRef}
-            />
-          ))}
-          {chainSections.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-4">
-              Enter monomer view to see annotations
-            </p>
-          )}
-        </div>
-      </section>
+      {/* ── Toolbar ── */}
+      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-100 bg-gray-50/50">
+        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mr-auto">
+          Monomers
+        </span>
+
+        <button
+          onClick={() => setAlignDialogOpen(true)}
+          className="p-1 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50"
+          title="Add alignment"
+        >
+          <Plus size={13} />
+        </button>
+
+        <button
+          onClick={() => dispatch(hideAllVisibility())}
+          className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100"
+          title="Hide all annotations"
+        >
+          <EyeOff size={13} />
+        </button>
+      </div>
+
+      {/* ── Chain list ── */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {chainSections.map(section => (
+          <ChainRow
+            key={section.chainKey}
+            chainKey={section.chainKey}
+            pdbId={section.pdbId}
+            chainId={section.chainId}
+            isPrimary={section.isPrimary}
+            family={section.family}
+            aligned={section.aligned}
+            instance={instance}
+            msaRef={msaRef}
+          />
+        ))}
+        {chainSections.length === 0 && (
+          <p className="text-gray-400 text-center py-6">
+            Enter monomer view to see annotations
+          </p>
+        )}
+      </div>
+      {alignDialogOpen && activeChainId && (
+        <AlignmentDialog
+          targetChainId={activeChainId}
+          targetFamily={activeFamily}
+          instance={instance}
+          masterLength={masterLength}
+          alignedStructures={alignedStructures}
+          primaryPdbId={pdbId}
+          onClose={() => setAlignDialogOpen(false)}
+        />
+      )}
     </div>
   );
 }

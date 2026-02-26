@@ -237,7 +237,14 @@ export function _hashColor(s: string, saturation = 75, lightness = 55): Color {
 function _hashHex(s: string, saturation = 70, lightness = 45): string {
   let hash = 0;
   for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
-  return `hsl(${Math.abs(hash) % 360}, ${saturation}%, ${lightness}%)`;
+  const h = Math.abs(hash) % 360;
+  // Convert to RGB then to hex, instead of returning an HSL string
+
+  const color = _hslToColor(h / 360, saturation / 100, lightness / 100);
+  const r     = (color >> 16) & 0xFF;
+  const g     = (color >> 8) & 0xFF;
+  const b     = color & 0xFF;
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
 function _hslToColor(h: number, s: number, l: number): Color {
