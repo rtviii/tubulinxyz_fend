@@ -29,12 +29,19 @@
 - [ ] ingest morisette database
 
 
+
+
 ## UI Refactoring
+
 
 - [ ] Isotype naming (just pull from metadata where present)
 - Start by separating easy and expert modes
 - [ ] Enrich the easy mode with metadata and such
+1JFF
+6WVM
+
 - [ ] links and popups to other structures everywhere
+
 - [ ] Rework the ui for the "expert mode" to be more like a toolbox as opposed to a single panel
     - polymer navigator with the filters :
 
