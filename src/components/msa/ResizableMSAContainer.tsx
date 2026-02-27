@@ -17,6 +17,10 @@ interface ResizableMSAContainerProps {
   onResidueLeave?: () => void;
   onResidueClick?: (seqId: string, position: number) => void;
   onDisplayRangeChange?: (start: number, end: number) => void;
+
+  visibleChainKeys?: Set<string>;
+  onToggleChainVisibility?: (chainKey: string) => void;
+  onSoloChain?: (chainKey: string) => void;
 }
 
 export interface ResizableMSAContainerHandle {
@@ -52,6 +56,10 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       onResidueLeave,
       onResidueClick,
       onDisplayRangeChange,
+
+      visibleChainKeys,
+      onToggleChainVisibility,
+      onSoloChain,
     } = props;
 
     console.log('[ResizableMSAContainer] received sequences:', {
@@ -429,6 +437,9 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
                 rowHeight={rowHeight}
                 scrollTop={scrollTop}
                 onWidthCalculated={handleLabelWidthCalculated}
+                visibleChainKeys={visibleChainKeys}
+                onToggleChainVisibility={onToggleChainVisibility}
+                onSoloChain={onSoloChain}
               />
             </div>
           </div>

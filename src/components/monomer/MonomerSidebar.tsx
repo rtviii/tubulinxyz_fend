@@ -1,6 +1,6 @@
 // src/components/monomer/MonomerSidebar.tsx
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { ArrowLeft, Plus, EyeOff } from 'lucide-react';
 import { ChainRow } from './ChainRow';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
@@ -81,9 +81,19 @@ export function MonomerSidebar({
     return sections;
   }, [pdbId, activeChainId, activeFamily, alignedStructures]);
 
+  // Solo: hide all aligned chains except the given one
+  const handleSolo = useCallback((soloChainKey: string) => {
+    if (!instance || !activeChainId) return;
+    for (const a of alignedStructures) {
+      const ck = makeChainKey(a.sourcePdbId, a.sourceChainId);
+      const shouldShow = ck === soloChainKey;
+      instance.setAlignedStructureVisible(a.targetChainId, a.id, shouldShow);
+    }
+  }, [instance, activeChainId, alignedStructures]);
+
   return (
     <div className="h-full bg-white border-r border-gray-200 flex flex-col overflow-hidden text-xs">
-      {/* ── Header: single dense row ── */}
+      {/* ── Header ── */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
         <button
           onClick={() => instance?.exitMonomerView()}
@@ -157,6 +167,7 @@ export function MonomerSidebar({
             aligned={section.aligned}
             instance={instance}
             msaRef={msaRef}
+            onSolo={section.isPrimary ? undefined : handleSolo}
           />
         ))}
         {chainSections.length === 0 && (
@@ -165,6 +176,7 @@ export function MonomerSidebar({
           </p>
         )}
       </div>
+
       {alignDialogOpen && activeChainId && (
         <AlignmentDialog
           targetChainId={activeChainId}

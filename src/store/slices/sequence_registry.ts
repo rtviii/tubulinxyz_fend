@@ -284,4 +284,43 @@ export const selectSequencesForFamily = createSelector(
   }
 );
 
+// ============================================================
+// Chain Focus Bridge Selectors
+// ============================================================
+
+export const selectSequenceIdForChainKey = createSelector(
+  [
+    selectSequencesMap,
+    (_state: RootState, chainKey: string) => chainKey,
+  ],
+  (sequences, chainKey): string | null => {
+    const underscore = chainKey.indexOf('_');
+    if (underscore < 0) return null;
+    const pdbId = chainKey.slice(0, underscore);
+    const chainId = chainKey.slice(underscore + 1);
+
+    for (const seq of Object.values(sequences)) {
+      if (
+        seq.chainRef &&
+        seq.chainRef.pdbId === pdbId &&
+        seq.chainRef.chainId === chainId
+      ) {
+        return seq.id;
+      }
+    }
+    return null;
+  }
+);
+
+export const selectChainKeyForSequenceId = createSelector(
+  [
+    selectSequencesMap,
+    (_state: RootState, sequenceId: string) => sequenceId,
+  ],
+  (sequences, sequenceId): string | null => {
+    const seq = sequences[sequenceId];
+    if (!seq?.chainRef) return null;
+    return `${seq.chainRef.pdbId}_${seq.chainRef.chainId}`;
+  }
+);
 export default sequenceRegistrySlice.reducer;

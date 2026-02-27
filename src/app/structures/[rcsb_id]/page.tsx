@@ -33,6 +33,8 @@ import { API_BASE_URL } from '@/config';
 import type { MSAHandle } from '@/components/msa/types';
 import { makeChainKey } from '@/lib/chain_key';
 import { ResidueInfoOverlay } from '@/components/molstar/overlay/ResidueInfoOverlay';
+import { useChainFocusSync } from '@/hooks/useChainFocusSync';
+import { clearFocus } from '@/store/slices/chainFocusSlice';
 
 // ============================================================
 // Loading overlay
@@ -115,12 +117,19 @@ export default function StructureProfilePage() {
     loadedStructure,
     activeChainId
   );
+  useChainFocusSync({
+    instance,
+    primaryPdbId: loadedStructure,
+    primaryChainId: activeChainId,
+    alignedStructures,
+  });
 
   useEffect(() => {
     if (primaryChainKey && viewMode === 'monomer') {
       dispatch(setPrimaryChain(primaryChainKey));
     } else {
       dispatch(setPrimaryChain(null));
+      dispatch(clearFocus());  // <-- add this
     }
   }, [primaryChainKey, viewMode, dispatch]);
 
@@ -270,6 +279,7 @@ export default function StructureProfilePage() {
                       instance={instance}
                       masterSequences={masterSequences}
                       pdbSequences={pdbSequences}
+                      alignedStructures={alignedStructures}   // <-- add this
                       maxLength={masterData?.alignment_length ?? 0}
                       nglLoaded={nglLoaded}
                       msaRef={msaRef}

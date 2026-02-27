@@ -7,6 +7,7 @@ import molstarInstancesReducer from '@/components/molstar/state/molstarInstances
 import structuresReducer from './slices/slice_structures';
 import sequenceRegistryReducer from './slices/sequence_registry';
 import annotationsReducer from './slices/annotationsSlice';
+import chainFocusReducer from './slices/chainFocusSlice';
 
 export const makeStore = () => {
   return configureStore({
@@ -14,6 +15,7 @@ export const makeStore = () => {
       molstarInstances: molstarInstancesReducer,
       annotations: annotationsReducer,
       sequenceRegistry: sequenceRegistryReducer,
+      chainFocus: chainFocusReducer,
       structures_page: structuresReducer,
       [tubxz_api.reducerPath]: tubxz_api.reducer,
     },
@@ -31,4 +33,3 @@ export type AppDispatch = AppStore['dispatch'];
 export const useAppDispatch: () => AppDispatch = useDispatch;
 export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;
 export const useAppStore: () => AppStore = useStore;
-

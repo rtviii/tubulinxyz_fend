@@ -2,10 +2,12 @@ import { useState, useMemo, useCallback, useRef } from 'react';
 import { useAutoAlignFromProfile } from '@/hooks/useChainAlignment';
 import { ResizableMSAContainer } from '@/components/msa/ResizableMSAContainer';
 import { MSAToolbar } from '@/components/msa/MSAToolbar';
+import { makeChainKey } from '@/lib/chain_key';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { MsaSequence } from '@/store/slices/sequence_registry';
 import type { MSAHandle } from '@/components/msa/types';
 import type { TubulinStructure } from '@/store/tubxz_api';
+import type { AlignedStructure } from '@/components/molstar/core/types';
 
 interface MonomerMSAPanelProps {
   profile?: TubulinStructure;
@@ -15,6 +17,7 @@ interface MonomerMSAPanelProps {
   instance: MolstarInstance | null;
   masterSequences: MsaSequence[];
   pdbSequences: MsaSequence[];
+  alignedStructures: AlignedStructure[];
   maxLength: number;
   nglLoaded: boolean;
   msaRef: React.RefObject<MSAHandle>;
@@ -33,6 +36,7 @@ export function MonomerMSAPanel({
   instance,
   masterSequences,
   pdbSequences,
+  alignedStructures,
   maxLength,
   nglLoaded,
   msaRef,
@@ -44,22 +48,48 @@ export function MonomerMSAPanel({
 }: MonomerMSAPanelProps) {
   const [colorScheme, setColorScheme] = useState('custom-position');
   const [inRangeOnly, setInRangeOnly] = useState(false);
-
-  // Track the current nightingale display range so we can apply the mask
-  // immediately when the checkbox is toggled on, even if no drag has happened.
+  const [showMasters, setShowMasters] = useState(true);
   const currentRangeRef = useRef<[number, number] | null>(null);
 
-  // Auto-align from profile -- synchronous, no spinner needed
   const { isAligned } = useAutoAlignFromProfile(profile, chainId, maxLength);
 
-  const allSequences = useMemo(
-    () => [...masterSequences, ...pdbSequences],
-    [masterSequences, pdbSequences]
+  const displaySequences = useMemo(
+    () => showMasters
+      ? [...masterSequences, ...pdbSequences]
+      : [...pdbSequences],
+    [masterSequences, pdbSequences, showMasters]
   );
 
-  // ----------------------------------------------------------------
-  // Range mask handlers
-  // ----------------------------------------------------------------
+  // ── Visibility state for MSA label buttons ──
+
+  const visibleChainKeys = useMemo(() => {
+    const set = new Set<string>();
+    if (pdbId && chainId) set.add(makeChainKey(pdbId, chainId));
+    for (const a of alignedStructures) {
+      if (a.visible) set.add(makeChainKey(a.sourcePdbId, a.sourceChainId));
+    }
+    return set;
+  }, [pdbId, chainId, alignedStructures]);
+
+  const handleToggleChainVisibility = useCallback((chainKey: string) => {
+    if (!instance) return;
+    for (const a of alignedStructures) {
+      if (makeChainKey(a.sourcePdbId, a.sourceChainId) === chainKey) {
+        instance.setAlignedStructureVisible(a.targetChainId, a.id, !a.visible);
+        return;
+      }
+    }
+  }, [instance, alignedStructures]);
+
+  const handleSoloChain = useCallback((soloChainKey: string) => {
+    if (!instance) return;
+    for (const a of alignedStructures) {
+      const ck = makeChainKey(a.sourcePdbId, a.sourceChainId);
+      instance.setAlignedStructureVisible(a.targetChainId, a.id, ck === soloChainKey);
+    }
+  }, [instance, alignedStructures]);
+
+  // ── Range mask ──
 
   const handleDisplayRangeChange = useCallback((start: number, end: number) => {
     currentRangeRef.current = [start, end];
@@ -75,9 +105,7 @@ export function MonomerMSAPanel({
     }
   }, [onWindowMaskChange, onWindowMaskClear]);
 
-  // ----------------------------------------------------------------
-  // Toolbar handlers
-  // ----------------------------------------------------------------
+  // ── Toolbar ──
 
   const handleSchemeChange = useCallback(
     (scheme: string) => {
@@ -89,9 +117,7 @@ export function MonomerMSAPanel({
   );
 
   const handleJumpToRange = useCallback(
-    (start: number, end: number) => {
-      msaRef.current?.jumpToRange(start, end);
-    },
+    (start: number, end: number) => msaRef.current?.jumpToRange(start, end),
     [msaRef]
   );
 
@@ -105,10 +131,6 @@ export function MonomerMSAPanel({
     (_seqId: string, position: number) => onResidueHover(position),
     [onResidueHover]
   );
-
-  // ----------------------------------------------------------------
-  // Loading state
-  // ----------------------------------------------------------------
 
   if (!nglLoaded || maxLength === 0 || !isAligned) {
     return (
@@ -128,15 +150,27 @@ export function MonomerMSAPanel({
           <span className="text-sm font-semibold text-gray-800">Sequence Alignment</span>
           <span className="text-xs text-gray-400 font-mono">{pdbId}:{chainId}</span>
         </div>
-        <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={inRangeOnly}
-            onChange={e => handleInRangeToggle(e.target.checked)}
-            className="rounded"
-          />
-          In-range only
-        </label>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showMasters}
+              onChange={e => setShowMasters(e.target.checked)}
+              className="rounded"
+            />
+            Reference
+            <span className="text-gray-400">({masterSequences.length})</span>
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={inRangeOnly}
+              onChange={e => handleInRangeToggle(e.target.checked)}
+              className="rounded"
+            />
+            In-range only
+          </label>
+        </div>
       </div>
 
       <div className="flex-shrink-0 px-3 py-1.5 border-b bg-white">
@@ -152,14 +186,17 @@ export function MonomerMSAPanel({
 
       <div className="flex-1 min-h-0 p-2">
         <ResizableMSAContainer
-          key={`msa-${family ?? 'none'}`}
+          key={`msa-${family ?? 'none'}-${showMasters ? 'wm' : 'nm'}`}
           ref={msaRef}
-          sequences={allSequences}
+          sequences={displaySequences}
           maxLength={maxLength}
           colorScheme={colorScheme}
           onResidueHover={handleResidueHover}
           onResidueLeave={onResidueLeave}
           onDisplayRangeChange={handleDisplayRangeChange}
+          visibleChainKeys={visibleChainKeys}
+          onToggleChainVisibility={handleToggleChainVisibility}
+          onSoloChain={handleSoloChain}
         />
       </div>
     </div>
