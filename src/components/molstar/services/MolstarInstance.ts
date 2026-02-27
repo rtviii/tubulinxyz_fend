@@ -1,7 +1,6 @@
 import { AppDispatch, RootState } from '@/store/store';
 import { MolstarViewer } from '../core/MolstarViewer';
 import { setStructureTransparency } from 'molstar/lib/mol-plugin-state/helpers/structure-transparency';
-import { setAlignedStructureFamily } from '../state/molstarInstancesSlice';
 import {
   MolstarInstanceId,
   ViewMode,

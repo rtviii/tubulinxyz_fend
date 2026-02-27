@@ -97,7 +97,6 @@ export function ChainRow({
   const isHovered = hoveredChainKey === chainKey;
   const isSelected = selectedChainKey === chainKey;
 
-  // Fetch profile for metadata (cache shared across all rows with same pdbId)
   const { data: chainProfile } = useGetStructureProfileQuery(
     { rcsbId: pdbId },
     { skip: !pdbId }
@@ -184,7 +183,6 @@ export function ChainRow({
     dispatch(toggleSelectedChain(chainKey));
   }, [dispatch, chainKey]);
 
-  // ── Metadata subtitle ──
   const subtitle = [description, organism].filter(Boolean).join(' | ');
 
   return (
@@ -231,13 +229,13 @@ export function ChainRow({
             )}
           </div>
           {subtitle && (
-            <span className="text-[9px] text-gray-400 truncate max-w-[180px]">
+            <span className="text-[9px] text-gray-400 truncate max-w-[200px]">
               {subtitle}
             </span>
           )}
         </button>
 
-        {/* Annotation summary */}
+        {/* Annotation summary counts */}
         <div className="ml-auto flex items-center gap-1.5 text-[9px] text-gray-400 flex-shrink-0">
           {variantCounts.deletion && <span className="text-red-400">{variantCounts.deletion}del</span>}
           {variantCounts.substitution && <span className="text-orange-400">{variantCounts.substitution}sub</span>}
@@ -277,27 +275,38 @@ export function ChainRow({
         </div>
       </div>
 
-      {/* ── Expanded content ── */}
+      {/* ── Expanded: independently collapsible sub-tables ── */}
+      {/* ── Expanded: nested annotation sub-tables ── */}
       {expanded && (
-        <div className="px-3 pb-2 space-y-1.5">
+        <div className="mx-3 mb-2 rounded border border-gray-100 bg-gray-50/60 overflow-hidden">
           {variants.length === 0 && ligandSites.length === 0 ? (
-            <p className="text-[10px] text-gray-300 py-1">No annotations</p>
+            <p className="text-[10px] text-gray-300 py-2 px-2">No annotations</p>
           ) : (
             <>
-              <VariantsPanel
-                variants={variants}
-                showVariants={showVariants}
-                onToggleVariants={setShowVariants}
-                onFocusVariant={handleFocusVariant}
-              />
-              <LigandsPanel
-                ligandSites={ligandSites}
-                visibleLigandIds={visibleLigandIds}
-                onToggleLigand={toggleLigand}
-                onFocusLigand={handleFocusLigand}
-                onShowAll={showAll}
-                onHideAll={hideAll}
-              />
+              {variants.length > 0 && (
+                <div className="px-2 pt-1.5 pb-1 border-b border-gray-100 last:border-b-0">
+                  <VariantsPanel
+                    variants={variants}
+                    showVariants={showVariants}
+                    onToggleVariants={setShowVariants}
+                    onFocusVariant={handleFocusVariant}
+                  />
+                </div>
+              )}
+              {ligandSites.length > 0 && (
+                <div className="px-2 pt-1.5 pb-1">
+                  <LigandsPanel
+                    ligandSites={ligandSites}
+                    visibleLigandIds={visibleLigandIds}
+                    pdbId={pdbId}
+                    chainId={chainId}
+                    onToggleLigand={toggleLigand}
+                    onFocusLigand={handleFocusLigand}
+                    onShowAll={showAll}
+                    onHideAll={hideAll}
+                  />
+                </div>
+              )}
             </>
           )}
         </div>

@@ -74,13 +74,96 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
     }, [alignedIds, allPositionMappings]);
 
     // ============================================================
-    // Color Sync Effect
+    // Color Sync Effect (debounced + serialized)
     // ============================================================
 
-    useEffect(() => {
-        if (!molstarInstance) return;
+    const colorSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const colorSyncInFlightRef = useRef(false);
+    const colorSyncPendingRef = useRef(false);
 
-        // --- MSA cell colors ---
+    // Snapshot refs so the async function always reads the latest values
+    const colorRulesRef = useRef(colorRules);
+    colorRulesRef.current = colorRules;
+    const chainKeyRef = useRef(chainKey);
+    chainKeyRef.current = chainKey;
+    const molstarRef = useRef(molstarInstance);
+    molstarRef.current = molstarInstance;
+
+    const runColorSync = useCallback(async () => {
+        if (colorSyncInFlightRef.current) {
+            // Another sync is running; mark pending so it re-runs when done
+            colorSyncPendingRef.current = true;
+            return;
+        }
+
+        colorSyncInFlightRef.current = true;
+        colorSyncPendingRef.current = false;
+
+        try {
+            const rules = colorRulesRef.current;
+            const instance = molstarRef.current;
+            const ck = chainKeyRef.current;
+            if (!instance) return;
+
+            // --- Primary chain Molstar colors ---
+            const primaryRules = rules.filter(r => r.chainKey === ck);
+            const primaryColorings = primaryRules.flatMap(rule =>
+                rule.residues.map(r => ({
+                    chainId: r.chainId,
+                    authSeqId: r.authSeqId,
+                    color: Color(parseInt(rule.color.replace('#', ''), 16)),
+                }))
+            );
+
+            if (primaryColorings.length > 0) {
+                await instance.applyColorscheme('annotations', primaryColorings);
+            } else {
+                await instance.restoreDefaultColors();
+            }
+
+            // --- Aligned chain Molstar colors (serialized) ---
+            const currentAligned = alignedStructuresRef.current;
+            const alignedRulesByKey = new Map<string, typeof rules>();
+            for (const rule of rules) {
+                if (rule.chainKey === ck) continue;
+                const existing = alignedRulesByKey.get(rule.chainKey) ?? [];
+                existing.push(rule);
+                alignedRulesByKey.set(rule.chainKey, existing);
+            }
+
+            for (const a of currentAligned) {
+                const aKey = makeChainKey(a.sourcePdbId, a.sourceChainId);
+                const aRules = alignedRulesByKey.get(aKey);
+                if (!aRules) {
+                    await instance.clearAlignedOverpaint(a.targetChainId, a.id);
+                } else {
+                    const colorings = aRules.flatMap(rule =>
+                        rule.residues.map(r => ({
+                            chainId: r.chainId,
+                            authSeqId: r.authSeqId,
+                            color: Color(parseInt(rule.color.replace('#', ''), 16)),
+                        }))
+                    );
+                    await instance.applyColorschemeToAligned(a.targetChainId, a.id, colorings);
+                }
+            }
+        } catch (err) {
+            console.error('[useViewerSync] Color sync error:', err);
+        } finally {
+            colorSyncInFlightRef.current = false;
+
+            // If another update came in while we were working, run again
+            if (colorSyncPendingRef.current) {
+                colorSyncPendingRef.current = false;
+                runColorSync();
+            }
+        }
+    }, []); // stable -- reads everything from refs
+
+    useEffect(() => {
+        if (colorSyncTimerRef.current) clearTimeout(colorSyncTimerRef.current);
+
+        // Apply MSA cell colors immediately -- this is cheap
         if (msaRef.current) {
             const cellColors: Record<string, string> = {};
             for (const rule of colorRules) {
@@ -95,48 +178,14 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
             }
         }
 
-        // --- Primary chain Molstar colors ---
-        const primaryRules = colorRules.filter(r => r.chainKey === chainKey);
-        const primaryColorings = primaryRules.flatMap(rule =>
-            rule.residues.map(r => ({
-                chainId: r.chainId,
-                authSeqId: r.authSeqId,
-                color: Color(parseInt(rule.color.replace('#', ''), 16)),
-            }))
-        );
+        // Debounce + serialize the expensive Molstar operations
+        colorSyncTimerRef.current = setTimeout(() => {
+            runColorSync();
+        }, 80);
 
-        if (primaryColorings.length > 0) {
-            molstarInstance.applyColorscheme('annotations', primaryColorings);
-        } else {
-            molstarInstance.restoreDefaultColors();
-        }
-
-        // --- Aligned chain Molstar colors ---
-        const currentAligned = alignedStructuresRef.current;
-        const alignedRulesByKey = new Map<string, typeof colorRules>();
-        for (const rule of colorRules) {
-            if (rule.chainKey === chainKey) continue;
-            const existing = alignedRulesByKey.get(rule.chainKey) ?? [];
-            existing.push(rule);
-            alignedRulesByKey.set(rule.chainKey, existing);
-        }
-
-        for (const a of currentAligned) {
-            const aKey = makeChainKey(a.sourcePdbId, a.sourceChainId);
-            const rules = alignedRulesByKey.get(aKey);
-            if (!rules) {
-                molstarInstance.clearAlignedOverpaint(a.targetChainId, a.id);
-            } else {
-                const colorings = rules.flatMap(rule =>
-                    rule.residues.map(r => ({
-                        chainId: r.chainId,
-                        authSeqId: r.authSeqId,
-                        color: Color(parseInt(rule.color.replace('#', ''), 16)),
-                    }))
-                );
-                molstarInstance.applyColorschemeToAligned(a.targetChainId, a.id, colorings);
-            }
-        }
+        return () => {
+            if (colorSyncTimerRef.current) clearTimeout(colorSyncTimerRef.current);
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [colorRules, molstarInstance, msaRef, chainKey, alignedIds]);
 

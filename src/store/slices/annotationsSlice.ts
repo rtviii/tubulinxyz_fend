@@ -175,6 +175,49 @@ export const annotationsSlice = createSlice({
     },
 
     clearAllAnnotations: () => initialState,
+
+
+
+    // ── New actions (add inside reducers: { ... }) ──
+
+    toggleAllVariants: (state) => {
+      let anyVisible = false;
+      for (const entry of Object.values(state.chains)) {
+        if (entry.visibility.showVariants) { anyVisible = true; break; }
+      }
+      for (const entry of Object.values(state.chains)) {
+        entry.visibility.showVariants = !anyVisible;
+      }
+    },
+
+    toggleAllLigandsByChemId: (state, action: PayloadAction<string>) => {
+      const chemId = action.payload;
+      let anyVisible = false;
+
+      for (const entry of Object.values(state.chains)) {
+        if (!entry.data) continue;
+        for (const site of entry.data.ligandSites) {
+          if (site.ligandId === chemId && entry.visibility.visibleLigandIds.includes(site.id)) {
+            anyVisible = true;
+            break;
+          }
+        }
+        if (anyVisible) break;
+      }
+
+      for (const entry of Object.values(state.chains)) {
+        if (!entry.data) continue;
+        for (const site of entry.data.ligandSites) {
+          if (site.ligandId !== chemId) continue;
+          const idx = entry.visibility.visibleLigandIds.indexOf(site.id);
+          if (anyVisible) {
+            if (idx >= 0) entry.visibility.visibleLigandIds.splice(idx, 1);
+          } else {
+            if (idx < 0) entry.visibility.visibleLigandIds.push(site.id);
+          }
+        }
+      }
+    },
   },
 });
 
@@ -190,6 +233,8 @@ export const {
   hideAllVisibility,
   clearChain,
   clearAllAnnotations,
+  toggleAllVariants,
+  toggleAllLigandsByChemId,
 } = annotationsSlice.actions;
 
 // ============================================================
@@ -218,6 +263,89 @@ export const selectLoadedChainKeys = createSelector(
   (annotations): string[] => Object.keys(annotations.chains).filter(
     k => annotations.chains[k].data !== null
   )
+);
+
+// ── Global selectors ──
+
+export const selectAnyVariantsVisible = createSelector(
+  [selectAnnotationsState],
+  (annotations): boolean => {
+    for (const entry of Object.values(annotations.chains)) {
+      if (entry.visibility.showVariants) return true;
+    }
+    return false;
+  }
+);
+
+export interface GlobalLigandInfo {
+  chemId: string;
+  color: string;
+  count: number;
+  anyVisible: boolean;
+}
+
+export const selectAllUniqueLigandIds = createSelector(
+  [selectAnnotationsState],
+  (annotations): GlobalLigandInfo[] => {
+    const map = new Map<string, { color: string; count: number; anyVisible: boolean }>();
+    for (const entry of Object.values(annotations.chains)) {
+      if (!entry.data) continue;
+      for (const site of entry.data.ligandSites) {
+        const isVisible = entry.visibility.visibleLigandIds.includes(site.id);
+        const existing = map.get(site.ligandId);
+        if (existing) {
+          existing.count++;
+          if (isVisible) existing.anyVisible = true;
+        } else {
+          map.set(site.ligandId, { color: site.color, count: 1, anyVisible: isVisible });
+        }
+      }
+    }
+    return Array.from(map.entries())
+      .map(([chemId, info]) => ({ chemId, ...info }))
+      .sort((a, b) => b.count - a.count);
+  }
+);
+export interface ExportableLigandSite {
+  pdbId: string;
+  chainId: string;
+  ligandId: string;
+  ligandName: string;
+  ligandChain: string;
+  ligandAuthSeqId: number;
+  drugbankId: string | null;
+  residueCount: number;
+  masterIndices: number[];
+  authSeqIds: number[];
+}
+
+export const selectAllLigandSitesForExport = createSelector(
+  [selectAnnotationsState],
+  (annotations): ExportableLigandSite[] => {
+    const sites: ExportableLigandSite[] = [];
+    for (const [chainKey, entry] of Object.entries(annotations.chains)) {
+      if (!entry.data) continue;
+      const underscore = chainKey.indexOf('_');
+      if (underscore < 0) continue;
+      const pdbId = chainKey.slice(0, underscore);
+      const chainId = chainKey.slice(underscore + 1);
+      for (const site of entry.data.ligandSites) {
+        sites.push({
+          pdbId,
+          chainId,
+          ligandId: site.ligandId,
+          ligandName: site.ligandName,
+          ligandChain: site.ligandChain,
+          ligandAuthSeqId: site.ligandAuthSeqId,
+          drugbankId: site.drugbankId,
+          residueCount: site.residueCount,
+          masterIndices: site.masterIndices,
+          authSeqIds: site.authSeqIds,
+        });
+      }
+    }
+    return sites;
+  }
 );
 
 export default annotationsSlice.reducer;
