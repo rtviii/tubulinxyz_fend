@@ -6,6 +6,7 @@ import { makeStore, AppStore } from '@/store/store';
 import './globals.css';
 import { MolstarInstanceManagerProvider } from '@/components/molstar/services/MolstarInstanceManager';
 import { IBM_Plex_Sans } from 'next/font/google';
+import { FloatingNav } from '@/components/ui/FloatingNav';
 
 const ibmPlexSans = IBM_Plex_Sans({
   subsets: ['latin'],
@@ -22,7 +23,6 @@ export default function RootLayout({
   const storeRef = useRef<AppStore | null>(null);
 
   if (!storeRef.current) {
-    // Create the store instance only once
     storeRef.current = makeStore();
   }
 
@@ -30,10 +30,12 @@ export default function RootLayout({
     <html lang="en" className={ibmPlexSans.variable}>
       <body className="bg-white font-sans">
         <Provider store={storeRef.current}>
-          <MolstarInstanceManagerProvider>{children}</MolstarInstanceManagerProvider>
+          <MolstarInstanceManagerProvider>
+            {children}
+            <FloatingNav />
+          </MolstarInstanceManagerProvider>
         </Provider>
       </body>
     </html>
   );
 }
-
