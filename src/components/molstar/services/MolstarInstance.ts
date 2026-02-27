@@ -1,6 +1,7 @@
 import { AppDispatch, RootState } from '@/store/store';
 import { MolstarViewer } from '../core/MolstarViewer';
 import { setStructureTransparency } from 'molstar/lib/mol-plugin-state/helpers/structure-transparency';
+import {  getMolstarLigandColor } from '../colors/palette';
 import {
   MolstarInstanceId,
   ViewMode,
@@ -58,6 +59,9 @@ import {
 } from '../colors/palette';
 import { StructureProperties } from 'molstar/lib/mol-model/structure';
 
+import { LabelManager } from '../labels/LabelManager';
+import { formatFamilyShort } from '@/lib/formatters';
+
 const ALIGNED_CHAIN_COLOR = Color(0xE57373);
 const GHOST_ALPHA = 0.12;
 const LIGAND_PROXIMITY_RADIUS = 8; // angstroms
@@ -71,6 +75,8 @@ export class MolstarInstance {
     pinnedAuthSeqIds: number[];
   } | null = null;
 
+
+  private labelManager: LabelManager | null = null;
   private activeAlignedWindowMasks: Map<string, {
     targetChainId: string;
     alignedStructureId: string;
@@ -135,6 +141,104 @@ export class MolstarInstance {
       });
     }
   }
+  private ensureLabelManager(): LabelManager | null {
+    if (this.labelManager) return this.labelManager;
+    const plugin = this.viewer.ctx;
+    if (!plugin) return null;
+    this.labelManager = new LabelManager(plugin);
+    return this.labelManager;
+  }
+
+
+removeExplorerLabel(key: string): void {
+  this.labelManager?.removePersistent(key);
+}
+
+removeAllExplorerLabels(): void {
+  this.labelManager?.removeAllPersistent();
+}
+/**
+ * Show a 3D label on the component identified by key (chainId for polymers,
+ * uniqueKey for ligands). Call with null to hide.
+ */
+// In MolstarInstance.ts — replace the label-related methods:
+
+async showComponentLabel(componentKey: string | null): Promise<void> {
+  const mgr = this.ensureLabelManager();
+  if (!mgr) return;
+
+  if (!componentKey) {
+    mgr.hideHover();
+    return;
+  }
+
+  const component = this.getComponent(componentKey);
+  if (!component) { mgr.hideHover(); return; }
+
+  const structure = this.viewer.getStructureFromRef(component.ref);
+  if (!structure) { mgr.hideHover(); return; }
+
+  const loci = structureToLoci(structure);
+  const text = this.componentLabelText(componentKey, component);
+  const color = this.componentColor(component);
+  await mgr.showHover(loci, text, color);
+}
+
+async addComponentExplorerLabel(componentKey: string, labelKey: string, text: string): Promise<void> {
+  const mgr = this.ensureLabelManager();
+  if (!mgr) return;
+
+  const component = this.getComponent(componentKey);
+  if (!component) return;
+
+  const structure = this.viewer.getStructureFromRef(component.ref);
+  if (!structure) return;
+
+  const loci = structureToLoci(structure);
+  const color = this.componentColor(component);
+  await mgr.addPersistent(labelKey, loci, text, color);
+}
+
+async addExplorerLabel(
+  key: string,
+  loci: import('molstar/lib/mol-model/structure').StructureElement.Loci,
+  text: string,
+  accentColor?: Color,
+  paramOverrides?: Record<string, any>
+): Promise<void> {
+  const mgr = this.ensureLabelManager();
+  if (!mgr) return;
+  await mgr.addPersistent(key, loci, text, accentColor, paramOverrides);
+}
+
+private componentColor(component: Component): Color {
+  if (isPolymerComponent(component)) {
+    const family = this.getChainFamily(component.chainId);
+    return getMolstarColorForFamily(family);
+  }
+  if (isLigandComponent(component)) {
+    return getMolstarLigandColor(component.compId);
+  }
+  return Color(0x888888);
+}
+
+hideComponentLabel(): void {
+  this.labelManager?.hideHover();
+}
+
+private componentLabelText(key: string, component: Component): string {
+  if (isPolymerComponent(component)) {
+    const family = this.getChainFamily(component.chainId);
+    const familyName = family ? formatFamilyShort(family) : '';
+    return familyName
+      ? `Chain ${component.chainId} \u00B7 ${familyName}`
+      : `Chain ${component.chainId}`;
+  }
+  if (isLigandComponent(component)) {
+    return `${component.compId} (${component.authAsymId}:${component.authSeqId})`;
+  }
+  return key;
+}
 
   // ============================================================
   // Repr Helpers -- find and update representation state nodes
@@ -1137,10 +1241,12 @@ export class MolstarInstance {
   }
 
   async clearCurrentStructure(): Promise<void> {
-    this.viewer.clearFocus();
-    await this.viewer.clear();
-    this.dispatch(clearInstance(this.id));
-  }
+  this.labelManager?.dispose();
+  this.labelManager = null;
+  this.viewer.clearFocus();
+  await this.viewer.clear();
+  this.dispatch(clearInstance(this.id));
+}
 
 
   // ============================================================
@@ -1342,7 +1448,9 @@ export class MolstarInstance {
   }
 
 
-  dispose(): void {
-    this.viewer.dispose();
-  }
+dispose(): void {
+  this.labelManager?.dispose();
+  this.labelManager = null;
+  this.viewer.dispose();
+}
 }

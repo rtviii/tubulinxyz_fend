@@ -4,6 +4,8 @@ import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { useAppSelector, useAppDispatch } from '@/store/store';
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
+
+import { useStructureHoverSync } from '@/hooks/useStructureHoverSync';
 import { selectSequencesForFamily } from '@/store/slices/sequence_registry';
 import {
   selectLoadedStructure,
@@ -141,6 +143,15 @@ export default function StructureProfilePage() {
     visibleSequenceIds: allVisibleSequenceIds,
   });
 
+
+  // Inside the component, after the existing hook calls:
+  useStructureHoverSync({
+    instanceId: 'structure',
+    instance,
+    polymerComponents,
+    ligandComponents,
+    viewMode,
+  });
   const { areLoaded: nglLoaded } = useNightingaleComponents();
   // Structure loading
   useEffect(() => {

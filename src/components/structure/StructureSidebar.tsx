@@ -1,11 +1,24 @@
+// src/components/structure/StructureSidebar.tsx
+
 import { useAppSelector } from '@/store/store';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { selectComponentState } from '@/components/molstar/state/selectors';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { formatFamilyShort } from '@/lib/formatters';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { PolymerComponent, LigandComponent } from '@/components/molstar/core/types';
-import { Eye, EyeOff, Focus, Microscope } from 'lucide-react';
-import { useState } from 'react';
+import {
+  Eye,
+  EyeOff,
+  Focus,
+  Microscope,
+  ExternalLink,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
+import { ExplorerPanel } from '@/components/explorer/ExplorerPanel';
+import type { ExplorerContext } from '@/components/explorer/types';
 
 interface StructureSidebarProps {
   loadedStructure: string | null;
@@ -16,8 +29,17 @@ interface StructureSidebarProps {
   profile: StructureProfile | null;
 }
 
-export function StructureSidebar({ loadedStructure, polymerComponents, ligandComponents, instance, error, profile }: StructureSidebarProps) {
+export function StructureSidebar({
+  loadedStructure,
+  polymerComponents,
+  ligandComponents,
+  instance,
+  error,
+  profile,
+}: StructureSidebarProps) {
+  const router = useRouter();
   const [ghostMode, setGhostMode] = useState(false);
+  const [ligandsExpanded, setLigandsExpanded] = useState(false);
 
   const toggleGhost = () => {
     const next = !ghostMode;
@@ -25,55 +47,247 @@ export function StructureSidebar({ loadedStructure, polymerComponents, ligandCom
     instance?.setStructureGhostColors(next);
   };
 
+  const isLandingStructure =
+    loadedStructure === '1JFF' || loadedStructure === '6WVM';
+  const isDimer = loadedStructure === '1JFF';
+
+  const explorerContext: ExplorerContext = {
+    instance,
+    profile,
+    pdbId: loadedStructure,
+  };
+
   return (
-    <div className="h-full bg-white border-r border-gray-200 p-4 overflow-y-auto">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-lg font-semibold">{loadedStructure ?? 'No Structure'}</h1>
-        {loadedStructure && (
-          <button
-            onClick={toggleGhost}
-            title={ghostMode ? 'Restore colors' : 'Ghostly α/β'}
-            className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${ghostMode
-                ? 'bg-stone-100 border-stone-300 text-stone-700'
-                : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300'
-              }`}
+    <div className="h-full bg-white border-r border-gray-200 flex flex-col overflow-hidden">
+      {/* ── Header block ── */}
+      <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+        <div className="flex items-baseline justify-between gap-2 mb-1">
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-base font-semibold tracking-tight">
+              {loadedStructure ?? 'No Structure'}
+            </h1>
+            {profile?.polymerization_state &&
+              profile.polymerization_state !== 'unknown' && (
+                <span className="text-[10px] text-gray-400 font-medium uppercase">
+                  {profile.polymerization_state}
+                </span>
+              )}
+          </div>
+          {loadedStructure && (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              
+              <a
+                href={`https://www.rcsb.org/structure/${loadedStructure}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-0.5 text-gray-300 hover:text-blue-500 transition-colors"
+                title="RCSB PDB"
+              >
+                <ExternalLink size={12} />
+              </a>
+              <button
+                onClick={toggleGhost}
+                title={ghostMode ? 'Restore colors' : 'Ghost alpha/beta'}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-medium border transition-colors ${
+                  ghostMode
+                    ? 'bg-stone-100 border-stone-300 text-stone-600'
+                    : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                {ghostMode ? 'Vivid' : 'Ghost'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {profile?.citation_title && (
+          <p className="text-xs text-gray-600 leading-snug mb-1">
+            {profile.citation_title}
+          </p>
+        )}
+
+        {(profile?.citation_rcsb_authors || profile?.citation_year) && (
+          <div className="flex items-baseline justify-between text-[11px] text-gray-400 mb-1.5">
+            <span className="italic truncate mr-2">
+              {formatAuthors(profile?.citation_rcsb_authors ?? null)}
+            </span>
+            {profile?.citation_year && (
+              <span className="flex-shrink-0">{profile.citation_year}</span>
+            )}
+          </div>
+        )}
+
+        {profile?.citation_pdbx_doi && (
+          
+          <a
+            href={`https://doi.org/${profile.citation_pdbx_doi}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-blue-400 hover:text-blue-600 block truncate mb-2"
           >
-            {ghostMode ? 'Vivid' : 'Ghost'}
-          </button>
+            {profile.citation_pdbx_doi}
+          </a>
+        )}
+
+        {profile && <MetadataGrid profile={profile} />}
+
+        {isLandingStructure && (
+          <div className="flex items-center gap-1 mt-2">
+            <button
+              onClick={() =>
+                router.push(`/structures/${isDimer ? '6WVM' : '1JFF'}`)
+              }
+              className="text-[10px] px-2 py-0.5 rounded border border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-colors"
+            >
+              Switch to {isDimer ? 'Lattice (6WVM)' : 'Dimer (1JFF)'}
+            </button>
+          </div>
         )}
       </div>
 
       {error && (
-        <div className="text-red-500 text-sm mb-4 p-2 bg-red-50 rounded">{error}</div>
+        <div className="text-red-500 text-xs mx-4 mt-2 p-2 bg-red-50 rounded">
+          {error}
+        </div>
       )}
 
-      <section className="mb-6">
-        <h2 className="text-sm font-medium text-gray-700 mb-2">Chains</h2>
-        <div className="space-y-1">
-          {polymerComponents.map(chain => (
-            <ChainRow
-              key={chain.chainId}
-              chain={chain}
-              instance={instance}
-              family={getFamilyForChain(profile, chain.chainId)}
-            />
-          ))}
-        </div>
-      </section>
-
-      {ligandComponents.length > 0 && (
+      {/* ── Scrollable content ── */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-4">
         <section>
-          <h2 className="text-sm font-medium text-gray-700 mb-2">Ligands</h2>
-          <div className="space-y-1">
-            {ligandComponents.map(ligand => (
-              <LigandRow key={ligand.uniqueKey} ligand={ligand} instance={instance} />
+          <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+            Chains
+          </h2>
+          <div className="space-y-0.5">
+            {polymerComponents.map(chain => (
+              <ChainRow
+                key={chain.chainId}
+                chain={chain}
+                instance={instance}
+                family={getFamilyForChain(profile, chain.chainId)}
+              />
             ))}
           </div>
         </section>
+
+        {ligandComponents.length > 0 && (
+          <section>
+            <button
+              onClick={() => setLigandsExpanded(!ligandsExpanded)}
+              className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5 hover:text-gray-700"
+            >
+              {ligandsExpanded ? (
+                <ChevronDown size={12} />
+              ) : (
+                <ChevronRight size={12} />
+              )}
+              Ligands
+              <span className="text-gray-300 font-normal normal-case">
+                ({ligandComponents.length})
+              </span>
+            </button>
+            {ligandsExpanded && (
+              <div className="space-y-0.5">
+                {ligandComponents.map(ligand => (
+                  <LigandRow
+                    key={ligand.uniqueKey}
+                    ligand={ligand}
+                    instance={instance}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        <ExplorerPanel context={explorerContext} />
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────
+// MetadataGrid
+// ────────────────────────────────────────────
+
+function MetadataGrid({ profile }: { profile: StructureProfile }) {
+  const { expMethod, resolution, deposition_date, src_organism_names, pdbx_keywords } =
+    profile;
+
+  const methodRes = [
+    expMethod ? abbreviateMethod(expMethod) : null,
+    resolution != null ? `${resolution} \u00C5` : null,
+  ]
+    .filter(Boolean)
+    .join(' \u00B7 ');
+
+  const year = deposition_date ? new Date(deposition_date).getFullYear() : null;
+  const organisms = src_organism_names?.length
+    ? src_organism_names.join(', ')
+    : null;
+
+  return (
+    <div className="text-[11px] text-gray-500 space-y-0.5">
+      {methodRes && (
+        <div className="flex items-center gap-1.5">
+          <MethodBadge method={expMethod} />
+          <span>{methodRes}</span>
+          {year && <span className="text-gray-300">({year})</span>}
+        </div>
+      )}
+      {organisms && (
+        <div className="truncate" title={organisms}>
+          {organisms}
+        </div>
+      )}
+      {pdbx_keywords && (
+        <div className="text-gray-400 truncate" title={pdbx_keywords}>
+          {pdbx_keywords}
+        </div>
       )}
     </div>
   );
 }
+
+function MethodBadge({ method }: { method?: string | null }) {
+  if (!method) return null;
+  const abbr = abbreviateMethod(method);
+  const color =
+    abbr === 'EM'
+      ? 'bg-teal-50 text-teal-600 border-teal-200'
+      : abbr === 'X-ray'
+        ? 'bg-violet-50 text-violet-600 border-violet-200'
+        : 'bg-gray-50 text-gray-500 border-gray-200';
+
+  return (
+    <span className={`text-[9px] font-semibold px-1 py-px rounded border ${color}`}>
+      {abbr}
+    </span>
+  );
+}
+
+// ────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────
+
+function abbreviateMethod(method: string): string {
+  const upper = method.toUpperCase();
+  if (upper.includes('ELECTRON MICROSCOPY') || upper.includes('CRYO')) return 'EM';
+  if (upper.includes('X-RAY') || upper.includes('CRYSTAL')) return 'X-ray';
+  if (upper.includes('NMR')) return 'NMR';
+  if (upper.includes('NEUTRON')) return 'Neutron';
+  return method;
+}
+
+function formatAuthors(authors: string[] | null): string | null {
+  if (!authors || authors.length === 0) return null;
+  if (authors.length === 1) return authors[0];
+  if (authors.length <= 3) return authors.join(', ');
+  return `${authors[0]}, ${authors[1]}, ... ${authors[authors.length - 1]}`;
+}
+
+// ────────────────────────────────────────────
+// ChainRow
+// ────────────────────────────────────────────
 
 function ChainRow({
   chain,
@@ -90,48 +304,63 @@ function ChainRow({
   const familyLabel = family ? formatFamilyShort(family) : null;
 
   return (
-    <div
-      className={`flex items-center justify-between py-1 px-2 rounded text-sm cursor-pointer transition-colors ${componentState.hovered ? 'bg-blue-100' : 'hover:bg-gray-100'
-        }`}
-      onMouseEnter={() => instance?.highlightChain(chain.chainId, true)}
-      onMouseLeave={() => instance?.highlightChain(chain.chainId, false)}
+  <div
+      className={`flex items-center justify-between py-1 px-2 rounded text-sm cursor-pointer transition-colors ${
+        componentState.hovered ? 'bg-blue-50' : 'hover:bg-gray-50'
+      }`}
+      onMouseEnter={() => {
+        instance?.highlightChain(chain.chainId, true);
+        instance?.showComponentLabel(chain.chainId);
+      }}
+      onMouseLeave={() => {
+        instance?.highlightChain(chain.chainId, false);
+        instance?.hideComponentLabel();
+      }}
       onClick={() => instance?.focusChain(chain.chainId)}
     >
       <div className="flex items-center gap-2">
-        <span className="font-mono">{chain.chainId}</span>
+        <span className="font-mono text-xs font-semibold">{chain.chainId}</span>
         {familyLabel && (
-          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
-            {familyLabel}
-          </span>
+          <span className="text-[10px] text-gray-400">{familyLabel}</span>
         )}
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5">
         <button
-          onClick={e => { e.stopPropagation(); instance?.enterMonomerView(chain.chainId); }}
-          className="p-1 text-gray-400 hover:text-blue-600"
+          onClick={e => {
+            e.stopPropagation();
+            instance?.enterMonomerView(chain.chainId);
+          }}
+          className="p-1 text-gray-300 hover:text-blue-600 transition-colors"
           title="Open monomer view"
         >
-          <Microscope size={14} />
+          <Microscope size={13} />
         </button>
         <button
-          onClick={e => { e.stopPropagation(); instance?.focusChain(chain.chainId); }}
-          className="p-1 text-gray-400 hover:text-gray-700"
+          onClick={e => {
+            e.stopPropagation();
+            instance?.focusChain(chain.chainId);
+          }}
+          className="p-1 text-gray-300 hover:text-gray-600 transition-colors"
         >
-          <Focus size={14} />
+          <Focus size={13} />
         </button>
         <button
           onClick={e => {
             e.stopPropagation();
             instance?.setChainVisibility(chain.chainId, !componentState.visible);
           }}
-          className="p-1 text-gray-400 hover:text-gray-700"
+          className="p-1 text-gray-300 hover:text-gray-600 transition-colors"
         >
-          {componentState.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+          {componentState.visible ? <Eye size={13} /> : <EyeOff size={13} />}
         </button>
       </div>
     </div>
   );
 }
+
+// ────────────────────────────────────────────
+// LigandRow
+// ────────────────────────────────────────────
 
 function LigandRow({
   ligand,
@@ -145,31 +374,45 @@ function LigandRow({
   );
 
   return (
+
     <div
-      className={`flex items-center justify-between py-1 px-2 rounded text-sm cursor-pointer transition-colors ${componentState.hovered ? 'bg-blue-100' : 'hover:bg-gray-100'
-        }`}
-      onMouseEnter={() => instance?.highlightLigand(ligand.uniqueKey, true)}
-      onMouseLeave={() => instance?.highlightLigand(ligand.uniqueKey, false)}
+      className={`flex items-center justify-between py-1 px-2 rounded text-sm cursor-pointer transition-colors ${
+        componentState.hovered ? 'bg-blue-50' : 'hover:bg-gray-50'
+      }`}
+      onMouseEnter={() => {
+        instance?.highlightLigand(ligand.uniqueKey, true);
+        instance?.showComponentLabel(ligand.uniqueKey);
+      }}
+      onMouseLeave={() => {
+        instance?.highlightLigand(ligand.uniqueKey, false);
+        instance?.hideComponentLabel();
+      }}
       onClick={() => instance?.focusLigand(ligand.uniqueKey)}
     >
       <span className="font-mono text-xs">
-        {ligand.compId} ({ligand.authAsymId}:{ligand.authSeqId})
+        {ligand.compId}
+        <span className="text-gray-400 ml-1">
+          ({ligand.authAsymId}:{ligand.authSeqId})
+        </span>
       </span>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5">
         <button
-          onClick={e => { e.stopPropagation(); instance?.focusLigand(ligand.uniqueKey); }}
-          className="p-1 text-gray-400 hover:text-gray-700"
+          onClick={e => {
+            e.stopPropagation();
+            instance?.focusLigand(ligand.uniqueKey);
+          }}
+          className="p-1 text-gray-300 hover:text-gray-600 transition-colors"
         >
-          <Focus size={14} />
+          <Focus size={13} />
         </button>
         <button
           onClick={e => {
             e.stopPropagation();
             instance?.setLigandVisibility(ligand.uniqueKey, !componentState.visible);
           }}
-          className="p-1 text-gray-400 hover:text-gray-700"
+          className="p-1 text-gray-300 hover:text-gray-600 transition-colors"
         >
-          {componentState.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+          {componentState.visible ? <Eye size={13} /> : <EyeOff size={13} />}
         </button>
       </div>
     </div>

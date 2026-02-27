@@ -143,6 +143,15 @@ const injectedRtkApi = api
         }),
         providesTags: ["Ligands"],
       }),
+      getCanonicalBindingSite: build.query<
+        GetCanonicalBindingSiteApiResponse,
+        GetCanonicalBindingSiteApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/ligands/canonical-site/${queryArg.chemicalId}/${queryArg.family}`,
+        }),
+        providesTags: ["Ligands"],
+      }),
       getPolymerLigandNeighborhoods: build.query<
         GetPolymerLigandNeighborhoodsApiResponse,
         GetPolymerLigandNeighborhoodsApiArg
@@ -319,6 +328,12 @@ export type ListLigandOptionsApiArg = {
   /** Search by ID or name */
   search?: string | null;
   limit?: number;
+};
+export type GetCanonicalBindingSiteApiResponse =
+  /** status 200 Successful Response */ CanonicalBindingSite;
+export type GetCanonicalBindingSiteApiArg = {
+  chemicalId: string;
+  family: string;
 };
 export type GetPolymerLigandNeighborhoodsApiResponse =
   /** status 200 Successful Response */ PolymerNeighborhoodsResponse;
@@ -736,6 +751,18 @@ export type LigandListResponse = {
   /** Whether more results exist */
   has_more: boolean;
 };
+export type CanonicalBindingSiteResidue = {
+  master_index: number;
+  count: number;
+  frequency: number;
+};
+export type CanonicalBindingSite = {
+  chemical_id: string;
+  chemical_name?: string | null;
+  family: string;
+  structure_count: number;
+  residues: CanonicalBindingSiteResidue[];
+};
 export type LigandNeighborhood = {
   ligand_id: string;
   ligand_name?: string | null;
@@ -854,6 +881,7 @@ export const {
   useListPolymersQuery,
   useListLigandsQuery,
   useListLigandOptionsQuery,
+  useGetCanonicalBindingSiteQuery,
   useGetPolymerLigandNeighborhoodsQuery,
   useAlignSequenceMutation,
   useGetMasterProfileQuery,
