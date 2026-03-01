@@ -1,11 +1,9 @@
-// src/components/explorer/questions/useCanonicalBindingSite.ts
-
 import { useState, useCallback, useMemo } from 'react';
 import { API_BASE_URL } from '@/config';
 import type { ExplorerContext, ExplorerQuestion } from '../types';
 import type { StructureProfile } from '@/lib/profile_utils';
 import { masterFrequenciesToColorings } from '../heatmapColors';
-import { Color } from 'molstar/lib/mol-util/color';
+import { getMolstarLigandColor } from '@/components/molstar/colors/palette';
 import { buildMultiResidueQuery, executeQuery } from '@/components/molstar/core/queries';
 
 interface CanonicalBindingSiteResponse {
@@ -40,9 +38,6 @@ function getChainsForFamily(
   return result;
 }
 
-// Deep red to match the hot end of the heatmap
-const BINDING_SITE_LABEL_COLOR = Color.fromRgb(180, 30, 30);
-
 export function useCanonicalBindingSite(
   ctx: ExplorerContext,
   chemicalId: string,
@@ -58,6 +53,9 @@ export function useCanonicalBindingSite(
   );
 
   const available = chains.length > 0 && !!ctx.instance;
+
+  // Ligand color from the palette -- used for both heatmap gradient and label
+  const ligandColor = useMemo(() => getMolstarLigandColor(chemicalId), [chemicalId]);
 
   const execute = useCallback(async () => {
     if (!ctx.instance || chains.length === 0) return;
@@ -76,16 +74,14 @@ export function useCanonicalBindingSite(
       }
 
       const allColorings = chains.flatMap(({ chainId, masterToAuth }) =>
-        masterFrequenciesToColorings(freqMap, masterToAuth, chainId)
+        masterFrequenciesToColorings(freqMap, masterToAuth, chainId, ligandColor)
       );
 
       if (allColorings.length > 0) {
         await ctx.instance.applyColorscheme(`canonical-site-${chemicalId}`, allColorings);
 
-        // Add a label at the highest-frequency residues (top cluster)
         const structure = ctx.instance.viewer.getCurrentStructure();
         if (structure) {
-          // Pick the top ~5 residues by frequency for label positioning
           const sorted = [...allColorings].sort((a, b) => {
             const freqA = freqMap.get(
               Number(Object.entries(chains[0].masterToAuth)
@@ -118,7 +114,7 @@ export function useCanonicalBindingSite(
                 `canonical-label-${chemicalId}`,
                 loci,
                 labelText,
-                BINDING_SITE_LABEL_COLOR,
+                ligandColor,
               );
             }
           }
@@ -129,7 +125,7 @@ export function useCanonicalBindingSite(
     } finally {
       setIsLoading(false);
     }
-  }, [ctx.instance, chains, chemicalId, family]);
+  }, [ctx.instance, chains, chemicalId, family, ligandColor]);
 
   const clear = useCallback(async () => {
     if (ctx.instance) {

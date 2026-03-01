@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { selectComponentState } from '@/components/molstar/state/selectors';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { formatFamilyShort } from '@/lib/formatters';
+import { getHexForFamily, getHexForLigand } from '@/components/molstar/colors/palette';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { PolymerComponent, LigandComponent } from '@/components/molstar/core/types';
 import {
@@ -59,7 +60,7 @@ export function StructureSidebar({
 
   return (
     <div className="h-full bg-white border-r border-gray-200 flex flex-col overflow-hidden">
-      {/* ── Header block ── */}
+      {/* Header block */}
       <div className="px-4 pt-4 pb-3 border-b border-gray-100">
         <div className="flex items-baseline justify-between gap-2 mb-1">
           <div className="flex items-baseline gap-2">
@@ -98,110 +99,114 @@ export function StructureSidebar({
               </button>
             </div>
           )}
-        </div>
-
-        {profile?.citation_title && (
-          <p className="text-xs text-gray-600 leading-snug mb-1">
-            {profile.citation_title}
-          </p>
-        )}
-
-        {(profile?.citation_rcsb_authors || profile?.citation_year) && (
-          <div className="flex items-baseline justify-between text-[11px] text-gray-400 mb-1.5">
-            <span className="italic truncate mr-2">
-              {formatAuthors(profile?.citation_rcsb_authors ?? null)}
-            </span>
-            {profile?.citation_year && (
-              <span className="flex-shrink-0">{profile.citation_year}</span>
-            )}
-          </div>
-        )}
-
-        {profile?.citation_pdbx_doi && (
-          
-          <a
-            href={`https://doi.org/${profile.citation_pdbx_doi}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[10px] text-blue-400 hover:text-blue-600 block truncate mb-2"
-          >
-            {profile.citation_pdbx_doi}
-          </a>
-        )}
-
-        {profile && <MetadataGrid profile={profile} />}
-
-        {isLandingStructure && (
-          <div className="flex items-center gap-1 mt-2">
-            <button
-              onClick={() =>
-                router.push(`/structures/${isDimer ? '6WVM' : '1JFF'}`)
-              }
-              className="text-[10px] px-2 py-0.5 rounded border border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-colors"
-            >
-              Switch to {isDimer ? 'Lattice (6WVM)' : 'Dimer (1JFF)'}
-            </button>
-          </div>
-        )}
       </div>
 
-      {error && (
-        <div className="text-red-500 text-xs mx-4 mt-2 p-2 bg-red-50 rounded">
-          {error}
+      {profile?.citation_title && (
+        <p className="text-xs text-gray-600 leading-snug mb-1">
+          {profile.citation_title}
+        </p>
+      )}
+
+      {(profile?.citation_rcsb_authors || profile?.citation_year) && (
+        <div className="flex items-baseline justify-between text-[11px] text-gray-400 mb-1.5">
+          <span className="italic truncate mr-2">
+            {formatAuthors(profile?.citation_rcsb_authors ?? null)}
+          </span>
+          {profile?.citation_year && (
+            <span className="flex-shrink-0">{profile.citation_year}</span>
+          )}
         </div>
       )}
 
-      {/* ── Scrollable content ── */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-4">
-        <section>
-          <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
-            Chains
-          </h2>
-          <div className="space-y-0.5">
-            {polymerComponents.map(chain => (
-              <ChainRow
-                key={chain.chainId}
-                chain={chain}
-                instance={instance}
-                family={getFamilyForChain(profile, chain.chainId)}
-              />
-            ))}
-          </div>
-        </section>
+      {profile?.citation_pdbx_doi && (
 
-        {ligandComponents.length > 0 && (
-          <section>
-            <button
-              onClick={() => setLigandsExpanded(!ligandsExpanded)}
-              className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5 hover:text-gray-700"
-            >
-              {ligandsExpanded ? (
-                <ChevronDown size={12} />
-              ) : (
-                <ChevronRight size={12} />
-              )}
-              Ligands
-              <span className="text-gray-300 font-normal normal-case">
-                ({ligandComponents.length})
-              </span>
-            </button>
-            {ligandsExpanded && (
-              <div className="space-y-0.5">
-                {ligandComponents.map(ligand => (
-                  <LigandRow
-                    key={ligand.uniqueKey}
-                    ligand={ligand}
-                    instance={instance}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
-        )}
+<a
+        href = {`https://doi.org/${profile.citation_pdbx_doi}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-[10px] text-blue-400 hover:text-blue-600 block truncate mb-2"
+          >
+      {profile.citation_pdbx_doi}
+    </a>
+  )
+}
 
-        <ExplorerPanel context={explorerContext} />
-      </div>
+{ profile && <MetadataGrid profile={profile} /> }
+
+{
+  isLandingStructure && (
+    <div className="flex items-center gap-1 mt-2">
+      <button
+        onClick={() =>
+          router.push(`/structures/${isDimer ? '6WVM' : '1JFF'}`)
+        }
+        className="text-[10px] px-2 py-0.5 rounded border border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 transition-colors"
+      >
+        Switch to {isDimer ? 'Lattice (6WVM)' : 'Dimer (1JFF)'}
+      </button>
     </div>
+  )
+}
+      </div >
+
+  { error && (
+    <div className="text-red-500 text-xs mx-4 mt-2 p-2 bg-red-50 rounded">
+      {error}
+    </div>
+  )}
+
+{/* Scrollable content */ }
+<div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-4">
+  <section>
+    <h2 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
+      Chains
+    </h2>
+    <div className="space-y-0.5">
+      {polymerComponents.map(chain => (
+        <ChainRow
+          key={chain.chainId}
+          chain={chain}
+          instance={instance}
+          profile={profile}
+        />
+      ))}
+    </div>
+  </section>
+
+  {ligandComponents.length > 0 && (
+    <section>
+      <button
+        onClick={() => setLigandsExpanded(!ligandsExpanded)}
+        className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5 hover:text-gray-700"
+      >
+        {ligandsExpanded ? (
+          <ChevronDown size={12} />
+        ) : (
+          <ChevronRight size={12} />
+        )}
+        Ligands
+        <span className="text-gray-300 font-normal normal-case">
+          ({ligandComponents.length})
+        </span>
+      </button>
+      {ligandsExpanded && (
+        <div className="space-y-0.5">
+          {ligandComponents.map(ligand => (
+            <LigandRow
+              key={ligand.uniqueKey}
+              ligand={ligand}
+              instance={instance}
+              profile={profile}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  )}
+
+  <ExplorerPanel context={explorerContext} />
+</div>
+    </div >
   );
 }
 
@@ -285,6 +290,35 @@ function formatAuthors(authors: string[] | null): string | null {
   return `${authors[0]}, ${authors[1]}, ... ${authors[authors.length - 1]}`;
 }
 
+/** Look up a polymer entity from profile by chain id */
+function getPolymerEntityInfo(profile: StructureProfile | null, chainId: string) {
+  if (!profile) return null;
+  for (const poly of profile.polypeptides) {
+    if (poly.auth_asym_id !== chainId) continue;
+    const entity = profile.entities[poly.entity_id];
+    if (!entity) continue;
+    return { poly, entity };
+  }
+  return null;
+}
+
+/** Look up a nonpolymer entity from profile by compId + chain + seqId */
+function getNonpolymerEntityInfo(
+  profile: StructureProfile | null,
+  compId: string,
+  authAsymId: string,
+  authSeqId: number
+) {
+  if (!profile) return null;
+  for (const np of profile.nonpolymers) {
+    if (np.auth_asym_id !== authAsymId || np.auth_seq_id !== authSeqId) continue;
+    const entity = profile.entities[np.entity_id];
+    if (!entity) continue;
+    return { np, entity };
+  }
+  return null;
+}
+
 // ────────────────────────────────────────────
 // ChainRow
 // ────────────────────────────────────────────
@@ -292,22 +326,33 @@ function formatAuthors(authors: string[] | null): string | null {
 function ChainRow({
   chain,
   instance,
-  family,
+  profile,
 }: {
   chain: PolymerComponent;
   instance: MolstarInstance | null;
-  family?: string;
+  profile: StructureProfile | null;
 }) {
   const componentState = useAppSelector(state =>
     selectComponentState(state, 'structure', chain.chainId)
   );
+
+  const family = getFamilyForChain(profile, chain.chainId);
   const familyLabel = family ? formatFamilyShort(family) : null;
+  const hexColor = getHexForFamily(family);
+
+  // Pull richer info from profile
+  const info = getPolymerEntityInfo(profile, chain.chainId);
+  const organism = info?.entity && 'src_organism_names' in info.entity
+    ? (info.entity.src_organism_names as string[] | undefined)?.[0]
+    : null;
+  const uniprotId = info?.entity && 'uniprot_id' in info.entity
+    ? (info.entity.uniprot_id as string | undefined)
+    : null;
 
   return (
-  <div
-      className={`flex items-center justify-between py-1 px-2 rounded text-sm cursor-pointer transition-colors ${
-        componentState.hovered ? 'bg-blue-50' : 'hover:bg-gray-50'
-      }`}
+    <div
+      className={`flex items-center justify-between py-1.5 px-2 rounded text-sm cursor-pointer transition-colors ${componentState.hovered ? 'bg-blue-50' : 'hover:bg-gray-50'
+        }`}
       onMouseEnter={() => {
         instance?.highlightChain(chain.chainId, true);
         instance?.showComponentLabel(chain.chainId);
@@ -318,13 +363,28 @@ function ChainRow({
       }}
       onClick={() => instance?.focusChain(chain.chainId)}
     >
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-xs font-semibold">{chain.chainId}</span>
-        {familyLabel && (
-          <span className="text-[10px] text-gray-400">{familyLabel}</span>
-        )}
+      <div className="flex items-center gap-2 min-w-0">
+        <span
+          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+          style={{ backgroundColor: hexColor }}
+        />
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-mono text-xs font-semibold">{chain.chainId}</span>
+            {familyLabel && (
+              <span className="text-[10px] text-gray-500">{familyLabel}</span>
+            )}
+          </div>
+          {(organism || uniprotId) && (
+            <div className="text-[9px] text-gray-400 truncate">
+              {organism}
+              {organism && uniprotId && ' \u00B7 '}
+              {uniprotId}
+            </div>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-0.5 flex-shrink-0">
         <button
           onClick={e => {
             e.stopPropagation();
@@ -365,20 +425,30 @@ function ChainRow({
 function LigandRow({
   ligand,
   instance,
+  profile,
 }: {
   ligand: LigandComponent;
   instance: MolstarInstance | null;
+  profile: StructureProfile | null;
 }) {
   const componentState = useAppSelector(state =>
     selectComponentState(state, 'structure', ligand.uniqueKey)
   );
 
-  return (
+  const hexColor = getHexForLigand(ligand.compId);
+  const info = getNonpolymerEntityInfo(profile, ligand.compId, ligand.authAsymId, ligand.authSeqId);
+  const chemName = info?.entity && 'chemical_name' in info.entity
+    ? (info.entity.chemical_name as string | undefined)
+    : null;
 
+  // Which chain family is this ligand bound near?
+  const parentFamily = getFamilyForChain(profile, ligand.authAsymId);
+  const parentFamilyLabel = parentFamily ? formatFamilyShort(parentFamily) : null;
+
+  return (
     <div
-      className={`flex items-center justify-between py-1 px-2 rounded text-sm cursor-pointer transition-colors ${
-        componentState.hovered ? 'bg-blue-50' : 'hover:bg-gray-50'
-      }`}
+      className={`flex items-center justify-between py-1.5 px-2 rounded text-sm cursor-pointer transition-colors ${componentState.hovered ? 'bg-blue-50' : 'hover:bg-gray-50'
+        }`}
       onMouseEnter={() => {
         instance?.highlightLigand(ligand.uniqueKey, true);
         instance?.showComponentLabel(ligand.uniqueKey);
@@ -389,13 +459,32 @@ function LigandRow({
       }}
       onClick={() => instance?.focusLigand(ligand.uniqueKey)}
     >
-      <span className="font-mono text-xs">
-        {ligand.compId}
-        <span className="text-gray-400 ml-1">
-          ({ligand.authAsymId}:{ligand.authSeqId})
-        </span>
-      </span>
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-2 min-w-0">
+        <span
+          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+          style={{ backgroundColor: hexColor }}
+        />
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-mono text-xs font-semibold">{ligand.compId}</span>
+            <span className="text-[10px] text-gray-400">
+              {ligand.authAsymId}:{ligand.authSeqId}
+            </span>
+          </div>
+          {(chemName || parentFamilyLabel) && (
+            <div className="text-[9px] text-gray-400 truncate">
+              {chemName}
+              {chemName && parentFamilyLabel && ' \u00B7 '}
+              {parentFamilyLabel && (
+                <span style={{ color: getHexForFamily(parentFamily) }}>
+                  {parentFamilyLabel}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-0.5 flex-shrink-0">
         <button
           onClick={e => {
             e.stopPropagation();

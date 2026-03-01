@@ -654,7 +654,8 @@ private componentLabelText(key: string, component: Component): string {
     // Overpaint each chain with its family color.
     for (const chainId of chainsInSurroundings) {
       const family = this.getChainFamily(chainId);
-      const color = getMolstarColorForFamily(family);
+
+const color = getMolstarGhostColor(family);
 
       await setStructureOverpaint(
         plugin,

@@ -1,7 +1,6 @@
-// src/components/explorer/questions/useInterfaceContacts.ts
-
 import { useState, useCallback, useMemo } from 'react';
 import { StructureElement, StructureProperties, Structure } from 'molstar/lib/mol-model/structure';
+import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder';
 import type { ExplorerContext, ExplorerQuestion } from '../types';
 import type { StructureProfile } from '@/lib/profile_utils';
 import {
@@ -10,7 +9,7 @@ import {
   buildMultiResidueQuery,
   executeQuery,
 } from '@/components/molstar/core/queries';
-import { getMolstarColorForFamily } from '@/components/molstar/colors/palette';
+import { getMolstarGhostColor } from '@/components/molstar/colors/palette';
 import { Color } from 'molstar/lib/mol-util/color';
 
 const CONTACT_RADIUS = 4.5;
@@ -50,7 +49,6 @@ function getInterfaceResidues(
   return Array.from(ids);
 }
 
-/** Blend two Molstar Colors by averaging their channels */
 function blendColors(a: Color, b: Color): Color {
   const rA = (a >> 16) & 0xFF, gA = (a >> 8) & 0xFF, bA = a & 0xFF;
   const rB = (b >> 16) & 0xFF, gB = (b >> 8) & 0xFF, bB = b & 0xFF;
@@ -93,8 +91,10 @@ export function useInterfaceContacts(ctx: ExplorerContext): ExplorerQuestion {
 
           if (bNearA.length === 0 && aNearB.length === 0) continue;
 
-          const colorA = getMolstarColorForFamily(a.family);
-          const colorB = getMolstarColorForFamily(b.family);
+          const colorA = getMolstarGhostColor(a.family);
+          const colorB = getMolstarGhostColor(b.family);
+
+          // --- Per-chain ball-and-stick (ghost colored) ---
 
           if (aNearB.length > 0) {
             const compA = await plugin.builders.structure.tryCreateComponentFromExpression(
@@ -109,7 +109,7 @@ export function useInterfaceContacts(ctx: ExplorerContext): ExplorerQuestion {
                 type: 'ball-and-stick',
                 color: 'uniform',
                 colorParams: { value: colorA },
-                typeParams: { sizeFactor: 0.2, sizeAspectRatio: 0.6 },
+                typeParams: { sizeFactor: 0.2 },
               });
             }
           }
@@ -127,12 +127,41 @@ export function useInterfaceContacts(ctx: ExplorerContext): ExplorerQuestion {
                 type: 'ball-and-stick',
                 color: 'uniform',
                 colorParams: { value: colorB },
-                typeParams: { sizeFactor: 0.2, sizeAspectRatio: 0.6 },
+                typeParams: { sizeFactor: 0.2 },
               });
             }
           }
 
-          // Label at the interface, colored as a blend of the two chain colors
+          // --- NCI dashed lines between the two chains ---
+
+          if (aNearB.length > 0 && bNearA.length > 0) {
+            const combinedExpr = MS.struct.combinator.merge([
+              buildMultiResidueQuery(a.chainId, aNearB),
+              buildMultiResidueQuery(b.chainId, bNearA),
+            ]);
+
+            const nciComp = await plugin.builders.structure.tryCreateComponentFromExpression(
+              structureCell,
+              combinedExpr,
+              `iface-nci-${a.chainId}-${b.chainId}`,
+              { label: `${a.chainId}/${b.chainId} interactions` }
+            );
+
+            if (nciComp) {
+              refs.push(nciComp.ref);
+              try {
+                await plugin.builders.structure.representation.addRepresentation(nciComp, {
+                  type: 'interactions',
+                  color: 'interaction-type',
+                });
+              } catch (err) {
+                console.warn(`[InterfaceContacts] Could not add interactions repr:`, err);
+              }
+            }
+          }
+
+          // --- Label ---
+
           if ((aNearB.length > 0 || bNearA.length > 0) && ctx.instance) {
             const labelLoci = aNearB.length > 0
               ? executeQuery(buildMultiResidueQuery(a.chainId, aNearB), structure)
@@ -189,7 +218,7 @@ export function useInterfaceContacts(ctx: ExplorerContext): ExplorerQuestion {
   return {
     id: 'interface-contacts',
     label,
-    description: 'Ball-and-stick at inter-chain contact residues, colored by family',
+    description: 'Ball-and-stick at inter-chain contact residues with non-covalent interactions',
     available,
     isLoading,
     isActive,

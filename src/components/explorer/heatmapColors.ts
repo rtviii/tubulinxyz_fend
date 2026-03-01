@@ -1,30 +1,45 @@
-// src/components/explorer/visualization/heatmapColors.ts
-
 import { Color } from 'molstar/lib/mol-util/color';
 
-/**
- * Interpolate between a cold color and a hot color based on a 0-1 intensity value.
- * cold = light blue, hot = deep red
- */
-export function heatmapColor(intensity: number): Color {
-  const t = Math.max(0, Math.min(1, intensity));
-
-  // Cold: rgb(200, 220, 240)  ->  Hot: rgb(180, 30, 30)
-  const r = Math.round(200 + (180 - 200) * t);
-  const g = Math.round(220 + (30 - 220) * t);
-  const b = Math.round(240 + (30 - 240) * t);
-
-  return Color.fromRgb(r, g, b);
+/** Tint a color toward white by factor (0 = original, 1 = white) */
+function tintColor(color: Color, factor: number): Color {
+  const r = (color >> 16) & 0xFF;
+  const g = (color >> 8) & 0xFF;
+  const b = color & 0xFF;
+  return Color.fromRgb(
+    Math.round(r + (255 - r) * factor),
+    Math.round(g + (255 - g) * factor),
+    Math.round(b + (255 - b) * factor),
+  );
 }
 
 /**
- * Given a map of master_index -> frequency (0-1), a chain's master_to_auth_seq_id mapping,
- * and a chainId, produce ResidueColoring[] ready for MolstarInstance.applyColorscheme().
+ * Interpolate from a light tint of baseColor (at intensity 0)
+ * to full baseColor (at intensity 1).
+ */
+export function heatmapColor(intensity: number, baseColor: Color): Color {
+  const t = Math.max(0, Math.min(1, intensity));
+  const light = tintColor(baseColor, 0.78);
+
+  const rL = (light >> 16) & 0xFF, gL = (light >> 8) & 0xFF, bL = light & 0xFF;
+  const rH = (baseColor >> 16) & 0xFF, gH = (baseColor >> 8) & 0xFF, bH = baseColor & 0xFF;
+
+  return Color.fromRgb(
+    Math.round(rL + (rH - rL) * t),
+    Math.round(gL + (gH - gL) * t),
+    Math.round(bL + (bH - bL) * t),
+  );
+}
+
+/**
+ * Given a map of master_index -> frequency (0-1), a chain's master_to_auth mapping,
+ * a chainId, and a base color (typically the ligand's palette color),
+ * produce ResidueColoring[] for applyColorscheme().
  */
 export function masterFrequenciesToColorings(
   frequencies: Map<number, number>,
   masterToAuth: Record<string, number | null>,
   chainId: string,
+  baseColor: Color,
 ): Array<{ chainId: string; authSeqId: number; color: Color }> {
   const colorings: Array<{ chainId: string; authSeqId: number; color: Color }> = [];
 
@@ -34,7 +49,7 @@ export function masterFrequenciesToColorings(
     colorings.push({
       chainId,
       authSeqId,
-      color: heatmapColor(freq),
+      color: heatmapColor(freq, baseColor),
     });
   }
 
