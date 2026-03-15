@@ -2389,7 +2389,6 @@
     tslib "^2.3.0"
     yargs-parser "21.1.1"
 
-
 "@nx/nx-freebsd-x64@22.3.3":
   version "22.3.3"
   resolved "https://registry.yarnpkg.com/@nx/nx-freebsd-x64/-/nx-freebsd-x64-22.3.3.tgz#5d97fc1a9df8841b8d596e4633f3288b4e68c9a9"
@@ -2631,7 +2630,6 @@
   version "4.55.3"
   resolved "https://registry.yarnpkg.com/@rollup/rollup-android-arm64/-/rollup-android-arm64-4.55.3.tgz#9f682da7d077ec40731cb262f90242cd7dbe3f67"
   integrity sha512-6sHrL42bjt5dHQzJ12Q4vMKfN+kUnZ0atHHnv4V0Wd9JMTk7FDzSY35+7qbz3ypQYMBPANbpGK7JpnWNnhGt8g==
-
 
 "@rollup/rollup-freebsd-arm64@4.55.3":
   version "4.55.3"
@@ -4143,7 +4141,7 @@
   resolved "https://registry.yarnpkg.com/@types/geojson/-/geojson-7946.0.16.tgz#8ebe53d69efada7044454e3305c19017d97ced2a"
   integrity sha512-6C8nqWur3j98U6+lXDfTUWIfgvZU+EumvpHKcYjujKH7woYyLj2sUmff0tRhrqM7BohUw7Pz3ZB1jj2gW9Fvmg==
 
-"@types/glob@*":
+"@types/glob@*", "@types/glob@^9.0.0":
   version "9.0.0"
   resolved "https://registry.yarnpkg.com/@types/glob/-/glob-9.0.0.tgz#7b942fafe09c55671912b34f04e8e4676faf32b1"
   integrity sha512-00UxlRaIUvYm4R4W9WYkN8/J+kV8fmOQ7okeH6YFtGWFMt3odD45tpG5yA5wnL7HE6lLgjaTW5n14ju2hl2NNA==
@@ -12874,6 +12872,8 @@ nwsapi@^2.2.2:
     yargs "^17.6.2"
     yargs-parser "21.1.1"
   optionalDependencies:
+    "@nx/nx-darwin-arm64" "22.3.3"
+    "@nx/nx-darwin-x64" "22.3.3"
     "@nx/nx-freebsd-x64" "22.3.3"
     "@nx/nx-linux-arm-gnueabihf" "22.3.3"
     "@nx/nx-linux-arm64-gnu" "22.3.3"
@@ -14707,6 +14707,8 @@ rollup@4.17.2:
   optionalDependencies:
     "@rollup/rollup-android-arm-eabi" "4.17.2"
     "@rollup/rollup-android-arm64" "4.17.2"
+    "@rollup/rollup-darwin-arm64" "4.17.2"
+    "@rollup/rollup-darwin-x64" "4.17.2"
     "@rollup/rollup-linux-arm-gnueabihf" "4.17.2"
     "@rollup/rollup-linux-arm-musleabihf" "4.17.2"
     "@rollup/rollup-linux-arm64-gnu" "4.17.2"
@@ -14730,6 +14732,8 @@ rollup@^4.4.0:
   optionalDependencies:
     "@rollup/rollup-android-arm-eabi" "4.55.3"
     "@rollup/rollup-android-arm64" "4.55.3"
+    "@rollup/rollup-darwin-arm64" "4.55.3"
+    "@rollup/rollup-darwin-x64" "4.55.3"
     "@rollup/rollup-freebsd-arm64" "4.55.3"
     "@rollup/rollup-freebsd-x64" "4.55.3"
     "@rollup/rollup-linux-arm-gnueabihf" "4.55.3"
