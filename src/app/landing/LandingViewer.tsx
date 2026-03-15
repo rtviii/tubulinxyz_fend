@@ -10,6 +10,8 @@ import { PluginCommands } from 'molstar/lib/mol-plugin/commands';
 import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
 import { PluginConfig } from 'molstar/lib/mol-plugin/config';
 import type { MolstarInstanceId } from '@/components/molstar/core/types';
+import type { PluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';  // add this
+
 
 const LANDING_SPEC = {
   ...DefaultPluginUISpec(),
@@ -62,7 +64,9 @@ type Props = {
 
 export default function LandingViewer({ pdbId, instanceId }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { instance, isInitialized } = useMolstarInstance(containerRef, instanceId, LANDING_SPEC);
+  // const { instance, isInitialized } = useMolstarInstance(containerRef, instanceId, LANDING_SPEC);
+  // @ts-ignore
+  const { instance, isInitialized } = useMolstarInstance(containerRef, instanceId, LANDING_SPEC as PluginUISpec);
   const loadedRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
