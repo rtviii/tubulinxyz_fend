@@ -16,7 +16,7 @@ export default {
     css(),
     nodeResolve(),
     commonjs(),
-    typescript(),
+    typescript({ compilerOptions: { skipLibCheck: true } }),
     json(),
     terser({
       ecma: 2020,
