@@ -2389,15 +2389,6 @@
     tslib "^2.3.0"
     yargs-parser "21.1.1"
 
-"@nx/nx-darwin-arm64@22.3.3", "@nx/nx-darwin-arm64@^22.3.3":
-  version "22.3.3"
-  resolved "https://registry.yarnpkg.com/@nx/nx-darwin-arm64/-/nx-darwin-arm64-22.3.3.tgz#5ea940101b5753f6b6e60f66ee734532d3cebd84"
-  integrity sha512-zBAGFGLal09CxhQkdMpOVwcwa9Y01aFm88jTTn35s/DdIWsfngmPzz0t4mG7u2D05q7TJfGQ31pIf5GkNUjo6g==
-
-"@nx/nx-darwin-x64@22.3.3":
-  version "22.3.3"
-  resolved "https://registry.yarnpkg.com/@nx/nx-darwin-x64/-/nx-darwin-x64-22.3.3.tgz#d2243db3b74d8b248b2610788c7508f412ab3bbd"
-  integrity sha512-6ZQ6rMqH8NY4Jz+Gc89D5bIH2NxZb5S/vaA4yJ9RrqAfl4QWchNFD5na+aRivSd+UdsYLPKKl6qohet5SE6vOg==
 
 "@nx/nx-freebsd-x64@22.3.3":
   version "22.3.3"
@@ -2641,25 +2632,6 @@
   resolved "https://registry.yarnpkg.com/@rollup/rollup-android-arm64/-/rollup-android-arm64-4.55.3.tgz#9f682da7d077ec40731cb262f90242cd7dbe3f67"
   integrity sha512-6sHrL42bjt5dHQzJ12Q4vMKfN+kUnZ0atHHnv4V0Wd9JMTk7FDzSY35+7qbz3ypQYMBPANbpGK7JpnWNnhGt8g==
 
-"@rollup/rollup-darwin-arm64@4.17.2":
-  version "4.17.2"
-  resolved "https://registry.yarnpkg.com/@rollup/rollup-darwin-arm64/-/rollup-darwin-arm64-4.17.2.tgz#6b66aaf003c70454c292cd5f0236ebdc6ffbdf1a"
-  integrity sha512-kcMLpE6uCwls023+kknm71ug7MZOrtXo+y5p/tsg6jltpDtgQY1Eq5sGfHcQfb+lfuKwhBmEURDga9N0ol4YPw==
-
-"@rollup/rollup-darwin-arm64@4.55.3":
-  version "4.55.3"
-  resolved "https://registry.yarnpkg.com/@rollup/rollup-darwin-arm64/-/rollup-darwin-arm64-4.55.3.tgz#4bb3a056cd83fb071b82ba223d894925f7972ec1"
-  integrity sha512-1ht2SpGIjEl2igJ9AbNpPIKzb1B5goXOcmtD0RFxnwNuMxqkR6AUaaErZz+4o+FKmzxcSNBOLrzsICZVNYa1Rw==
-
-"@rollup/rollup-darwin-x64@4.17.2":
-  version "4.17.2"
-  resolved "https://registry.yarnpkg.com/@rollup/rollup-darwin-x64/-/rollup-darwin-x64-4.17.2.tgz#f64fc51ed12b19f883131ccbcea59fc68cbd6c0b"
-  integrity sha512-AtKwD0VEx0zWkL0ZjixEkp5tbNLzX+FCqGG1SvOu993HnSz4qDI6S4kGzubrEJAljpVkhRSlg5bzpV//E6ysTQ==
-
-"@rollup/rollup-darwin-x64@4.55.3":
-  version "4.55.3"
-  resolved "https://registry.yarnpkg.com/@rollup/rollup-darwin-x64/-/rollup-darwin-x64-4.55.3.tgz#b399002e28210f79ca9547ae3ff57a1e460c50db"
-  integrity sha512-FYZ4iVunXxtT+CZqQoPVwPhH7549e/Gy7PIRRtq4t5f/vt54pX6eG9ebttRH6QSH7r/zxAFA4EZGlQ0h0FvXiA==
 
 "@rollup/rollup-freebsd-arm64@4.55.3":
   version "4.55.3"
@@ -12902,8 +12874,6 @@ nwsapi@^2.2.2:
     yargs "^17.6.2"
     yargs-parser "21.1.1"
   optionalDependencies:
-    "@nx/nx-darwin-arm64" "22.3.3"
-    "@nx/nx-darwin-x64" "22.3.3"
     "@nx/nx-freebsd-x64" "22.3.3"
     "@nx/nx-linux-arm-gnueabihf" "22.3.3"
     "@nx/nx-linux-arm64-gnu" "22.3.3"
@@ -14737,8 +14707,6 @@ rollup@4.17.2:
   optionalDependencies:
     "@rollup/rollup-android-arm-eabi" "4.17.2"
     "@rollup/rollup-android-arm64" "4.17.2"
-    "@rollup/rollup-darwin-arm64" "4.17.2"
-    "@rollup/rollup-darwin-x64" "4.17.2"
     "@rollup/rollup-linux-arm-gnueabihf" "4.17.2"
     "@rollup/rollup-linux-arm-musleabihf" "4.17.2"
     "@rollup/rollup-linux-arm64-gnu" "4.17.2"
@@ -14762,8 +14730,6 @@ rollup@^4.4.0:
   optionalDependencies:
     "@rollup/rollup-android-arm-eabi" "4.55.3"
     "@rollup/rollup-android-arm64" "4.55.3"
-    "@rollup/rollup-darwin-arm64" "4.55.3"
-    "@rollup/rollup-darwin-x64" "4.55.3"
     "@rollup/rollup-freebsd-arm64" "4.55.3"
     "@rollup/rollup-freebsd-x64" "4.55.3"
     "@rollup/rollup-linux-arm-gnueabihf" "4.55.3"
