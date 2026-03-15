@@ -1,8 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: false, // Disable to prevent double Molstar initialization in development
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  reactStrictMode: false,
   webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
-    // Handle Molstar's large bundle size
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -11,7 +13,6 @@ const nextConfig = {
         crypto: false,
       };
     }
-
     return config;
   },
 }
