@@ -9,7 +9,6 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-yarn.lock
 
 # testing
 /coverage
@@ -46,7 +45,7 @@ q_*.md
 notes*
 **/notes/*
 
-output/** 
+output/**
 *.png
 
 

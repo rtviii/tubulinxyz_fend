@@ -29,7 +29,6 @@
     "@babel/core": "7.24.5",
     "@codesandbox/sandpack-react": "2.13.10",
     "@custom-elements-manifest/analyzer": "0.10.2",
-    "@nx/nx-darwin-arm64": "^22.3.3",
     "@rollup/plugin-commonjs": "25.0.7",
     "@rollup/plugin-json": "6.1.0",
     "@rollup/plugin-node-resolve": "15.2.3",
