@@ -42,7 +42,6 @@
     "@storybook/manager-webpack5": "6.5.16",
     "@storybook/web-components": "6.5.16",
     "@types/d3": "7.4.3",
-    "@types/glob": "^9.0.0",
     "@types/jest": "29.5.12",
     "@types/lodash-es": "4.17.12",
     "@typescript-eslint/eslint-plugin": "7.8.0",
