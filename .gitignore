@@ -61,3 +61,5 @@ nightingale/packages/*/node_modules/
 .next/
 nightingale/packages/*/dist/
 TODOs.md
+
+test
