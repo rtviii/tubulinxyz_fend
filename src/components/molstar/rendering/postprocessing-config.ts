@@ -5,7 +5,7 @@ export const STYLIZED_POSTPROCESSING = {
     outline: {
         name: 'on' as const,
         params: {
-            scale: 1,
+            scale: 0.5,
             color: Color(0x000000),
             threshold: 0.33,
             includeTransparent: true

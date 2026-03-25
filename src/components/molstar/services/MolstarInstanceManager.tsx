@@ -48,7 +48,7 @@ export function MolstarInstanceManagerProvider({ children }: { children: React.R
   const value = useMemo<MolstarInstanceManagerContextValue>(() => ({
     getInstance: (id) => entriesRef.current.get(id)?.instance ?? null,
 
-    initializeInstance: async (id, container, dispatch, getState) => {
+    initializeInstance: async (id, container, dispatch, getState, spec?) => {
       // Cancel any pending dispose for this id
       const pendingTimer = disposeTimersRef.current.get(id);
       if (pendingTimer !== undefined) {
@@ -83,7 +83,7 @@ export function MolstarInstanceManagerProvider({ children }: { children: React.R
 
       try {
         const viewer = new MolstarViewer();
-        await viewer.init(container);
+        await viewer.init(container, spec);
 
         if (!viewer.ctx) throw new Error('Viewer context not created');
 

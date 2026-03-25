@@ -2,7 +2,6 @@
 
 import React from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import LandingViewer from '@/app/landing/LandingViewer';
 
 const STRUCTURES = [
@@ -66,35 +65,19 @@ export default function Page() {
         {/* Structure viewers -- taller panels */}
         <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
           {STRUCTURES.map((s) => (
-            <Link
+            <div
               key={s.pdbId}
-              href={`/structures/${s.pdbId}`}
-              className="group flex flex-col"
+              className="h-[36rem] rounded-xl border border-slate-200/80 bg-white overflow-hidden
+                         transition-shadow duration-200 hover:shadow-md hover:border-slate-300"
             >
-              <div
-                className="h-[34rem] rounded-xl border border-slate-200 bg-white overflow-hidden
-                           transition-shadow duration-200 group-hover:shadow-md
-                           group-hover:border-slate-300"
-              >
-                <LandingViewer pdbId={s.pdbId} instanceId={s.instanceId} />
-              </div>
-
-              <div className="mt-3 space-y-0.5">
-                <div
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-800
-                             group-hover:text-blue-600 transition-colors"
-                >
-                  <span className="font-mono">{s.pdbId}</span>
-                  <span className="text-slate-300">&mdash;</span>
-                  <span>{s.type}</span>
-                  <span aria-hidden className="text-slate-400 text-xs ml-0.5">&rarr;</span>
-                </div>
-                <p className="text-xs text-slate-500 leading-relaxed max-w-md">
-                  {s.description}{' '}
-                  <span className="text-slate-400">{s.citation}</span>
-                </p>
-              </div>
-            </Link>
+              <LandingViewer
+                pdbId={s.pdbId}
+                instanceId={s.instanceId}
+                type={s.type}
+                description={s.description}
+                citation={s.citation}
+              />
+            </div>
           ))}
         </div>
       </main>
