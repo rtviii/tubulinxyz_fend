@@ -32,6 +32,7 @@ import {
   setComponentHovered,
   setActiveColorscheme,
   setViewMode,
+  setGhostMode,
   addAlignedStructure,
   removeAlignedStructure,
   setAlignedStructureVisibility,
@@ -212,9 +213,10 @@ async addExplorerLabel(
 }
 
 private componentColor(component: Component): Color {
+  const ghost = this.instanceState.ghostMode;
   if (isPolymerComponent(component)) {
     const family = this.getChainFamily(component.chainId);
-    return getMolstarColorForFamily(family);
+    return ghost ? getMolstarGhostColor(family) : getMolstarColorForFamily(family);
   }
   if (isLigandComponent(component)) {
     return getMolstarLigandColor(component.compId);
@@ -407,6 +409,8 @@ private componentLabelText(key: string, component: Component): string {
   }
 
   async setStructureGhostColors(enabled: boolean): Promise<void> {
+    this.dispatch(setGhostMode({ instanceId: this.id, ghostMode: enabled }));
+
     const plugin = this.viewer.ctx;
     if (!plugin) return;
 

@@ -29,6 +29,7 @@ import { useMultiChainAnnotations, ChainAnnotationFetcher } from '@/hooks/useMul
 import { createClassificationFromProfile } from '@/services/profile_service';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { StructureSidebar } from '@/components/structure/StructureSidebar';
+import { ViewerToolbar } from '@/components/structure/ViewerToolbar';
 import { MonomerSidebar } from '@/components/monomer/MonomerSidebar';
 import { MonomerMSAPanel } from '@/components/monomer/MonomerMSAPanel';
 import { API_BASE_URL } from '@/config';
@@ -260,6 +261,15 @@ export default function StructureProfilePage() {
             <ResizablePanel defaultSize={isMonomerView ? 50 : 100} minSize={30}>
               <div className="relative w-full h-full min-h-0 bg-gray-200">
                 <div ref={containerRef} className="w-full h-full" />
+
+                {!isLoading && isInitialized && !isMonomerView && (
+                  <ViewerToolbar
+                    instanceId="structure"
+                    instance={instance}
+                    loadedStructure={loadedStructure}
+                    profile={profile}
+                  />
+                )}
 
                 {/* <ResidueInfoOverlay
                   instance={instance}

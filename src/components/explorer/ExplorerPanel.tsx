@@ -100,11 +100,10 @@ export function ExplorerPanel({ context }: ExplorerPanelProps) {
   if (!hasAnything) return null;
 
   return (
-    <section className="rounded-lg border border-gray-200 bg-gray-50/50 p-3">
+    <section>
       <h2 className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-        <Sparkles size={10} className="text-gray-300" />
-        Ask assistant
-        <span className="text-[9px] text-gray-300 font-normal normal-case">(WIP)</span>
+        <Sparkles size={10} className="text-gray-400" />
+        Assistant
       </h2>
       <div className="space-y-0.5">
         {buttonQuestions.map(q => (

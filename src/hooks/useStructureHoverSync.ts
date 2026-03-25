@@ -1,7 +1,7 @@
 // src/hooks/useStructureHoverSync.ts
 
 import { useEffect, useRef } from 'react';
-import { useAppDispatch } from '@/store/store';
+import { useAppDispatch, useAppSelector } from '@/store/store';
 import { setComponentHovered } from '@/components/molstar/state/molstarInstancesSlice';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { MolstarInstanceId, ViewMode } from '@/components/molstar/core/types';
@@ -25,6 +25,12 @@ export function useStructureHoverSync({
   const dispatchRef = useRef(useAppDispatch());
   const prevKeyRef = useRef<string | null>(null);
   const viewModeRef = useRef(viewMode);
+
+  const labelsEnabled = useAppSelector(
+    state => state.molstarInstances.instances[instanceId]?.labelsEnabled ?? true
+  );
+  const labelsEnabledRef = useRef(labelsEnabled);
+  useEffect(() => { labelsEnabledRef.current = labelsEnabled; }, [labelsEnabled]);
 
   const ligandLookupRef = useRef(new Map<string, string>());
   const chainIdsRef = useRef(new Set<string>());
@@ -89,7 +95,7 @@ export function useStructureHoverSync({
 
       if (key) {
         dispatch(setComponentHovered({ instanceId, componentKey: key, hovered: true }));
-        instance.showComponentLabel(key);
+        if (labelsEnabledRef.current) instance.showComponentLabel(key);
       } else {
         instance.hideComponentLabel();
       }

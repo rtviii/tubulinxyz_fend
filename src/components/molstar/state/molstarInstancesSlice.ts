@@ -19,6 +19,8 @@ interface MolstarInstanceState {
   viewMode: ViewMode;
   activeMonomerChainId: string | null;
   monomerChainStates: Record<string, MonomerChainState>;
+  ghostMode: boolean;
+  labelsEnabled: boolean;
 }
 
 interface MolstarInstancesState {
@@ -35,6 +37,8 @@ const createEmptyInstanceState = (): MolstarInstanceState => ({
   viewMode: 'structure',
   activeMonomerChainId: null,
   monomerChainStates: {},
+  ghostMode: false,
+  labelsEnabled: true,
 });
 
 const createEmptyMonomerChainState = (): MonomerChainState => ({
@@ -170,6 +174,22 @@ export const molstarInstancesSlice = createSlice({
       if (aligned) aligned.visible = visible;
     },
 
+    setGhostMode: (
+      state,
+      action: PayloadAction<{ instanceId: MolstarInstanceId; ghostMode: boolean }>
+    ) => {
+      const { instanceId, ghostMode } = action.payload;
+      state.instances[instanceId].ghostMode = ghostMode;
+    },
+
+    setLabelsEnabled: (
+      state,
+      action: PayloadAction<{ instanceId: MolstarInstanceId; labelsEnabled: boolean }>
+    ) => {
+      const { instanceId, labelsEnabled } = action.payload;
+      state.instances[instanceId].labelsEnabled = labelsEnabled;
+    },
+
     clearInstance: (state, action: PayloadAction<MolstarInstanceId>) => {
       state.instances[action.payload] = createEmptyInstanceState();
     },
@@ -186,6 +206,8 @@ export const {
   setComponentHovered,
   setActiveColorscheme,
   setViewMode,
+  setGhostMode,
+  setLabelsEnabled,
   addAlignedStructure,
   removeAlignedStructure,
   setAlignedStructureVisibility,
