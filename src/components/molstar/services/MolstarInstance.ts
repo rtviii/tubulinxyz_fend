@@ -522,7 +522,11 @@ private componentLabelText(key: string, component: Component): string {
     if (!component || !isPolymerComponent(component)) return;
 
     const family = this.getChainFamily(chainId);
-    const originalColor = getMolstarColorForFamily(family);
+    const ghost = this.instanceState.ghostMode;
+    const isAlphaBeta = family === 'tubulin_alpha' || family === 'tubulin_beta';
+    const originalColor = (ghost && isAlphaBeta)
+      ? getMolstarGhostColor(family)
+      : getMolstarColorForFamily(family);
     const reprCells = this.findReprCells(component.ref);
     if (reprCells.length === 0) return;
 
@@ -543,10 +547,11 @@ private componentLabelText(key: string, component: Component): string {
     );
     if (chainComponents.length === 0) return;
 
+    const transparency = (ghost && isAlphaBeta) ? STRUCTURE_GHOST_TRANSPARENCY : 0;
     await setStructureTransparency(
       plugin,
       chainComponents,
-      0,
+      transparency,
       async (structure) => {
         const loci = executeQuery(buildChainQuery(chainId), structure);
         return loci ?? StructureElement.Loci.none(structure);
@@ -751,6 +756,10 @@ const color = getMolstarGhostColor(family);
   // ============================================================
 
   async enterMonomerView(chainId: string): Promise<void> {
+    // Clear any lingering focus/selection from structure mode
+    this.viewer.clearFocus();
+    this.viewer.clearSelection();
+
     const components = this.instanceState.components;
 
     // Hide all polymer chains except the target
@@ -807,6 +816,11 @@ const color = getMolstarGhostColor(family);
     }
 
     this.dispatch(setViewMode({ instanceId: this.id, viewMode: 'structure', activeChainId: null }));
+
+    // Reapply ghost colors to all chains if ghost mode is on
+    if (this.instanceState.ghostMode) {
+      await this.setStructureGhostColors(true);
+    }
 
     this.viewer.clearFocus();
   }

@@ -30,6 +30,7 @@ import { createClassificationFromProfile } from '@/services/profile_service';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { StructureSidebar } from '@/components/structure/StructureSidebar';
 import { ViewerToolbar } from '@/components/structure/ViewerToolbar';
+import { StructureSequencePanel } from '@/components/structure/StructureSequencePanel';
 import { MonomerSidebar } from '@/components/monomer/MonomerSidebar';
 import { MonomerMSAPanel } from '@/components/monomer/MonomerMSAPanel';
 import { API_BASE_URL } from '@/config';
@@ -81,6 +82,7 @@ export default function StructureProfilePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<StructureProfile | null>(null);
+  const [structureSequenceChainId, setStructureSequenceChainId] = useState<string | null>(null);
   const loadedFromUrlRef = useRef<string | null>(null);
 
   // Derive active family from profile + active chain
@@ -211,6 +213,11 @@ export default function StructureProfilePage() {
   }, [instance]);
 
   const isMonomerView = viewMode === 'monomer';
+
+  // Clear structure sequence panel when entering monomer view
+  useEffect(() => {
+    if (isMonomerView) setStructureSequenceChainId(null);
+  }, [isMonomerView]);
   const handleClearAllAnnotations = useCallback(() => {
     dispatch(hideAllVisibility());
   }, [dispatch]);
@@ -236,6 +243,8 @@ export default function StructureProfilePage() {
                   instance={instance}
                   error={error}
                   profile={profile}
+                  onShowSequence={setStructureSequenceChainId}
+                  activeSequenceChainId={structureSequenceChainId}
                 />
               </div>
               <div className="w-full h-full flex-shrink-0">
@@ -258,7 +267,7 @@ export default function StructureProfilePage() {
 
         <ResizablePanel defaultSize={80}>
           <ResizablePanelGroup direction="vertical">
-            <ResizablePanel defaultSize={isMonomerView ? 50 : 100} minSize={30}>
+            <ResizablePanel defaultSize={(isMonomerView || structureSequenceChainId) ? 70 : 100} minSize={30}>
               <div className="relative w-full h-full min-h-0 bg-gray-200">
                 <div ref={containerRef} className="w-full h-full" />
 
@@ -286,6 +295,20 @@ export default function StructureProfilePage() {
                 )}
               </div>
             </ResizablePanel>
+
+            {!isMonomerView && structureSequenceChainId && (
+              <>
+                <ResizableHandle withHandle />
+                <ResizablePanel defaultSize={30} minSize={15}>
+                  <StructureSequencePanel
+                    chainId={structureSequenceChainId}
+                    instance={instance}
+                    profile={profile}
+                    onClose={() => setStructureSequenceChainId(null)}
+                  />
+                </ResizablePanel>
+              </>
+            )}
 
             {isMonomerView && activeChainId && (
               <>

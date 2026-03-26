@@ -13,6 +13,7 @@ import {
   EyeOff,
   Focus,
   Microscope,
+  AlignLeft,
 } from 'lucide-react';
 
 // ────────────────────────────────────────────
@@ -99,6 +100,8 @@ interface StructureSidebarProps {
   instance: MolstarInstance | null;
   error: string | null;
   profile: StructureProfile | null;
+  onShowSequence?: (chainId: string | null) => void;
+  activeSequenceChainId?: string | null;
 }
 
 export function StructureSidebar({
@@ -108,6 +111,8 @@ export function StructureSidebar({
   instance,
   error,
   profile,
+  onShowSequence,
+  activeSequenceChainId,
 }: StructureSidebarProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'chains' | 'ligands'>('chains');
@@ -179,6 +184,8 @@ export function StructureSidebar({
                   profile={profile}
                   ghostMode={ghostMode}
                   labelsEnabled={labelsEnabled}
+                  onShowSequence={onShowSequence}
+                  isSequenceActive={activeSequenceChainId === chain.chainId}
                 />
               ))}
             </div>
@@ -241,12 +248,16 @@ function ChainRow({
   profile,
   ghostMode,
   labelsEnabled,
+  onShowSequence,
+  isSequenceActive,
 }: {
   chain: PolymerComponent;
   instance: MolstarInstance | null;
   profile: StructureProfile | null;
   ghostMode: boolean;
   labelsEnabled: boolean;
+  onShowSequence?: (chainId: string | null) => void;
+  isSequenceActive?: boolean;
 }) {
   const componentState = useAppSelector(state =>
     selectComponentState(state, 'structure', chain.chainId)
@@ -275,7 +286,6 @@ function ChainRow({
         instance?.highlightChain(chain.chainId, false);
         instance?.hideComponentLabel();
       }}
-      onClick={() => instance?.focusChain(chain.chainId)}
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-1.5">
@@ -295,6 +305,16 @@ function ChainRow({
         </div>
       </div>
       <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            onShowSequence?.(isSequenceActive ? null : chain.chainId);
+          }}
+          className={`p-1 transition-colors ${isSequenceActive ? 'text-blue-500' : 'text-gray-400 hover:text-blue-600'}`}
+          title={isSequenceActive ? 'Hide sequence' : 'Show sequence'}
+        >
+          <AlignLeft size={14} />
+        </button>
         <button
           onClick={e => {
             e.stopPropagation();
@@ -374,7 +394,6 @@ function LigandRow({
         instance?.highlightLigand(ligand.uniqueKey, false);
         instance?.hideComponentLabel();
       }}
-      onClick={() => instance?.focusLigand(ligand.uniqueKey)}
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-1.5">
