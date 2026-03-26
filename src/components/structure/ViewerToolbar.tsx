@@ -6,10 +6,11 @@ import { useAppSelector, useAppDispatch } from '@/store/store';
 import { setGhostMode, setLabelsEnabled } from '@/components/molstar/state/molstarInstancesSlice';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { MolstarInstanceId } from '@/components/molstar/core/types';
-import { Tag, Eye, ExternalLink, Sparkles } from 'lucide-react';
+import { Tag, Eye, ExternalLink, Sparkles, Home, LayoutGrid, Mail } from 'lucide-react';
 import { ExplorerPanel } from '@/components/explorer/ExplorerPanel';
 import type { ExplorerContext } from '@/components/explorer/types';
 import type { StructureProfile } from '@/lib/profile_utils';
+import Link from 'next/link';
 
 function abbreviateMethod(method: string): string {
   const upper = method.toUpperCase();
@@ -75,10 +76,27 @@ export function ViewerToolbar({ instanceId, instance, loadedStructure, profile }
   const method = profile?.expMethod ? abbreviateMethod(profile.expMethod) : null;
 
   return (
-    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10
-                    flex items-center gap-0 px-1 py-0.5
+    <div className="flex items-center gap-0 px-1 py-0.5
                     rounded-full bg-white/80 backdrop-blur border border-slate-200/60
                     shadow-sm text-[11px]">
+
+      {/* Nav links */}
+      <Link
+        href="/"
+        className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 transition-colors"
+        title="Home"
+      >
+        <Home size={13} />
+      </Link>
+      <Link
+        href="/structures"
+        className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 transition-colors"
+        title="Structures"
+      >
+        <LayoutGrid size={13} />
+      </Link>
+
+      <div className="w-px h-4 bg-slate-200" />
 
       {/* Structure slug — hover for metadata */}
       <div
@@ -211,6 +229,16 @@ export function ViewerToolbar({ instanceId, instance, loadedStructure, profile }
           </div>
         )}
       </div>
+
+      <div className="w-px h-4 bg-slate-200" />
+
+      <a
+        href="mailto:feedback@tube.xyz?subject=tube.xyz%20feedback"
+        className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 transition-colors"
+        title="Send feedback"
+      >
+        <Mail size={13} />
+      </a>
     </div>
   );
 }
