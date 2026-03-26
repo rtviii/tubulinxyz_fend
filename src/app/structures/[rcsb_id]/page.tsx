@@ -15,20 +15,16 @@ import {
   selectActiveMonomerChainId,
   selectAlignedStructuresForActiveChain,
 } from '@/components/molstar/state/selectors';
-// Resizable panels removed — layout is now floating overlays on full-viewport Molstar
-import { addSequence } from '@/store/slices/sequence_registry';
 import { setPrimaryChain, hideAllVisibility } from '@/store/slices/annotationsSlice';
 import { useGetMasterProfileQuery } from '@/store/tubxz_api';
-import { useNightingaleComponents } from '@/hooks/useNightingaleComponents';
 import { useViewerSync } from '@/hooks/useViewerSync';
 import { useMultiChainAnnotations, ChainAnnotationFetcher } from '@/hooks/useMultiChainAnnotations';
 import { createClassificationFromProfile } from '@/services/profile_service';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { StructureSidebar } from '@/components/structure/StructureSidebar';
 import { ViewerToolbar } from '@/components/structure/ViewerToolbar';
-import { StructureSequencePanel } from '@/components/structure/StructureSequencePanel';
 import { MonomerSidebar } from '@/components/monomer/MonomerSidebar';
-import { MonomerMSAPanel } from '@/components/monomer/MonomerMSAPanel';
+import { SequenceAlignmentPanel } from '@/components/msa/SequenceAlignmentPanel';
 import { API_BASE_URL } from '@/config';
 import type { MSAHandle } from '@/components/msa/types';
 import { makeChainKey } from '@/lib/chain_key';
@@ -81,36 +77,41 @@ export default function StructureProfilePage() {
   const [structureSequenceChainId, setStructureSequenceChainId] = useState<string | null>(null);
   const loadedFromUrlRef = useRef<string | null>(null);
 
-  // Derive active family from profile + active chain
+  const isMonomerView = viewMode === 'monomer';
+
+  // The "effective" chain for the sequence panel: monomer mode uses Redux,
+  // structure mode uses local state.
+  const sequencePanelChainId = isMonomerView ? activeChainId : structureSequenceChainId;
+
+  // Derive active family from profile + effective chain
   const activeFamily = useMemo(
-    () => (activeChainId ? getFamilyForChain(profile, activeChainId) : undefined),
-    [activeChainId, profile]
+    () => (sequencePanelChainId ? getFamilyForChain(profile, sequencePanelChainId) : undefined),
+    [sequencePanelChainId, profile]
   );
 
-  const fam = activeFamily ?? 'tubulin_alpha';
+  // Only fetch master data at page level in monomer mode (for MonomerSidebar's masterLength).
+  // In structure mode, the panel handles its own master data to avoid RTK Query cache interference.
+  const fam = (activeFamily ?? 'tubulin_alpha') as import('@/store/tubxz_api').TubulinFamily;
   const { data: masterData } = useGetMasterProfileQuery(
     { family: fam },
-    { skip: !activeFamily }
+    { skip: !activeFamily || !isMonomerView }
   );
 
-  const chainKey = loadedStructure && activeChainId
-    ? makeChainKey(loadedStructure, activeChainId)
+  const chainKey = loadedStructure && sequencePanelChainId
+    ? makeChainKey(loadedStructure, sequencePanelChainId)
     : '';
 
 
-  // Sequences scoped to the active family
+  // PDB sequences scoped to the active family (for useViewerSync color rules).
+  // Master sequences are now local to the panel and never enter Redux.
   const familySequences = useAppSelector(state => selectSequencesForFamily(state, activeFamily));
-  const masterSequences = useMemo(
-    () => familySequences.filter(s => s.originType === 'master'),
-    [familySequences]
-  );
   const pdbSequences = useMemo(
     () => familySequences.filter(s => s.originType === 'pdb'),
     [familySequences]
   );
   const allVisibleSequenceIds = useMemo(
-    () => [...masterSequences, ...pdbSequences].map(s => s.id),
-    [masterSequences, pdbSequences]
+    () => pdbSequences.map(s => s.id),
+    [pdbSequences]
   );
 
   // Annotation fetchers
@@ -135,7 +136,7 @@ export default function StructureProfilePage() {
   }, [primaryChainKey, viewMode, dispatch]);
 
 
-  const { handleMSAHover, handleMSAHoverEnd, focusLigandSite, focusMutation, handleDisplayRangeChange, clearWindowMask } = useViewerSync({
+  const { handleMSAHover, handleMSAHoverEnd, handleDisplayRangeChange, clearWindowMask } = useViewerSync({
     chainKey,
     molstarInstance: instance,
     msaRef,
@@ -151,7 +152,6 @@ export default function StructureProfilePage() {
     ligandComponents,
     viewMode,
   });
-  const { areLoaded: nglLoaded } = useNightingaleComponents();
   // Structure loading
   useEffect(() => {
     if (!isInitialized || !instance || !pdbIdFromUrl) return;
@@ -183,19 +183,8 @@ export default function StructureProfilePage() {
     load();
   }, [isInitialized, instance, pdbIdFromUrl]);
 
-  // Register master sequences when family data arrives
-  useEffect(() => {
-    if (!masterData?.sequences) return;
-    masterData.sequences.forEach((seq: any) => {
-      dispatch(addSequence({
-        id: `master__${fam}__${seq.id}`,
-        name: seq.id,
-        sequence: seq.sequence,
-        originType: 'master',
-        family: fam,
-      }));
-    });
-  }, [masterData, fam, dispatch]);
+  // Master sequence registration is now handled by SequenceAlignmentPanel.
+  // The page still fetches masterData for MonomerSidebar's masterLength prop.
 
   // Resize observer
   useEffect(() => {
@@ -208,8 +197,6 @@ export default function StructureProfilePage() {
     return () => observer.disconnect();
   }, [instance]);
 
-  const isMonomerView = viewMode === 'monomer';
-
   // Clear structure sequence panel when entering monomer view
   useEffect(() => {
     if (isMonomerView) setStructureSequenceChainId(null);
@@ -218,12 +205,34 @@ export default function StructureProfilePage() {
     dispatch(hideAllVisibility());
   }, [dispatch]);
 
+  // ── Auto-switch chain in sequence panel on 3D click ──
+  const structureSeqChainRef = useRef(structureSequenceChainId);
+  structureSeqChainRef.current = structureSequenceChainId;
+  const polymerChainIds = useMemo(
+    () => new Set(polymerComponents.map(p => p.chainId)),
+    [polymerComponents]
+  );
+  const polymerChainIdsRef = useRef(polymerChainIds);
+  polymerChainIdsRef.current = polymerChainIds;
+
+  useEffect(() => {
+    if (!instance?.viewer || isMonomerView) return;
+    const unsub = instance.viewer.subscribeToClick(info => {
+      if (!info) return;
+      const currentChain = structureSeqChainRef.current;
+      // Only auto-switch if the panel is open and the click is on a different polymer chain
+      if (currentChain && info.chainId !== currentChain && polymerChainIdsRef.current.has(info.chainId)) {
+        setStructureSequenceChainId(info.chainId);
+      }
+    });
+    return unsub;
+  }, [instance, isMonomerView]);
+
   const showStructureSeqPanel = !isMonomerView && !!structureSequenceChainId;
   const showMonomerPanel = isMonomerView && !!activeChainId;
   const showBottomPanel = showStructureSeqPanel || showMonomerPanel;
 
   // ── Panel dimensions (independent, capped to avoid overlap) ──
-  const GAP = 12; // min gap between panels
   const EDGE = 12; // margin from viewport edges
 
   const [sidebarWidth, setSidebarWidth] = useState(280);
@@ -397,27 +406,29 @@ export default function StructureProfilePage() {
               onMouseDown={onSeqDragStart}
             />
             <div className="flex-1 min-h-0 overflow-hidden">
-              {showStructureSeqPanel && (
-                <StructureSequencePanel
-                  chainId={structureSequenceChainId!}
-                  instance={instance}
+              {showBottomPanel && sequencePanelChainId && (
+                <SequenceAlignmentPanel
+                  ref={msaRef}
+                  chainId={sequencePanelChainId}
+                  onChainChange={chainId => {
+                    if (isMonomerView) {
+                      instance?.enterMonomerView(chainId);
+                    } else {
+                      setStructureSequenceChainId(chainId);
+                    }
+                  }}
                   profile={profile}
-                  onClose={() => setStructureSequenceChainId(null)}
-                />
-              )}
-              {showMonomerPanel && (
-                <MonomerMSAPanel
-                  profile={profile ?? undefined}
-                  pdbId={loadedStructure}
-                  chainId={activeChainId!}
-                  family={activeFamily}
                   instance={instance}
-                  masterSequences={masterSequences}
-                  pdbSequences={pdbSequences}
-                  alignedStructures={alignedStructures}
-                  maxLength={masterData?.alignment_length ?? 0}
-                  nglLoaded={nglLoaded}
-                  msaRef={msaRef}
+                  polymerComponents={polymerComponents}
+                  pdbId={loadedStructure}
+                  onClose={() => {
+                    if (isMonomerView) {
+                      instance?.exitMonomerView();
+                    } else {
+                      setStructureSequenceChainId(null);
+                    }
+                  }}
+                  alignedStructures={isMonomerView ? alignedStructures : undefined}
                   onResidueHover={handleMSAHover}
                   onResidueLeave={handleMSAHoverEnd}
                   onClearColors={handleClearAllAnnotations}

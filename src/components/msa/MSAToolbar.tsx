@@ -22,6 +22,13 @@ interface MSAToolbarProps {
   onJumpToRange  : (start: number, end: number) => void;
   onReset       ?: () => void;
   compact       ?: boolean;
+
+  // Optional toggles (moved from MonomerMSAPanel header)
+  showMasters       ?: boolean;
+  masterCount       ?: number;
+  onShowMastersChange?: (checked: boolean) => void;
+  inRangeOnly       ?: boolean;
+  onInRangeOnlyChange?: (checked: boolean) => void;
 }
 
 export function MSAToolbar({
@@ -31,6 +38,11 @@ export function MSAToolbar({
   onJumpToRange,
   onReset,
   compact = false,
+  showMasters,
+  masterCount,
+  onShowMastersChange,
+  inRangeOnly,
+  onInRangeOnlyChange,
 }: MSAToolbarProps) {
 
   const [jumpStart, setJumpStart] = useState(1);
@@ -111,6 +123,35 @@ export function MSAToolbar({
           >
             <RotateCcw size={14} />
           </button>
+        </>
+      )}
+      {onShowMastersChange != null && (
+        <>
+          <div className="w-px h-4 bg-gray-300" />
+          <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showMasters ?? true}
+              onChange={e => onShowMastersChange(e.target.checked)}
+              className="rounded"
+            />
+            Reference
+            {masterCount != null && <span className="text-gray-400">({masterCount})</span>}
+          </label>
+        </>
+      )}
+      {onInRangeOnlyChange != null && (
+        <>
+          <div className="w-px h-4 bg-gray-300" />
+          <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={inRangeOnly ?? false}
+              onChange={e => onInRangeOnlyChange(e.target.checked)}
+              className="rounded"
+            />
+            In-range only
+          </label>
         </>
       )}
     </div>
