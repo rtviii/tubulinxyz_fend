@@ -218,17 +218,34 @@ export default function StructureProfilePage() {
     dispatch(hideAllVisibility());
   }, [dispatch]);
 
-  // ── Sidebar width (resizable via drag handle) ──
-  const [sidebarWidth, setSidebarWidth] = useState(280);
-  const sidebarDragRef = useRef<{ startX: number; startW: number } | null>(null);
+  const showStructureSeqPanel = !isMonomerView && !!structureSequenceChainId;
+  const showMonomerPanel = isMonomerView && !!activeChainId;
+  const showBottomPanel = showStructureSeqPanel || showMonomerPanel;
 
+  // ── Panel dimensions (independent, capped to avoid overlap) ──
+  const GAP = 12; // min gap between panels
+  const EDGE = 12; // margin from viewport edges
+
+  const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [seqPanelHeight, setSeqPanelHeight] = useState(200);
+  const [seqPanelLeft, setSeqPanelLeft] = useState(300); // independent left edge
+
+  const seqPanelLeftRef = useRef(seqPanelLeft);
+
+  // Refs for drag closures (avoid stale captures)
+  const sidebarWidthRef = useRef(sidebarWidth);
+  useEffect(() => { sidebarWidthRef.current = sidebarWidth; }, [sidebarWidth]);
+
+  // Sidebar width drag
+  const sidebarDragRef = useRef<{ startX: number; startW: number } | null>(null);
   const onSidebarDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     sidebarDragRef.current = { startX: e.clientX, startW: sidebarWidth };
     const onMove = (ev: MouseEvent) => {
       if (!sidebarDragRef.current) return;
       const newW = sidebarDragRef.current.startW + (ev.clientX - sidebarDragRef.current.startX);
-      setSidebarWidth(Math.max(220, Math.min(480, newW)));
+      // Free resize, just keep sane bounds
+      setSidebarWidth(Math.max(220, Math.min(window.innerWidth * 0.5, newW)));
     };
     const onUp = () => {
       sidebarDragRef.current = null;
@@ -239,17 +256,15 @@ export default function StructureProfilePage() {
     window.addEventListener('mouseup', onUp);
   }, [sidebarWidth]);
 
-  // ── Sequence panel height (resizable via drag handle) ──
-  const [seqPanelHeight, setSeqPanelHeight] = useState(200);
+  // Sequence panel height drag (top edge)
   const seqDragRef = useRef<{ startY: number; startH: number } | null>(null);
-
   const onSeqDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     seqDragRef.current = { startY: e.clientY, startH: seqPanelHeight };
     const onMove = (ev: MouseEvent) => {
       if (!seqDragRef.current) return;
       const newH = seqDragRef.current.startH + (seqDragRef.current.startY - ev.clientY);
-      setSeqPanelHeight(Math.max(100, Math.min(500, newH)));
+      setSeqPanelHeight(Math.max(100, Math.min(window.innerHeight - 80, newH)));
     };
     const onUp = () => {
       seqDragRef.current = null;
@@ -260,32 +275,31 @@ export default function StructureProfilePage() {
     window.addEventListener('mouseup', onUp);
   }, [seqPanelHeight]);
 
-  // ── Lifted sidebar tab (for ligand click detection) ──
+  // Sequence panel left-edge drag (width from left)
+  const seqLeftDragRef = useRef<{ startX: number; startL: number } | null>(null);
+  const onSeqLeftDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    seqLeftDragRef.current = { startX: e.clientX, startL: seqPanelLeft };
+    const onMove = (ev: MouseEvent) => {
+      if (!seqLeftDragRef.current) return;
+      const newL = seqLeftDragRef.current.startL + (ev.clientX - seqLeftDragRef.current.startX);
+      // Min: just enough to not go off-screen left. No coupling to sidebar.
+      const minL = EDGE;
+      const maxL = window.innerWidth - 200;
+      const clamped = Math.max(minL, Math.min(maxL, newL));
+      setSeqPanelLeft(clamped);
+      seqPanelLeftRef.current = clamped;
+    };
+    const onUp = () => {
+      seqLeftDragRef.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [seqPanelLeft]);
+
   const [sidebarTab, setSidebarTab] = useState<'chains' | 'ligands'>('chains');
-
-  // ── Ligand click detection: click on ligand in 3D → switch sidebar to Ligands tab ──
-  // Use a ref for ligandComponents to avoid re-subscribing (BehaviorSubject replays last value)
-  const ligandComponentsRef = useRef(ligandComponents);
-  useEffect(() => { ligandComponentsRef.current = ligandComponents; }, [ligandComponents]);
-
-  useEffect(() => {
-    if (!instance || isMonomerView) return;
-    // Skip the first (replayed) emission from BehaviorSubject
-    let first = true;
-    const unsub = instance.viewer.subscribeToClick(info => {
-      if (first) { first = false; return; }
-      if (!info) return;
-      const isLigand = ligandComponentsRef.current.some(
-        l => l.authAsymId === info.chainId && l.authSeqId === info.authSeqId
-      );
-      if (isLigand) setSidebarTab('ligands');
-    });
-    return unsub;
-  }, [instance, isMonomerView]);
-
-  const showStructureSeqPanel = !isMonomerView && !!structureSequenceChainId;
-  const showMonomerPanel = isMonomerView && !!activeChainId;
-  const showBottomPanel = showStructureSeqPanel || showMonomerPanel;
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-gray-200">
@@ -368,10 +382,16 @@ export default function StructureProfilePage() {
       {showBottomPanel && (
         <div
           className="absolute bottom-3 right-3 z-10 pointer-events-none"
-          style={{ left: sidebarWidth + 12, height: seqPanelHeight }}
+          style={{ left: seqPanelLeft, height: seqPanelHeight }}
         >
-          <div className="pointer-events-auto h-full flex flex-col bg-white/95 backdrop-blur-sm shadow-lg rounded-xl border border-slate-200/60 overflow-hidden">
-            {/* Sequence panel resize handle */}
+          <div className="pointer-events-auto h-full flex bg-white/95 backdrop-blur-sm shadow-lg rounded-xl border border-slate-200/60 overflow-hidden">
+            {/* Left-edge resize handle (width) */}
+            <div
+              className="w-1.5 cursor-col-resize bg-transparent hover:bg-blue-400/30 transition-colors flex-shrink-0"
+              onMouseDown={onSeqLeftDragStart}
+            />
+            <div className="flex-1 min-w-0 flex flex-col">
+            {/* Top-edge resize handle (height) */}
             <div
               className="h-1.5 cursor-row-resize bg-transparent hover:bg-blue-400/30 transition-colors flex-shrink-0"
               onMouseDown={onSeqDragStart}
@@ -406,6 +426,7 @@ export default function StructureProfilePage() {
                 />
               )}
             </div>
+            </div>{/* close flex-col wrapper */}
           </div>
         </div>
       )}

@@ -2,7 +2,7 @@
 
 import { useAppSelector } from '@/store/store';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { selectComponentState } from '@/components/molstar/state/selectors';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { getHexForFamily, TUBULIN_GHOST_COLORS } from '@/components/molstar/colors/palette';
@@ -291,7 +291,8 @@ function EntityGroupSection({
   onShowSequence?: (chainId: string | null) => void;
   activeSequenceChainId?: string | null;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  // Auto-collapse entities with many chains
+  const [collapsed, setCollapsed] = useState(group.chains.length > 10);
 
   // Check if any chain in this entity is visible
   const chainIds = useMemo(() => group.chains.map(c => c.chainId), [group.chains]);
@@ -350,6 +351,7 @@ function EntityGroupSection({
           <div className="text-[10px] text-gray-400 flex items-center gap-1.5">
             {organism && <span>{organism}</span>}
             {seqLen ? <span>{seqLen} aa</span> : null}
+            <span>{group.chains.length} chain{group.chains.length !== 1 ? 's' : ''}</span>
           </div>
         </div>
         <div className="flex items-center gap-0.5 flex-shrink-0">
@@ -395,7 +397,7 @@ function EntityGroupSection({
 // ChainRow
 // ────────────────────────────────────────────
 
-function ChainRow({
+const ChainRow = memo(function ChainRow({
   chain,
   instance,
   profile,
@@ -478,7 +480,7 @@ function ChainRow({
       </div>
     </div>
   );
-}
+});
 
 // ────────────────────────────────────────────
 // LigandRow (expandable)
@@ -522,11 +524,9 @@ function LigandRow({
         ${!componentState.visible ? 'opacity-40' : ''}`}
       style={{ borderLeft: `3px solid ${parentColor}` }}
       onMouseEnter={() => {
-        instance?.highlightLigand(ligand.uniqueKey, true);
         if (labelsEnabled) instance?.showComponentLabel(ligand.uniqueKey);
       }}
       onMouseLeave={() => {
-        instance?.highlightLigand(ligand.uniqueKey, false);
         instance?.hideComponentLabel();
       }}
     >

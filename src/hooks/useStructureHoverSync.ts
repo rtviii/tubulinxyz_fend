@@ -80,9 +80,11 @@ export function useStructureHoverSync({
       }
 
       let key: string | null = null;
+      let isLigand = false;
       const ligKey = ligandLookupRef.current.get(`${info.chainId}_${info.authSeqId}`);
       if (ligKey) {
         key = ligKey;
+        isLigand = true;
       } else if (chainIdsRef.current.has(info.chainId)) {
         key = info.chainId;
       }
@@ -95,7 +97,9 @@ export function useStructureHoverSync({
 
       if (key) {
         dispatch(setComponentHovered({ instanceId, componentKey: key, hovered: true }));
-        if (labelsEnabledRef.current) instance.showComponentLabel(key);
+        // Skip label creation for ligands in 3D hover to avoid unwanted camera side-effects.
+        // Ligand labels are shown from sidebar hover instead.
+        if (labelsEnabledRef.current && !isLigand) instance.showComponentLabel(key);
       } else {
         instance.hideComponentLabel();
       }

@@ -1096,6 +1096,9 @@ const color = getMolstarGhostColor(family);
   focusResidue(chainId: string, authSeqId: number): void {
     const structure = this.viewer.getCurrentStructure();
     if (!structure) return;
+    // Clear any stale structure focus (e.g. from a previous focusLigand call)
+    // so it doesn't interfere with the new camera position
+    this.viewer.clearFocus();
     const loci = executeQuery(buildResidueQuery(chainId, authSeqId), structure);
     if (loci) this.viewer.focusLoci(loci);
   }
