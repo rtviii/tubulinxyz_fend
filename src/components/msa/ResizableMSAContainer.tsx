@@ -62,22 +62,17 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       onSoloChain,
     } = props;
 
-    console.log('[ResizableMSAContainer] received sequences:', {
-      count: sequences.length,
-      ids: sequences.map(s => s.id),
-      families: sequences.map(s => s.family),
-    });
 
-    const outerRef = useRef<HTMLDivElement>(null);
-    const msaRef = useRef<any>(null);
-    const navRef = useRef<any>(null);
-    const managerRef = useRef<any>(null);
+    const outerRef                            = useRef<HTMLDivElement>(null);
+    const msaRef                              = useRef<any>(null);
+    const navRef                              = useRef<any>(null);
+    const managerRef                          = useRef<any>(null);
 
     const [availableWidth, setAvailableWidth] = useState(0);
-    const [labelWidth, setLabelWidth] = useState(0);
-    const [scrollTop, setScrollTop] = useState(0);
-    const [isInitialized, setIsInitialized] = useState(false);
-    const baseColorSchemeRef = useRef(colorScheme);
+    const [labelWidth, setLabelWidth]         = useState(0);
+    const [scrollTop, setScrollTop]           = useState(0);
+    const [isInitialized, setIsInitialized]   = useState(false);
+    const baseColorSchemeRef                  = useRef(colorScheme);
 
     // ----------------------------------------------------------------
     // Scroll sync for labels
@@ -141,38 +136,15 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       return () => manager.removeEventListener('change', handler);
     }, [isInitialized, onDisplayRangeChange]);
 
-    useEffect(() => {
-      if (!isInitialized) return;
-
-      const manager = managerRef.current;
-      const nav = navRef.current;
-
-      const logAny = (label: string) => (e: Event) => {
-        console.log(`[MSA event] ${label}`, e.type, (e as CustomEvent).detail);
-      };
-
-      // Cast the net wide - listen on both elements for any likely event name
-      ['change', 'display-start-change', 'position-change', 'updated'].forEach(name => {
-        manager?.addEventListener(name, logAny(`manager:${name}`));
-        nav?.addEventListener(name, logAny(`nav:${name}`));
-      });
-
-      return () => {
-        ['change', 'display-start-change', 'position-change', 'updated'].forEach(name => {
-          manager?.removeEventListener(name, logAny(`manager:${name}`));
-          nav?.removeEventListener(name, logAny(`nav:${name}`));
-        });
-      };
-    }, [isInitialized]);
     // ----------------------------------------------------------------
     // Derived layout
     // ----------------------------------------------------------------
 
-    const msaAreaWidth = showLabels ? availableWidth - labelWidth : availableWidth;
+    const msaAreaWidth    = showLabels ? availableWidth - labelWidth : availableWidth;
     const minContentWidth = maxLength * minTileWidth;
-    const contentWidth = Math.max(msaAreaWidth, minContentWidth);
-    const needsScroll = msaAreaWidth > 0 && contentWidth > msaAreaWidth;
-    const msaHeight = Math.min(sequences.length * rowHeight, maxMsaHeight);
+    const contentWidth    = Math.max(msaAreaWidth, minContentWidth);
+    const needsScroll     = msaAreaWidth > 0 && contentWidth > msaAreaWidth;
+    const msaHeight       = Math.min(sequences.length * rowHeight, maxMsaHeight);
 
     // ----------------------------------------------------------------
     // Imperative helpers
@@ -197,15 +169,15 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
 
       if (nav) {
         nav.setAttribute('width', String(contentWidth));
-        nav.width = contentWidth;
-        nav.style.width = `${contentWidth}px`;
+        nav.width          = contentWidth;
+        nav.style.width    = `${contentWidth}px`;
         nav.style.minWidth = `${contentWidth}px`;
         nav.style.maxWidth = `${contentWidth}px`;
 
         const svg = nav.renderRoot?.querySelector('svg');
         if (svg) {
           svg.setAttribute('width', String(contentWidth));
-          svg.style.width = `${contentWidth}px`;
+          svg.style.width    = `${contentWidth}px`;
           svg.style.minWidth = `${contentWidth}px`;
         }
 
@@ -215,8 +187,8 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
 
       if (msa) {
         msa.setAttribute('width', String(contentWidth));
-        msa.width = contentWidth;
-        msa.style.width = `${contentWidth}px`;
+        msa.width          = contentWidth;
+        msa.style.width    = `${contentWidth}px`;
         msa.style.minWidth = `${contentWidth}px`;
         msa.style.maxWidth = `${contentWidth}px`;
 
@@ -225,8 +197,8 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
         const seqViewer = getSequenceViewer();
         if (seqViewer) {
           seqViewer.setAttribute('width', String(contentWidth));
-          seqViewer.width = contentWidth;
-          seqViewer.style.width = `${contentWidth}px`;
+          seqViewer.width          = contentWidth;
+          seqViewer.style.width    = `${contentWidth}px`;
           seqViewer.style.minWidth = `${contentWidth}px`;
 
           if (typeof seqViewer.invalidateAndRedraw === 'function') {
@@ -275,7 +247,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     const applyCellColors = useCallback((colors: Record<string, string>) => {
       const msa = msaRef.current;
       if (!msa) return;
-      msa.setAttribute('color-scheme', 'custom-position');
+      // Don't override color-scheme -- cell overrides layer on top of the active scheme
       (msa as any).cellColors = colors;
     }, []);
 
@@ -335,7 +307,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
 
       const timer = setTimeout(() => {
         msaRef.current.data = freshData;
-        msaRef.current.setAttribute('color-scheme', 'custom-position');
+        msaRef.current.setAttribute('color-scheme', baseColorSchemeRef.current);
 
         requestAnimationFrame(() => {
           syncWidths();
@@ -472,7 +444,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
                 length={maxLength}
                 display-start="1"
                 display-end={maxLength}
-                color-scheme="custom-position"
+                color-scheme={colorScheme}
                 label-width="0"
                 highlight-event="onmouseover"
                 highlight-color="#00FF0044"

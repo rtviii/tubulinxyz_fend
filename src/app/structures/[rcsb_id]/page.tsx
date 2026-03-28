@@ -109,9 +109,18 @@ export default function StructureProfilePage() {
     () => familySequences.filter(s => s.originType === 'pdb'),
     [familySequences]
   );
+
+  // Build the same display order as the MSA panel: masters first, then PDB.
+  // Master IDs don't match any annotation chainKey, so they produce no rules,
+  // but their presence offsets PDB row indices to match the actual MSA rows.
+  const masterSequenceIds = useMemo(() => {
+    if (!masterData?.sequences || !activeFamily) return [];
+    return masterData.sequences.map((seq: any, i: number) => `master__${activeFamily}__${seq.id}`);
+  }, [masterData, activeFamily]);
+
   const allVisibleSequenceIds = useMemo(
-    () => pdbSequences.map(s => s.id),
-    [pdbSequences]
+    () => [...masterSequenceIds, ...pdbSequences.map(s => s.id)],
+    [masterSequenceIds, pdbSequences]
   );
 
   // Annotation fetchers
@@ -237,7 +246,7 @@ export default function StructureProfilePage() {
 
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [seqPanelHeight, setSeqPanelHeight] = useState(200);
-  const [seqPanelLeft, setSeqPanelLeft] = useState(300); // independent left edge
+  const [seqPanelLeft, setSeqPanelLeft] = useState(12); // independent left edge
 
   const seqPanelLeftRef = useRef(seqPanelLeft);
 

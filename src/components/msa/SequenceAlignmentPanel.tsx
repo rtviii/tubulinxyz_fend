@@ -187,7 +187,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
     }, [allSequences, family]);
 
     // ── Local UI state ──
-    const [colorScheme, setColorScheme] = useState('clustal2');
+    const [colorScheme, setColorScheme] = useState('substitution');
     const [showMasters, setShowMasters] = useState(true);
     const [inRangeOnly, setInRangeOnly] = useState(false);
     const currentRangeRef = useRef<[number, number] | null>(null);
@@ -256,8 +256,8 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
 
     const handleReset = useCallback(() => {
       onClearColors?.();
-      setColorScheme('clustal2');
-      msaRef.current?.setColorScheme('clustal2');
+      setColorScheme('substitution');
+      msaRef.current?.setColorScheme('substitution');
     }, [onClearColors]);
 
     // ── MSA interaction callbacks ──

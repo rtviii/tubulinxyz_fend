@@ -19,22 +19,22 @@ import type { VariantType } from '@/store/slices/annotationsSlice';
 import type { TubulinStructure } from '@/store/tubxz_api';
 
 interface AlignedInfo {
-  id: string;
+  id           : string;
   targetChainId: string;
-  rmsd: number | null;
-  visible: boolean;
+  rmsd         : number | null;
+  visible      : boolean;
 }
 
 interface ChainRowProps {
-  chainKey: string;
-  pdbId: string;
-  chainId: string;
-  isPrimary: boolean;
-  family?: string;
-  aligned?: AlignedInfo;
-  instance: MolstarInstance | null;
-  msaRef: React.RefObject<MSAHandle>;
-  onSolo?: (chainKey: string) => void;
+  chainKey  : string;
+  pdbId     : string;
+  chainId   : string;
+  isPrimary : boolean;
+  family   ?: string;
+  aligned  ?: AlignedInfo;
+  instance  : MolstarInstance | null;
+  msaRef    : React.RefObject<MSAHandle>;
+  onSolo   ?: (chainKey: string) => void;
 }
 
 const FAMILY_SHORT: Record<string, string> = {
@@ -92,10 +92,10 @@ export function ChainRow({
   const dispatch = useAppDispatch();
   const [expanded, setExpanded] = useState(isPrimary);
 
-  const hoveredChainKey = useAppSelector(selectHoveredChainKey);
+  const hoveredChainKey  = useAppSelector(selectHoveredChainKey);
   const selectedChainKey = useAppSelector(selectSelectedChainKey);
-  const isHovered = hoveredChainKey === chainKey;
-  const isSelected = selectedChainKey === chainKey;
+  const isHovered        = hoveredChainKey  === chainKey;
+  const isSelected       = selectedChainKey === chainKey;
 
   const { data: chainProfile } = useGetStructureProfileQuery(
     { rcsbId: pdbId },
@@ -149,11 +149,13 @@ export function ChainRow({
     const site = ligandSites.find(s => s.id === siteId);
     if (!site || site.masterIndices.length === 0) return;
     const start = Math.min(...site.masterIndices);
-    const end = Math.max(...site.masterIndices);
+    const end   = Math.max(...site.masterIndices);
     msaRef.current?.jumpToRange(start, end);
+
     if (isPrimary && instance && site.authSeqIds.length > 0) {
       instance.focusResidueRange(chainId, Math.min(...site.authSeqIds), Math.max(...site.authSeqIds));
     }
+
   }, [msaRef, isPrimary, instance, ligandSites, chainId]);
 
   // ── Aligned chain actions ──

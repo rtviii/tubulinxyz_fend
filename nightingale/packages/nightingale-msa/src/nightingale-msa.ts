@@ -63,6 +63,9 @@ class NightingaleMSA extends withManager(
 
   constructor() {
     super();
+    this.worker.onerror = (err) => {
+      console.error('[NightingaleMSA] conservation worker ERROR:', err.message, err);
+    };
     this.worker.onmessage = (e) => {
       this.dispatchEvent(
         new CustomEvent("conservationProgress", {
@@ -75,6 +78,7 @@ class NightingaleMSA extends withManager(
           ...e.data,
           map: e.data.conservation,
         };
+        console.log('[NightingaleMSA] conservation worker done, map length:', conservation.map?.length, 'sequenceViewer exists:', !!this.sequenceViewer);
         this.sequenceViewer?.setProp("conservation", conservation);
       }
     };
@@ -90,6 +94,7 @@ set cellColors(val: Record<string, string>) {
   }
 }
   set data(sequences: SequencesMSA) {
+    console.log('[NightingaleMSA] data setter called, sequences:', sequences.length, 'sequenceViewer:', !!this.sequenceViewer, 'colorScheme:', this.colorScheme);
     this.length = Math.max(...sequences.map(({ sequence }) => sequence.length));
     const seqs = {
       raw: sequences,
@@ -100,6 +105,7 @@ set cellColors(val: Record<string, string>) {
     if (this.labelPanel)
       this.labelPanel.labels = sequences.map(({ name }) => name);
 
+    console.log('[NightingaleMSA] posting to conservation worker...');
     this.worker.postMessage({ sequences, sampleSize: this.sampleSize });
   }
 

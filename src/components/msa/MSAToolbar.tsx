@@ -13,6 +13,8 @@ const BUILTIN_SCHEMES = [
   { id: 'cinema', name: 'Cinema' },
   { id: 'helix', name: 'Helix Propensity' },
   { id: 'strand', name: 'Strand Propensity' },
+  { id: 'conservation', name: 'Conservation' },
+  { id: 'substitution', name: 'Substitution Salience' },
 ] as const;
 
 interface MSAToolbarProps {
