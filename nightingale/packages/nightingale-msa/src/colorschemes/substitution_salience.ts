@@ -10,12 +10,12 @@ const CONSENSUS_FLOOR = 0.40;
 const COMMON_THRESHOLD = 0.30;
 
 // --- Colors ---
-const COLOR_GAP = "#ffffff";
-const COLOR_CONSENSUS = "#f0f0f0";
-const COLOR_AMBIGUOUS = "#e5e1db";
-const COLOR_COMMON_SUB = "#9db5cf";
-const COLOR_RARE_CONSERV = "#5d9ec2";
-const COLOR_RARE_RADICAL = "#d06060";
+const COLOR_GAP          = "#ffffff";
+const COLOR_CONSENSUS    = "#f0f0f0";
+const COLOR_AMBIGUOUS    = "#cdc4b4";
+const COLOR_COMMON_SUB   = "#e8c87a";
+const COLOR_RARE_CONSERV = "#e09850";
+const COLOR_RARE_RADICAL = "#c8553a";
 
 // --- Amino acid property groups ---
 // 0: Hydrophobic aliphatic (A, V, L, I, M)
@@ -69,10 +69,10 @@ PROPERTY_GROUP[24] = 1;
 
 // --- Consensus cache ---
 // Per-column: index of the consensus letter (0-25), or -1 if below floor.
-let consensusCache: Int8Array | null = null;
+let consensusCache: Int8Array | null        = null;
 let consensusFreqCache: Float32Array | null = null;
-let cachedMapRef: ArrayLike<number> | null = null;
-let _loggedOnce = false;
+let cachedMapRef: ArrayLike<number> | null  = null;
+let _loggedOnce                             = false;
 
 const substitutionSalience: ColorStructure = {
   init: function () {
@@ -162,11 +162,11 @@ const substitutionSalience: ColorStructure = {
   },
 
   map: {
-    "Consensus": COLOR_CONSENSUS,
-    "Ambiguous column": COLOR_AMBIGUOUS,
+    "Consensus"          : COLOR_CONSENSUS,
+    "Ambiguous column"   : COLOR_AMBIGUOUS,
     "Common substitution": COLOR_COMMON_SUB,
     "Conservative (rare)": COLOR_RARE_CONSERV,
-    "Radical (rare)": COLOR_RARE_RADICAL,
+    "Radical (rare)"     : COLOR_RARE_RADICAL,
   },
 };
 

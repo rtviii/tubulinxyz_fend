@@ -237,6 +237,10 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
     // ============================================================
 
     const handleMolstarHover = useCallback((chainId: string, authSeqId: number) => {
+        // Only highlight when hovering over the chain currently shown in MSA
+        const activeAuth = authAsymIdFromChainKey(chainKeyRef.current);
+        if (chainId !== activeAuth) return;
+
         const masterIdx = authToMasterRef.current[authSeqId];
         if (masterIdx !== undefined && msaRef.current) {
             msaRef.current.setHighlight(masterIdx, masterIdx);
