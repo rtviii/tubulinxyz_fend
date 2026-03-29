@@ -278,11 +278,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
     useEffect(() => {
         if (!molstarInstance?.viewer) return;
         const unsubscribe = molstarInstance.viewer.subscribeToClick((info) => {
-            if (!info) {
-                molstarInstance.clearFocus();
-                molstarInstance.viewer.resetCamera();
-                return;
-            }
+            if (!info) return;
             const now = Date.now();
             const last = lastClickTimeRef.current;
             const lastInfo = lastClickInfoRef.current;

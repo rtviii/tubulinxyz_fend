@@ -188,6 +188,8 @@ export class MolstarViewer {
     }
 
     const subscription = this.ctx.behaviors.interaction.click.subscribe((e) => {
+      // Ignore right-clicks (secondary button) -- those trigger context menus, not selection
+      if ((e as any).button === 2) return;
       if (StructureElement.Loci.is(e.current.loci) && !StructureElement.Loci.isEmpty(e.current.loci)) {
         let emitted = false;
         StructureElement.Loci.forEachLocation(e.current.loci, (location) => {

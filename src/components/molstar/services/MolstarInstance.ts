@@ -1145,6 +1145,24 @@ const color = getMolstarGhostColor(family);
     if (loci) this.viewer.focusLoci(loci);
   }
 
+  /** Get the 3D center position of a residue (average of all atom positions). */
+  getResidueCenterPosition(chainId: string, authSeqId: number): [number, number, number] | null {
+    const structure = this.viewer.getCurrentStructure();
+    if (!structure) return null;
+    const loci = executeQuery(buildResidueQuery(chainId, authSeqId), structure);
+    if (!loci) return null;
+
+    let sumX = 0, sumY = 0, sumZ = 0, count = 0;
+    StructureElement.Loci.forEachLocation(loci, (location) => {
+      sumX += StructureProperties.atom.x(location);
+      sumY += StructureProperties.atom.y(location);
+      sumZ += StructureProperties.atom.z(location);
+      count++;
+    });
+    if (count === 0) return null;
+    return [sumX / count, sumY / count, sumZ / count];
+  }
+
   triggerNeighborhoodFocus(chainId: string, authSeqId: number): void {
     const structure = this.viewer.getCurrentStructure();
     if (!structure) return;

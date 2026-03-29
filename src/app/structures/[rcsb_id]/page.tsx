@@ -6,7 +6,7 @@ import { useAppSelector, useAppDispatch } from '@/store/store';
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
 
 import { useStructureHoverSync } from '@/hooks/useStructureHoverSync';
-import { selectSequencesForFamily, selectPositionMapping } from '@/store/slices/sequence_registry';
+import { selectSequencesForFamily } from '@/store/slices/sequence_registry';
 import {
   selectLoadedStructure,
   selectPolymerComponents,
@@ -24,9 +24,9 @@ import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { StructureSidebar } from '@/components/structure/StructureSidebar';
 import { ViewerToolbar } from '@/components/structure/ViewerToolbar';
 import { MonomerSidebar } from '@/components/monomer/MonomerSidebar';
-import { SequenceAlignmentPanel } from '@/components/msa/SequenceAlignmentPanel';
-import { ResidueContextMenu, type ContextMenuTarget } from '@/components/msa/ResidueContextMenu';
-import { MolstarResiduePopup, type MolstarPopupTarget } from '@/components/molstar/overlay/MolstarResiduePopup';
+import { SequenceAlignmentPanel, type MSAContextMenuEvent } from '@/components/msa/SequenceAlignmentPanel';
+import { ResiduePopupLayer } from '@/components/residue_popup/ResiduePopup';
+import type { ResiduePopupTarget } from '@/components/residue_popup/types';
 import { API_BASE_URL } from '@/config';
 import type { MSAHandle } from '@/components/msa/types';
 import { makeChainKey } from '@/lib/chain_key';
@@ -162,39 +162,83 @@ export default function StructureProfilePage() {
     onMolstarResidueSelect: handleMolstarResidueSelect,
   });
 
-  // ── Residue context menus ──
-  // MSA right-click: static dropdown
-  const [contextMenuTarget, setContextMenuTarget] = useState<ContextMenuTarget | null>(null);
-  // Molstar right-click: 3D-anchored popup with connector line
-  const [molstarPopupTarget, setMolstarPopupTarget] = useState<MolstarPopupTarget | null>(null);
+  // ── Residue popups (multi-popup, unified for MSA + Molstar) ──
+  const [popups, setPopups] = useState<ResiduePopupTarget[]>([]);
 
+  const addPopup = useCallback((target: ResiduePopupTarget) => {
+    setPopups(prev => {
+      const filtered = prev.filter(p => p.id !== target.id);
+      return [...filtered, target];
+    });
+  }, []);
+
+  const removePopup = useCallback((id: string) => {
+    setPopups(prev => prev.filter(p => p.id !== id));
+  }, []);
+
+  const clearPopups = useCallback(() => setPopups([]), []);
+
+  // Molstar right-click → anchored popup
   const handleMolstarContextMenu = useCallback((e: React.MouseEvent) => {
     const hovered = lastHoveredMolstarResidueRef.current;
     if (!hovered || !hovered.position3d) return;
     e.preventDefault();
-
-    // Close MSA menu if open
-    setContextMenuTarget(null);
 
     const { chainId: hovChainId, authSeqId, masterIdx, position3d } = hovered;
     let residueLetter = '?';
     let chainLabel = `${loadedStructure}:${hovChainId}`;
     const seq = pdbSequences.find(s => s.chainRef?.chainId === hovChainId);
     if (seq) {
-      const col = masterIdx - 1;
-      residueLetter = seq.sequence[col] ?? '?';
+      residueLetter = seq.sequence[masterIdx - 1] ?? '?';
       if (seq.chainRef) chainLabel = `${seq.chainRef.pdbId}:${seq.chainRef.chainId}`;
     }
 
-    setMolstarPopupTarget({
+    addPopup({
+      id: `${chainLabel}:${authSeqId}`,
       residueLetter,
-      chainLabel,
+      label: chainLabel,
+      masterIndex: masterIdx,
       authSeqId,
       chainId: hovChainId,
-      masterIndex: masterIdx,
-      position3d,
+      anchor: { mode: 'anchored', position3d },
     });
-  }, [lastHoveredMolstarResidueRef, pdbSequences, loadedStructure]);
+  }, [lastHoveredMolstarResidueRef, pdbSequences, loadedStructure, addPopup]);
+
+  // MSA right-click → anchored (if structural + 3D position available) or static
+  const handleMSAContextMenu = useCallback((event: MSAContextMenuEvent) => {
+    if (event.structural && instance) {
+      // Structural sequence: try to get 3D center for anchored popup
+      const { chainLabel, authSeqId, chainId: cId } = event.structural;
+      const position3d = instance.getResidueCenterPosition(cId, authSeqId);
+      if (position3d) {
+        addPopup({
+          id: `${chainLabel}:${authSeqId}`,
+          residueLetter: event.residueLetter,
+          label: chainLabel,
+          masterIndex: event.masterIndex,
+          authSeqId,
+          chainId: cId,
+          anchor: { mode: 'anchored', position3d },
+        });
+        return;
+      }
+    }
+    // Non-structural or no 3D position: static popup
+    const label = event.structural?.chainLabel ?? event.sequenceName ?? 'Unknown';
+    const idKey = event.structural
+      ? `${event.structural.chainLabel}:${event.structural.authSeqId}`
+      : `${event.sequenceName}:${event.masterIndex}`;
+
+    addPopup({
+      id: idKey,
+      residueLetter: event.residueLetter,
+      label,
+      masterIndex: event.masterIndex,
+      authSeqId: event.structural?.authSeqId,
+      chainId: event.structural?.chainId,
+      anchor: { mode: 'static', screenX: event.screenX, screenY: event.screenY },
+    });
+  }, [instance, addPopup]);
 
 
   // Inside the component, after the existing hook calls:
@@ -488,7 +532,7 @@ export default function StructureProfilePage() {
                   onClearColors={handleClearAllAnnotations}
                   onWindowMaskChange={handleDisplayRangeChange}
                   onWindowMaskClear={clearWindowMask}
-                  onResidueContextMenu={setContextMenuTarget}
+                  onResidueContextMenu={handleMSAContextMenu}
                 />
               )}
             </div>
@@ -496,8 +540,7 @@ export default function StructureProfilePage() {
           </div>
         </div>
       )}
-      <ResidueContextMenu target={contextMenuTarget} onClose={() => setContextMenuTarget(null)} />
-      <MolstarResiduePopup target={molstarPopupTarget} instance={instance} onClose={() => setMolstarPopupTarget(null)} />
+      <ResiduePopupLayer popups={popups} instance={instance} onClose={removePopup} onCloseAll={clearPopups} />
     </div>
   );
 }
