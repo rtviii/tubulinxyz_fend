@@ -1,11 +1,27 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useMemo, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { MSALabels } from './MSALabels';
 import { MsaSequence } from '@/store/slices/sequence_registry';
 
+function computeConservation(sequences: Array<{ sequence: string }>): Float32Array {
+  const A = 'A'.charCodeAt(0);
+  const N = 26;
+  const len = sequences[0]?.sequence.length ?? 0;
+  const map = new Float32Array(len * N);
+  for (const { sequence } of sequences) {
+    for (let j = 0; j < sequence.length; j++) {
+      const idx = sequence[j].toUpperCase().charCodeAt(0) - A;
+      if (idx >= 0 && idx < N) map[j * N + idx]++;
+    }
+  }
+  for (let i = 0; i < map.length; i++) map[i] /= sequences.length;
+  return map;
+}
+
 interface ResizableMSAContainerProps {
   sequences: MsaSequence[];
+  conservationSequences?: MsaSequence[];
   maxLength: number;
   colorScheme?: string;
   minTileWidth?: number;
@@ -45,6 +61,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
   function ResizableMSAContainer(props, ref) {
     const {
       sequences,
+      conservationSequences,
       maxLength,
       colorScheme = 'custom-position',
       minTileWidth = DEFAULTS.minTileWidth,
@@ -70,9 +87,13 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
 
     const [availableWidth, setAvailableWidth] = useState(0);
     const [labelWidth, setLabelWidth]         = useState(0);
+    const [userLabelWidth, setUserLabelWidth] = useState<number | null>(null);
     const [scrollTop, setScrollTop]           = useState(0);
     const [isInitialized, setIsInitialized]   = useState(false);
     const baseColorSchemeRef                  = useRef(colorScheme);
+    const labelDragRef = useRef<{ startX: number; startW: number } | null>(null);
+
+    const effectiveLabelWidth = userLabelWidth ?? labelWidth;
 
     // ----------------------------------------------------------------
     // Scroll sync for labels
@@ -116,6 +137,31 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     }, []);
 
     // ----------------------------------------------------------------
+    // Label panel drag-to-resize
+    // ----------------------------------------------------------------
+
+    const onLabelDragStart = useCallback((e: React.MouseEvent) => {
+      e.preventDefault();
+      labelDragRef.current = { startX: e.clientX, startW: effectiveLabelWidth };
+
+      const onMove = (ev: MouseEvent) => {
+        if (!labelDragRef.current) return;
+        const delta = ev.clientX - labelDragRef.current.startX;
+        const clamped = Math.max(60, Math.min(availableWidth * 0.5, labelDragRef.current.startW + delta));
+        setUserLabelWidth(clamped);
+      };
+
+      const onUp = () => {
+        labelDragRef.current = null;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    }, [effectiveLabelWidth, availableWidth]);
+
+    // ----------------------------------------------------------------
     // Manager change event -> display range
     // ----------------------------------------------------------------
 
@@ -140,7 +186,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     // Derived layout
     // ----------------------------------------------------------------
 
-    const msaAreaWidth    = showLabels ? availableWidth - labelWidth : availableWidth;
+    const msaAreaWidth    = showLabels ? availableWidth - effectiveLabelWidth : availableWidth;
     const minContentWidth = maxLength * minTileWidth;
     const contentWidth    = Math.max(msaAreaWidth, minContentWidth);
     const needsScroll     = msaAreaWidth > 0 && contentWidth > msaAreaWidth;
@@ -292,6 +338,13 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     // Data init
     // ----------------------------------------------------------------
 
+    // Pre-compute master conservation (stable across show/hide toggles).
+    // useMemo so it's ready synchronously before the data init effect runs.
+    const masterConservation = useMemo(() => {
+      if (!conservationSequences || conservationSequences.length === 0) return null;
+      return { progress: 1, map: computeConservation(conservationSequences) };
+    }, [conservationSequences]);
+
     useEffect(() => {
       if (!msaRef.current || sequences.length === 0 || contentWidth === 0) return;
 
@@ -300,14 +353,27 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
         sequence: s.sequence,
       }));
 
-      console.log('[MSA Init] Setting data:', {
-        count: freshData.length,
-        names: freshData.map(d => d.name),
-      });
-
       const timer = setTimeout(() => {
-        msaRef.current.data = freshData;
-        msaRef.current.setAttribute('color-scheme', baseColorSchemeRef.current);
+        const msa = msaRef.current;
+
+        // Set sequences directly on the viewer, bypassing the data setter
+        // which would trigger the conservation worker (we provide our own).
+        const maxLen = Math.max(...freshData.map(d => d.sequence.length));
+        msa.length = maxLen;
+        const seqs = { raw: freshData, length: freshData.length, maxLength: maxLen };
+
+        const seqViewer = msa.renderRoot?.querySelector('msa-sequence-viewer');
+        if (seqViewer) {
+          seqViewer.sequences = seqs;
+
+          // Inject master-only conservation so PDB chains are colored
+          // against the reference alignment, not each other.
+          if (masterConservation) {
+            seqViewer.setProp('conservation', masterConservation);
+          }
+        }
+
+        msa.setAttribute('color-scheme', baseColorSchemeRef.current);
 
         requestAnimationFrame(() => {
           syncWidths();
@@ -401,20 +467,26 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     return (
       <div ref={outerRef} className="w-full h-full flex">
         {showLabels && (
-          <div className="flex-shrink-0 flex flex-col" style={{ width: labelWidth }}>
-            <div style={{ height: navHeight }} className="flex-shrink-0" />
-            <div className="flex-1 overflow-hidden">
-              <MSALabels
-                sequences={sequences}
-                rowHeight={rowHeight}
-                scrollTop={scrollTop}
-                onWidthCalculated={handleLabelWidthCalculated}
-                visibleChainKeys={visibleChainKeys}
-                onToggleChainVisibility={onToggleChainVisibility}
-                onSoloChain={onSoloChain}
-              />
+          <>
+            <div className="flex-shrink-0 flex flex-col" style={{ width: effectiveLabelWidth }}>
+              <div style={{ height: navHeight }} className="flex-shrink-0" />
+              <div className="flex-1 overflow-hidden">
+                <MSALabels
+                  sequences={sequences}
+                  rowHeight={rowHeight}
+                  scrollTop={scrollTop}
+                  onWidthCalculated={handleLabelWidthCalculated}
+                  visibleChainKeys={visibleChainKeys}
+                  onToggleChainVisibility={onToggleChainVisibility}
+                  onSoloChain={onSoloChain}
+                />
+              </div>
             </div>
-          </div>
+            <div
+              className="flex-shrink-0 w-1 cursor-col-resize bg-transparent hover:bg-blue-400/40 active:bg-blue-500/50 transition-colors"
+              onMouseDown={onLabelDragStart}
+            />
+          </>
         )}
 
         <div

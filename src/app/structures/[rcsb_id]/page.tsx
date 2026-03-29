@@ -145,11 +145,14 @@ export default function StructureProfilePage() {
   }, [primaryChainKey, viewMode, dispatch]);
 
 
+  const [selectedMSACell, setSelectedMSACell] = useState<{ row: number; column: number } | null>(null);
+
   const { handleMSAHover, handleMSAHoverEnd, handleDisplayRangeChange, clearWindowMask } = useViewerSync({
     chainKey,
     molstarInstance: instance,
     msaRef,
     visibleSequenceIds: allVisibleSequenceIds,
+    selectedCell: selectedMSACell,
   });
 
 
@@ -440,6 +443,7 @@ export default function StructureProfilePage() {
                   alignedStructures={isMonomerView ? alignedStructures : undefined}
                   onResidueHover={handleMSAHover}
                   onResidueLeave={handleMSAHoverEnd}
+                  onResidueSelect={setSelectedMSACell}
                   onClearColors={handleClearAllAnnotations}
                   onWindowMaskChange={handleDisplayRangeChange}
                   onWindowMaskClear={clearWindowMask}

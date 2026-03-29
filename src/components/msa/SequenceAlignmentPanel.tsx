@@ -16,10 +16,10 @@ import { useGetMasterProfileQuery } from '@/store/tubxz_api';
 import { useAutoAlignFromProfile } from '@/hooks/useChainAlignment';
 import { useNightingaleComponents } from '@/hooks/useNightingaleComponents';
 import { selectPositionMapping } from '@/store/slices/sequence_registry';
-import type { MsaSequence } from '@/store/slices/sequence_registry';
+import type { MsaSequence, PositionMapping } from '@/store/slices/sequence_registry';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { formatFamilyShort } from '@/lib/formatters';
-import { makeChainKey } from '@/lib/chain_key';
+import { makeChainKey, authAsymIdFromChainKey } from '@/lib/chain_key';
 import { ResizableMSAContainer } from './ResizableMSAContainer';
 import { MSAToolbar } from './MSAToolbar';
 import type { MSAHandle } from './types';
@@ -40,6 +40,14 @@ export interface ChainOption {
   uniprotId: string | undefined;
 }
 
+interface SelectedResidue {
+  seqId: string;
+  column: number;
+  residueLetter: string;
+  chainLabel: string;
+  authSeqId: number;
+}
+
 interface SequenceAlignmentPanelProps {
   chainId: string;
   onChainChange: (chainId: string) => void;
@@ -51,8 +59,9 @@ interface SequenceAlignmentPanelProps {
 
   // Monomer-mode extras (optional)
   alignedStructures?: AlignedStructure[];
-  onResidueHover?: (position: number) => void;
+  onResidueHover?: (seqId: string, position: number) => void;
   onResidueLeave?: () => void;
+  onResidueSelect?: (cell: { row: number; column: number } | null) => void;
   onClearColors?: () => void;
   onWindowMaskChange?: (masterStart: number, masterEnd: number) => void;
   onWindowMaskClear?: () => void;
@@ -101,6 +110,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       alignedStructures = [],
       onResidueHover,
       onResidueLeave,
+      onResidueSelect,
       onClearColors,
       onWindowMaskChange,
       onWindowMaskClear,
@@ -266,9 +276,26 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
     const positionMapping = useAppSelector(state =>
       sequenceKey ? selectPositionMapping(state, sequenceKey) : null
     );
+    const allPositionMappings = useAppSelector(state => state.sequenceRegistry.positionMappings);
+
+    // ── Persistent residue selection ──
+    const [selectedResidue, setSelectedResidue] = useState<SelectedResidue | null>(null);
+
+    // Clear selection on chain or family change
+    useEffect(() => {
+      setSelectedResidue(null);
+      onResidueSelect?.(null);
+    }, [chainId, family]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Recompute the display row index for the selected residue (handles reordering)
+    const selectedRow = useMemo(() => {
+      if (!selectedResidue) return null;
+      const idx = displaySequences.findIndex(s => s.id === selectedResidue.seqId);
+      return idx >= 0 ? idx : null;
+    }, [selectedResidue, displaySequences]);
 
     const handleResidueHover = useCallback(
-      (_seqId: string, position: number) => onResidueHover?.(position),
+      (seqId: string, position: number) => onResidueHover?.(seqId, position),
       [onResidueHover]
     );
 
@@ -277,16 +304,45 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       [onResidueLeave]
     );
 
-    // MSA click -> focus residue in Molstar 3D
+    // MSA click -> select residue + focus in Molstar 3D
     const handleResidueClick = useCallback(
-      (_seqId: string, position: number) => {
-        if (!instance || !positionMapping) return;
-        const authSeqId = positionMapping[position + 1];
-        if (authSeqId !== undefined) {
-          instance.focusResidue(chainId, authSeqId);
+      (seqId: string, position: number) => {
+        const seq = displaySequences.find(s => s.id === seqId);
+        if (!seq || seq.originType !== 'pdb' || !seq.chainRef) return;
+
+        const ck = makeChainKey(seq.chainRef.pdbId, seq.chainRef.chainId);
+        const mapping: PositionMapping | null = ck === sequenceKey
+          ? positionMapping
+          : allPositionMappings[ck] ?? null;
+        if (!mapping) return;
+
+        const authSeqId = mapping[position + 1];
+        if (authSeqId === undefined) return;
+
+        // Toggle: clicking the same cell deselects
+        if (selectedResidue && selectedResidue.seqId === seqId && selectedResidue.column === position) {
+          setSelectedResidue(null);
+          onResidueSelect?.(null);
+        } else {
+          const residueLetter = seq.sequence[position] ?? '?';
+          const seqIdx = displaySequences.findIndex(s => s.id === seqId);
+          setSelectedResidue({
+            seqId,
+            column: position,
+            residueLetter,
+            chainLabel: `${seq.chainRef.pdbId}:${seq.chainRef.chainId}`,
+            authSeqId,
+          });
+          onResidueSelect?.(seqIdx >= 0 ? { row: seqIdx, column: position } : null);
+        }
+
+        // Still focus camera
+        if (instance) {
+          const authAsymId = authAsymIdFromChainKey(ck);
+          instance.focusResidue(authAsymId, authSeqId);
         }
       },
-      [instance, positionMapping, chainId]
+      [displaySequences, instance, positionMapping, sequenceKey, allPositionMappings, selectedResidue, onResidueSelect]
     );
 
     // ── Loading state ──
@@ -325,6 +381,19 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
             flash={flash}
             inline
           />
+          {selectedResidue && (
+            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-50 border border-green-200 rounded text-[10px] flex-shrink-0">
+              <span className="font-mono font-bold text-green-800">{selectedResidue.residueLetter}</span>
+              <span className="text-green-700">{selectedResidue.chainLabel}</span>
+              <span className="text-green-500">#{selectedResidue.authSeqId}</span>
+              <button
+                onClick={() => { setSelectedResidue(null); onResidueSelect?.(null); }}
+                className="text-green-400 hover:text-green-600"
+              >
+                <X size={10} />
+              </button>
+            </div>
+          )}
           <div className="flex-1 min-w-0 overflow-x-auto">
             <MSAToolbar
               currentScheme={colorScheme}
@@ -345,9 +414,10 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
         {/* MSA content */}
         <div className="flex-1 min-h-0 p-2">
           <ResizableMSAContainer
-            key={`msa-${family}-${showMasters ? 'wm' : 'nm'}`}
+            key={`msa-${family}`}
             ref={msaRef}
             sequences={displaySequences}
+            conservationSequences={masterSequences}
             maxLength={maxLength}
             colorScheme={colorScheme}
             onResidueHover={handleResidueHover}

@@ -300,6 +300,24 @@ private componentLabelText(key: string, component: Component): string {
     }
   }
 
+  highlightAlignedResidue(
+    targetChainId: string,
+    alignedStructureId: string,
+    sourceChainId: string,
+    authSeqId: number,
+    highlight: boolean
+  ): void {
+    if (!highlight) { this.viewer.highlightLoci(null); return; }
+    const chainState = this.getMonomerChainState(targetChainId);
+    const aligned = chainState?.alignedStructures[alignedStructureId];
+    if (!aligned) return;
+
+    const structure = this.viewer.getStructureFromRef(aligned.chainComponentRef);
+    if (!structure) return;
+    const loci = executeQuery(buildResidueQuery(sourceChainId, authSeqId), structure);
+    this.viewer.highlightLoci(loci);
+  }
+
   /**
    * Iterate all visible aligned structures for the active chain
    * and return their Redux entries.

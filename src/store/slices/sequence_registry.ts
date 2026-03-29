@@ -17,6 +17,7 @@ export interface MsaSequence {
   originType: SequenceOriginType;
   chainRef?: ChainRef;
   family?: string;
+  organism?: string;
 }
 
 export type PositionMapping = Record<number, number>;
@@ -46,8 +47,9 @@ export const sequenceRegistrySlice = createSlice({
       originType: SequenceOriginType;
       chainRef?: ChainRef;
       family?: string;
+      organism?: string;
     }>) => {
-      const { id, name, sequence, originType, chainRef, family } = action.payload;
+      const { id, name, sequence, originType, chainRef, family, organism } = action.payload;
       const existingRowIndex = state.sequences[id]?.rowIndex;
 
       state.sequences[id] = {
@@ -58,6 +60,7 @@ export const sequenceRegistrySlice = createSlice({
         originType,
         chainRef,
         family,
+        organism,
       };
 
       if (existingRowIndex === undefined) {

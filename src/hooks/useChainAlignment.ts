@@ -144,6 +144,7 @@ export function useChainAlignment() {
           originType: 'pdb',
           chainRef: { pdbId, chainId },
           family: entity.family ?? undefined,
+          organism: entity.src_organism_names?.[0] ?? undefined,
         })
       );
 

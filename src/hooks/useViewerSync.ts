@@ -17,11 +17,12 @@ interface UseViewerSyncOptions {
     molstarInstance: MolstarInstance | null;
     msaRef: React.RefObject<MSAHandle>;
     visibleSequenceIds: string[];
+    selectedCell?: { row: number; column: number } | null;
 }
 
 const selectRulesForVisible = makeSelectActiveColorRulesForSequenceIds();
 
-export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequenceIds }: UseViewerSyncOptions) {
+export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequenceIds, selectedCell }: UseViewerSyncOptions) {
     const colorRules = useAppSelector(state => selectRulesForVisible(state, visibleSequenceIds));
     const positionMapping = useAppSelector(state => selectPositionMapping(state, chainKey));
 
@@ -171,6 +172,10 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
                     cellColors[`${cell.row}-${cell.column}`] = rule.color;
                 }
             }
+            // Merge persistent residue selection highlight
+            if (selectedCell) {
+                cellColors[`${selectedCell.row}-${selectedCell.column}`] = '#22c55e';
+            }
             if (Object.keys(cellColors).length > 0) {
                 msaRef.current.applyCellColors(cellColors);
             } else {
@@ -187,7 +192,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
             if (colorSyncTimerRef.current) clearTimeout(colorSyncTimerRef.current);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [colorRules, molstarInstance, msaRef, chainKey, alignedIds]);
+    }, [colorRules, molstarInstance, msaRef, chainKey, alignedIds, selectedCell]);
 
     // ============================================================
     // Click handlers
@@ -251,14 +256,38 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         msaRef.current?.clearHighlight();
     }, [msaRef]);
 
-    const handleMSAHover = useCallback((position: number) => {
-        if (!molstarInstance || !positionMapping) return;
-        const authSeqId = positionMapping[position + 1];
-        if (authSeqId !== undefined) {
+    const handleMSAHover = useCallback((seqId: string, position: number) => {
+        if (!molstarInstance) return;
+        // Master/custom sequences have no 3D representation
+        if (!seqId || seqId.startsWith('master__')) return;
+
+        const candidateChainKey = seqId; // PDB seq id IS the chainKey
+        const mapping = candidateChainKey === chainKey
+            ? positionMapping
+            : allPositionMappings[candidateChainKey] ?? null;
+        if (!mapping) return;
+
+        const authSeqId = mapping[position + 1];
+        if (authSeqId === undefined) return;
+
+        if (candidateChainKey === chainKey) {
+            // Primary chain
             const authAsymId = authAsymIdFromChainKey(chainKey);
             molstarInstance.highlightResidue(authAsymId, authSeqId, true);
+        } else {
+            // Aligned chain
+            const alignedInfo = alignedByChainKey.current[candidateChainKey];
+            if (alignedInfo) {
+                molstarInstance.highlightAlignedResidue(
+                    alignedInfo.targetChainId,
+                    alignedInfo.id,
+                    alignedInfo.sourceChainId,
+                    authSeqId,
+                    true
+                );
+            }
         }
-    }, [molstarInstance, positionMapping, chainKey]);
+    }, [molstarInstance, positionMapping, chainKey, allPositionMappings]);
 
     const handleMSAHoverEnd = useCallback(() => {
         molstarInstance?.clearHighlight();
