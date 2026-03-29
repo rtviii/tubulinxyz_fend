@@ -11,16 +11,17 @@ import {
   useImperativeHandle,
 } from 'react';
 import { X } from 'lucide-react';
-import { useAppSelector } from '@/store/store';
+import { useAppSelector, useAppDispatch } from '@/store/store';
 import { useGetMasterProfileQuery } from '@/store/tubxz_api';
 import { useAutoAlignFromProfile } from '@/hooks/useChainAlignment';
 import { useNightingaleComponents } from '@/hooks/useNightingaleComponents';
 import { selectPositionMapping } from '@/store/slices/sequence_registry';
+import { setHoveredChain } from '@/store/slices/chainFocusSlice';
 import type { MsaSequence, PositionMapping } from '@/store/slices/sequence_registry';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { formatFamilyShort } from '@/lib/formatters';
 import { makeChainKey, authAsymIdFromChainKey } from '@/lib/chain_key';
-import { ResizableMSAContainer } from './ResizableMSAContainer';
+import { ResizableMSAContainer, type ResizableMSAContainerHandle } from './ResizableMSAContainer';
 import { MSAToolbar } from './MSAToolbar';
 import type { MSAHandle } from './types';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
@@ -61,7 +62,7 @@ interface SequenceAlignmentPanelProps {
   alignedStructures?: AlignedStructure[];
   onResidueHover?: (seqId: string, position: number) => void;
   onResidueLeave?: () => void;
-  onResidueSelect?: (cell: { row: number; column: number } | null) => void;
+  onChainRowMapChange?: (map: Record<string, { chainKey: string; displayRow: number }>) => void;
   onClearColors?: () => void;
   onWindowMaskChange?: (masterStart: number, masterEnd: number) => void;
   onWindowMaskClear?: () => void;
@@ -110,16 +111,21 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       alignedStructures = [],
       onResidueHover,
       onResidueLeave,
-      onResidueSelect,
+      onChainRowMapChange,
       onClearColors,
       onWindowMaskChange,
       onWindowMaskClear,
     } = props;
 
-    const msaRef = useRef<MSAHandle>(null);
+    const msaRef = useRef<ResizableMSAContainerHandle>(null);
+
+    const dispatch = useAppDispatch();
 
     // Nightingale web components must be loaded before rendering
     const { areLoaded: nglLoaded } = useNightingaleComponents();
+
+    // Ref to avoid stale closure in imperative handle
+    const selectResidueImplRef = useRef<(chainKey: string, masterIdx: number, authSeqId: number) => void>(() => {});
 
     // Expose MSAHandle to parent
     useImperativeHandle(ref, () => ({
@@ -127,10 +133,15 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       jumpToRange: (s, e) => msaRef.current?.jumpToRange(s, e),
       setColorScheme: (s) => msaRef.current?.setColorScheme(s),
       setHighlight: (s, e) => msaRef.current?.setHighlight(s, e),
+      setCellHighlight: (r, c) => msaRef.current?.setCellHighlight(r, c),
+      setCrosshairHighlight: (r, c) => msaRef.current?.setCrosshairHighlight(r, c),
       clearHighlight: () => msaRef.current?.clearHighlight(),
+      setSelectionHighlight: (r, c) => msaRef.current?.setSelectionHighlight(r, c),
+      clearSelectionHighlight: () => msaRef.current?.clearSelectionHighlight(),
       applyPositionColors: (c) => msaRef.current?.applyPositionColors(c),
       applyCellColors: (c) => msaRef.current?.applyCellColors(c),
       clearPositionColors: () => msaRef.current?.clearPositionColors(),
+      selectResidueByChainKey: (ck, mi, as) => selectResidueImplRef.current(ck, mi, as),
     }));
 
     // ── Derived family from chainId ──
@@ -209,6 +220,19 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       [masterSequences, pdbSequences, showMasters]
     );
 
+    // Emit chain-to-row mapping for Molstar hover crosshair
+    useEffect(() => {
+      if (!onChainRowMapChange) return;
+      const map: Record<string, { chainKey: string; displayRow: number }> = {};
+      displaySequences.forEach((seq, idx) => {
+        if (seq.originType === 'pdb' && seq.chainRef) {
+          const ck = makeChainKey(seq.chainRef.pdbId, seq.chainRef.chainId);
+          map[seq.chainRef.chainId] = { chainKey: ck, displayRow: idx };
+        }
+      });
+      onChainRowMapChange(map);
+    }, [displaySequences]); // eslint-disable-line react-hooks/exhaustive-deps
+
     // ── Visibility for aligned structures ──
     const visibleChainKeys = useMemo(() => {
       const set = new Set<string>();
@@ -284,27 +308,57 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
     // Clear selection on chain or family change
     useEffect(() => {
       setSelectedResidue(null);
-      onResidueSelect?.(null);
+      msaRef.current?.clearSelectionHighlight();
+      instance?.viewer.clearSelection();
     }, [chainId, family]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Recompute the display row index for the selected residue (handles reordering)
-    const selectedRow = useMemo(() => {
-      if (!selectedResidue) return null;
+    // Recompute selection highlight row when displaySequences changes (e.g. Reference toggle)
+    useEffect(() => {
+      if (!selectedResidue) return;
       const idx = displaySequences.findIndex(s => s.id === selectedResidue.seqId);
-      return idx >= 0 ? idx : null;
-    }, [selectedResidue, displaySequences]);
+      if (idx >= 0) {
+        msaRef.current?.setSelectionHighlight(idx, selectedResidue.column);
+      } else {
+        msaRef.current?.clearSelectionHighlight();
+      }
+    }, [displaySequences]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleResidueHover = useCallback(
-      (seqId: string, position: number) => onResidueHover?.(seqId, position),
-      [onResidueHover]
+      (seqId: string, position: number) => {
+        // Highlight in the MSA itself
+        const seq = displaySequences.find(s => s.id === seqId);
+        if (seq && seq.originType === 'pdb') {
+          // Structural sequence: crosshair (dim column + bold cell)
+          const rowIdx = displaySequences.indexOf(seq);
+          if (rowIdx >= 0) msaRef.current?.setCrosshairHighlight(rowIdx, position);
+          // Highlight label row
+          if (seq.chainRef) {
+            dispatch(setHoveredChain(makeChainKey(seq.chainRef.pdbId, seq.chainRef.chainId)));
+          }
+        } else {
+          // Non-structural (master/custom): highlight whole column
+          msaRef.current?.setHighlight(position + 1, position + 1);
+          dispatch(setHoveredChain(null));
+        }
+        // Forward to Molstar highlight
+        onResidueHover?.(seqId, position);
+      },
+      [onResidueHover, displaySequences, dispatch]
     );
 
     const handleResidueLeave = useCallback(
-      () => onResidueLeave?.(),
-      [onResidueLeave]
+      () => {
+        msaRef.current?.clearHighlight();
+        dispatch(setHoveredChain(null));
+        onResidueLeave?.();
+      },
+      [onResidueLeave, dispatch]
     );
 
-    // MSA click -> select residue + focus in Molstar 3D
+    // MSA click -> select residue in MSA + Molstar; double-click -> focus camera
+    const lastMSAClickRef = useRef<{ seqId: string; position: number; time: number } | null>(null);
+    const DOUBLE_CLICK_MS = 300;
+
     const handleResidueClick = useCallback(
       (seqId: string, position: number) => {
         const seq = displaySequences.find(s => s.id === seqId);
@@ -318,11 +372,26 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
 
         const authSeqId = mapping[position + 1];
         if (authSeqId === undefined) return;
+        const authAsymId = authAsymIdFromChainKey(ck);
+
+        // Double-click detection -> focus camera + MSA range adjustment
+        const now = Date.now();
+        const last = lastMSAClickRef.current;
+        if (last && last.seqId === seqId && last.position === position && now - last.time < DOUBLE_CLICK_MS) {
+          lastMSAClickRef.current = null;
+          if (instance) instance.focusResidue(authAsymId, authSeqId);
+          const WINDOW = 15;
+          const masterIdx = position + 1;
+          msaRef.current?.jumpToRange(Math.max(1, masterIdx - WINDOW), masterIdx + WINDOW);
+          return;
+        }
+        lastMSAClickRef.current = { seqId, position, time: now };
 
         // Toggle: clicking the same cell deselects
         if (selectedResidue && selectedResidue.seqId === seqId && selectedResidue.column === position) {
           setSelectedResidue(null);
-          onResidueSelect?.(null);
+          msaRef.current?.clearSelectionHighlight();
+          instance?.viewer.clearSelection();
         } else {
           const residueLetter = seq.sequence[position] ?? '?';
           const seqIdx = displaySequences.findIndex(s => s.id === seqId);
@@ -333,17 +402,69 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
             chainLabel: `${seq.chainRef.pdbId}:${seq.chainRef.chainId}`,
             authSeqId,
           });
-          onResidueSelect?.(seqIdx >= 0 ? { row: seqIdx, column: position } : null);
-        }
+          // Highlight selection in MSA
+          if (seqIdx >= 0) msaRef.current?.setSelectionHighlight(seqIdx, position);
 
-        // Still focus camera
-        if (instance) {
-          const authAsymId = authAsymIdFromChainKey(ck);
-          instance.focusResidue(authAsymId, authSeqId);
+          // Select in Molstar (clear everything first to ensure single selection across all chains)
+          if (instance) {
+            instance.viewer.clearSelection();
+            if (ck === sequenceKey) {
+              instance.selectResidue(authAsymId, authSeqId);
+            } else {
+              const aligned = alignedStructures.find(
+                a => makeChainKey(a.sourcePdbId, a.sourceChainId) === ck
+              );
+              if (aligned) {
+                instance.selectAlignedResidue(aligned.targetChainId, aligned.id, aligned.sourceChainId, authSeqId);
+              }
+            }
+          }
         }
       },
-      [displaySequences, instance, positionMapping, sequenceKey, allPositionMappings, selectedResidue, onResidueSelect]
+      [displaySequences, instance, positionMapping, sequenceKey, allPositionMappings, selectedResidue, alignedStructures]
     );
+
+    // Imperative select from Molstar click
+    selectResidueImplRef.current = (ck: string, masterIdx: number, authSeqId: number) => {
+      const column = masterIdx - 1; // convert 1-based master to 0-based column
+      const seq = displaySequences.find(s => s.id === ck);
+      if (!seq || seq.originType !== 'pdb' || !seq.chainRef) return;
+      const seqIdx = displaySequences.indexOf(seq);
+
+      // Toggle if same residue
+      if (selectedResidue && selectedResidue.seqId === ck && selectedResidue.column === column) {
+        setSelectedResidue(null);
+        msaRef.current?.clearSelectionHighlight();
+        instance?.viewer.clearSelection();
+        return;
+      }
+
+      const residueLetter = seq.sequence[column] ?? '?';
+      setSelectedResidue({
+        seqId: ck,
+        column,
+        residueLetter,
+        chainLabel: `${seq.chainRef.pdbId}:${seq.chainRef.chainId}`,
+        authSeqId,
+      });
+      if (seqIdx >= 0) msaRef.current?.setSelectionHighlight(seqIdx, column);
+
+      // Select in Molstar
+      if (instance) {
+        instance.viewer.clearSelection();
+        const authAsymId = authAsymIdFromChainKey(ck);
+        if (ck === sequenceKey) {
+          instance.selectResidue(authAsymId, authSeqId);
+        } else {
+          const aligned = alignedStructures.find(
+            a => makeChainKey(a.sourcePdbId, a.sourceChainId) === ck
+          );
+          if (aligned) {
+            instance.selectAlignedResidue(aligned.targetChainId, aligned.id, aligned.sourceChainId, authSeqId);
+          }
+        }
+      }
+    };
 
     // ── Loading state ──
     if (!nglLoaded || !family || maxLength === 0 || !isAligned) {
@@ -387,7 +508,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
               <span className="text-green-700">{selectedResidue.chainLabel}</span>
               <span className="text-green-500">#{selectedResidue.authSeqId}</span>
               <button
-                onClick={() => { setSelectedResidue(null); onResidueSelect?.(null); }}
+                onClick={() => { setSelectedResidue(null); msaRef.current?.clearSelectionHighlight(); instance?.viewer.clearSelection(); }}
                 className="text-green-400 hover:text-green-600"
               >
                 <X size={10} />

@@ -50,29 +50,7 @@ export function useChainFocusSync({
     return map;
   }, [alignedStructures]);
 
-  // ── Hover -> Molstar highlight (ephemeral glow only, no visibility changes) ──
-
-  useEffect(() => {
-    if (!instance) return;
-
-    if (!hoveredChainKey) {
-      instance.clearHighlight();
-      return;
-    }
-
-    if (hoveredChainKey === primaryKey && primaryChainId) {
-      instance.highlightChain(primaryChainId, true);
-    } else {
-      const aligned = alignedByKey[hoveredChainKey];
-      if (aligned) {
-        instance.highlightAlignedChain(aligned.targetChainId, aligned.id, true);
-      }
-    }
-
-    return () => {
-      instance.clearHighlight();
-    };
-  }, [hoveredChainKey, instance, primaryKey, primaryChainId, alignedByKey]);
+  // Hover -> label highlight only (Molstar chain highlight removed as too aggressive)
 
   // ── Selection -> sync sequenceRegistry.selectedSequenceId ──
 

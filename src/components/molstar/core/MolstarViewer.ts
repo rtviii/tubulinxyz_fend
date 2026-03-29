@@ -187,11 +187,16 @@ export class MolstarViewer {
   // --- Selection ---
 
   clearSelection(): void {
+    this.ctx?.managers.interactivity.lociSelects.deselectAll();
     this.ctx?.managers.structure.selection.clear();
   }
 
   addToSelection(loci: StructureElement.Loci): void {
     this.ctx?.managers.structure.selection.fromLoci('add', loci);
+  }
+
+  setSelection(loci: StructureElement.Loci): void {
+    this.ctx?.managers.structure.selection.fromLoci('set', loci);
   }
 
   // --- Cleanup ---

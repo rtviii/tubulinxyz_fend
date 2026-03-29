@@ -44,7 +44,11 @@ export interface ResizableMSAContainerHandle {
   jumpToRange: (start: number, end: number) => void;
   setColorScheme: (scheme: string) => void;
   setHighlight: (start: number, end: number) => void;
+  setCellHighlight: (row: number, column: number) => void;
+  setCrosshairHighlight: (row: number, column: number) => void;
   clearHighlight: () => void;
+  setSelectionHighlight: (row: number, column: number) => void;
+  clearSelectionHighlight: () => void;
   applyPositionColors: (colors: Record<number, string>) => void;
   applyCellColors: (colors: Record<string, string>) => void;
   clearPositionColors: () => void;
@@ -278,17 +282,91 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       });
     }, [getSequenceViewer]);
 
-    const setHighlight = useCallback((start: number, end: number) => {
-      const msa = msaRef.current;
-      if (!msa) return;
-      msa.setAttribute('highlight', `${start}:${end}`);
-    }, []);
+    // ── Highlight region management ──
+    // We manage highlights directly via sequenceViewer.highlight (array of Region)
+    // to support both hover (transient) and selection (persistent) simultaneously.
+    const selectionRegionRef = useRef<any | null>(null);
+    const hoverRegionsRef = useRef<any[]>([]);
+    const HIGHLIGHT_COLOR = '#00FF0044';
+    const DIM_HIGHLIGHT_COLOR = '#00FF0018';
+    const BOLD_HIGHLIGHT_COLOR = '#00FF0066';
 
-    const clearHighlight = useCallback(() => {
+    const flushHighlights = useCallback(() => {
       const msa = msaRef.current;
       if (!msa) return;
       msa.removeAttribute('highlight');
+      const sv = (msa as any).sequenceViewer;
+      if (!sv) return;
+      const regions: any[] = [];
+      if (selectionRegionRef.current) regions.push(selectionRegionRef.current);
+      regions.push(...hoverRegionsRef.current);
+      sv.highlight = regions;
     }, []);
+
+    // Column highlight (all rows, single column range)
+    // Note: residues use 1-based coords (nightingale convention), sequences use 0-based row indices
+    const setHighlight = useCallback((start: number, end: number) => {
+      hoverRegionsRef.current = [{
+        sequences: { from: 0, to: Math.max(0, sequences.length - 1) },
+        residues: { from: start, to: end },
+        fillColor: HIGHLIGHT_COLOR,
+        borderColor: HIGHLIGHT_COLOR,
+      }];
+      flushHighlights();
+    }, [sequences.length, flushHighlights]);
+
+    // Single-cell highlight (row is 0-based, column is 0-based MSA position)
+    const setCellHighlight = useCallback((row: number, column: number) => {
+      hoverRegionsRef.current = [{
+        sequences: { from: row, to: row },
+        residues: { from: column + 1, to: column + 1 },
+        fillColor: HIGHLIGHT_COLOR,
+        borderColor: HIGHLIGHT_COLOR,
+      }];
+      flushHighlights();
+    }, [flushHighlights]);
+
+    // Crosshair highlight: dim column + bold single cell
+    const setCrosshairHighlight = useCallback((row: number, column: number) => {
+      hoverRegionsRef.current = [
+        // Dim full-column line
+        {
+          sequences: { from: 0, to: Math.max(0, sequences.length - 1) },
+          residues: { from: column + 1, to: column + 1 },
+          fillColor: DIM_HIGHLIGHT_COLOR,
+          borderColor: DIM_HIGHLIGHT_COLOR,
+        },
+        // Bold single cell
+        {
+          sequences: { from: row, to: row },
+          residues: { from: column + 1, to: column + 1 },
+          fillColor: BOLD_HIGHLIGHT_COLOR,
+          borderColor: BOLD_HIGHLIGHT_COLOR,
+        },
+      ];
+      flushHighlights();
+    }, [sequences.length, flushHighlights]);
+
+    const clearHighlight = useCallback(() => {
+      hoverRegionsRef.current = [];
+      flushHighlights();
+    }, [flushHighlights]);
+
+    // Persistent selection highlight (survives hover changes)
+    const setSelectionHighlight = useCallback((row: number, column: number) => {
+      selectionRegionRef.current = {
+        sequences: { from: row, to: row },
+        residues: { from: column + 1, to: column + 1 },
+        fillColor: HIGHLIGHT_COLOR,
+        borderColor: HIGHLIGHT_COLOR,
+      };
+      flushHighlights();
+    }, [flushHighlights]);
+
+    const clearSelectionHighlight = useCallback(() => {
+      selectionRegionRef.current = null;
+      flushHighlights();
+    }, [flushHighlights]);
 
     const applyCellColors = useCallback((colors: Record<string, string>) => {
       const msa = msaRef.current;
@@ -319,11 +397,15 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       jumpToRange,
       setColorScheme,
       setHighlight,
+      setCellHighlight,
+      setCrosshairHighlight,
       clearHighlight,
+      setSelectionHighlight,
+      clearSelectionHighlight,
       applyPositionColors,
       applyCellColors,
       clearPositionColors,
-    }), [triggerRedraw, jumpToRange, setColorScheme, setHighlight, clearHighlight, applyPositionColors, applyCellColors, clearPositionColors]);
+    }), [triggerRedraw, jumpToRange, setColorScheme, setHighlight, setCellHighlight, setCrosshairHighlight, clearHighlight, setSelectionHighlight, clearSelectionHighlight, applyPositionColors, applyCellColors, clearPositionColors]);
 
     // ----------------------------------------------------------------
     // Width sync

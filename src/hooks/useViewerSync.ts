@@ -1,8 +1,9 @@
 // src/hooks/useViewerSync.ts
 import { useEffect, useRef, useCallback, useMemo } from 'react';
-import { useAppSelector } from '@/store/store';
+import { useAppSelector, useAppDispatch } from '@/store/store';
 import { makeSelectActiveColorRulesForSequenceIds } from '@/store/slices/colorRulesSelector';
 import { selectPositionMapping } from '@/store/slices/sequence_registry';
+import { setHoveredChain } from '@/store/slices/chainFocusSlice';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import { Color } from 'molstar/lib/mol-util/color';
 import { MSAHandle } from '@/components/msa/types';
@@ -17,12 +18,16 @@ interface UseViewerSyncOptions {
     molstarInstance: MolstarInstance | null;
     msaRef: React.RefObject<MSAHandle>;
     visibleSequenceIds: string[];
-    selectedCell?: { row: number; column: number } | null;
+    /** Maps auth_asym_id -> { chainKey, displayRow } for all structural chains in the MSA */
+    chainRowMap?: Record<string, { chainKey: string; displayRow: number }>;
+    /** Called when a Molstar click selects a residue (single click) */
+    onMolstarResidueSelect?: (chainKey: string, masterIdx: number, authSeqId: number) => void;
 }
 
 const selectRulesForVisible = makeSelectActiveColorRulesForSequenceIds();
 
-export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequenceIds, selectedCell }: UseViewerSyncOptions) {
+export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequenceIds, chainRowMap, onMolstarResidueSelect }: UseViewerSyncOptions) {
+    const dispatch = useAppDispatch();
     const colorRules = useAppSelector(state => selectRulesForVisible(state, visibleSequenceIds));
     const positionMapping = useAppSelector(state => selectPositionMapping(state, chainKey));
 
@@ -50,7 +55,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         alignedByChainKey.current = map;
     }, [alignedIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Reverse mapping for hover coordination
+    // Reverse mapping for hover coordination (primary chain)
     const authToMasterRef = useRef<Record<number, number>>({});
     useEffect(() => {
         const map: Record<number, number> = {};
@@ -62,8 +67,42 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         authToMasterRef.current = map;
     }, [positionMapping]);
 
-    // Aligned chain position mappings -- stable via useMemo
+    // All position mappings (must be declared before effects that use it)
     const allPositionMappings = useAppSelector(state => state.sequenceRegistry.positionMappings);
+
+    // Reverse mappings for ALL chains keyed by auth_asym_id
+    const chainRowMapRef = useRef(chainRowMap);
+    chainRowMapRef.current = chainRowMap;
+
+    const allAuthToMasterRef = useRef<Record<string, Record<number, number>>>({});
+    useEffect(() => {
+        const result: Record<string, Record<number, number>> = {};
+        // Primary chain
+        const primaryAuth = authAsymIdFromChainKey(chainKey);
+        if (positionMapping) {
+            const map: Record<number, number> = {};
+            for (const [masterStr, authSeqId] of Object.entries(positionMapping)) {
+                map[authSeqId] = parseInt(masterStr, 10);
+            }
+            result[primaryAuth] = map;
+        }
+        // Aligned chains
+        for (const a of alignedStructuresRef.current) {
+            const aKey = makeChainKey(a.sourcePdbId, a.sourceChainId);
+            const aMapping = allPositionMappings[aKey];
+            if (aMapping) {
+                const map: Record<number, number> = {};
+                for (const [masterStr, authSeqId] of Object.entries(aMapping)) {
+                    map[authSeqId] = parseInt(masterStr, 10);
+                }
+                result[a.sourceChainId] = map;
+            }
+        }
+        allAuthToMasterRef.current = result;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [positionMapping, chainKey, alignedIds, allPositionMappings]);
+
+    // Aligned chain position mappings -- stable via useMemo
     const alignedMappings = useMemo(() => {
         const result: Record<string, Record<number, number> | null> = {};
         for (const a of alignedStructuresRef.current) {
@@ -172,10 +211,6 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
                     cellColors[`${cell.row}-${cell.column}`] = rule.color;
                 }
             }
-            // Merge persistent residue selection highlight
-            if (selectedCell) {
-                cellColors[`${selectedCell.row}-${selectedCell.column}`] = '#22c55e';
-            }
             if (Object.keys(cellColors).length > 0) {
                 msaRef.current.applyCellColors(cellColors);
             } else {
@@ -192,7 +227,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
             if (colorSyncTimerRef.current) clearTimeout(colorSyncTimerRef.current);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [colorRules, molstarInstance, msaRef, chainKey, alignedIds, selectedCell]);
+    }, [colorRules, molstarInstance, msaRef, chainKey, alignedIds]);
 
     // ============================================================
     // Click handlers
@@ -203,16 +238,35 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
     const lastClickInfoRef = useRef<{ chainId: string; authSeqId: number } | null>(null);
     const DOUBLE_CLICK_MS = 300;
 
-    const handleMolstarSingleClick = useCallback((chainId: string, authSeqId: number) => {
-        const masterIdx = authToMasterRef.current[authSeqId];
-        if (masterIdx === undefined || !msaRef.current) return;
-        const WINDOW = 25;
-        msaRef.current.jumpToRange(Math.max(1, masterIdx - WINDOW), masterIdx + WINDOW);
-    }, [msaRef]);
+    const onMolstarResidueSelectRef = useRef(onMolstarResidueSelect);
+    onMolstarResidueSelectRef.current = onMolstarResidueSelect;
 
+    // Single click in Molstar: select the residue (MSA + Molstar)
+    const handleMolstarSingleClick = useCallback((chainId: string, authSeqId: number) => {
+        const reverseMap = allAuthToMasterRef.current[chainId];
+        if (!reverseMap) return;
+        const masterIdx = reverseMap[authSeqId];
+        if (masterIdx === undefined) return;
+
+        const rowInfo = chainRowMapRef.current?.[chainId];
+        const ck = rowInfo?.chainKey ?? makeChainKey('', chainId);
+        onMolstarResidueSelectRef.current?.(ck, masterIdx, authSeqId);
+    }, []);
+
+    // Double click in Molstar: focus camera + MSA range adjustment
     const handleMolstarDoubleClick = useCallback((chainId: string, authSeqId: number) => {
-        molstarInstance?.triggerNeighborhoodFocus(chainId, authSeqId);
-    }, [molstarInstance]);
+        const reverseMap = allAuthToMasterRef.current[chainId];
+        const masterIdx = reverseMap?.[authSeqId];
+
+        // MSA range adjustment
+        if (masterIdx !== undefined && msaRef.current) {
+            const WINDOW = 15;
+            msaRef.current.jumpToRange(Math.max(1, masterIdx - WINDOW), masterIdx + WINDOW);
+        }
+
+        // Camera focus
+        molstarInstance?.focusResidue(chainId, authSeqId);
+    }, [molstarInstance, msaRef]);
 
     useEffect(() => {
         if (!molstarInstance?.viewer) return;
@@ -242,19 +296,29 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
     // ============================================================
 
     const handleMolstarHover = useCallback((chainId: string, authSeqId: number) => {
-        // Only highlight when hovering over the chain currently shown in MSA
-        const activeAuth = authAsymIdFromChainKey(chainKeyRef.current);
-        if (chainId !== activeAuth) return;
+        // Look up masterIdx from any chain's reverse mapping
+        const reverseMap = allAuthToMasterRef.current[chainId];
+        if (!reverseMap) return;
+        const masterIdx = reverseMap[authSeqId];
+        if (masterIdx === undefined || !msaRef.current) return;
 
-        const masterIdx = authToMasterRef.current[authSeqId];
-        if (masterIdx !== undefined && msaRef.current) {
+        // Look up the display row for this chain
+        const rowInfo = chainRowMapRef.current?.[chainId];
+        if (rowInfo && rowInfo.displayRow >= 0) {
+            // Crosshair: dim column + bold cell
+            msaRef.current.setCrosshairHighlight(rowInfo.displayRow, masterIdx - 1);
+            // Highlight the label row
+            dispatch(setHoveredChain(rowInfo.chainKey));
+        } else {
+            // Fallback: column-only highlight (chain not visible in MSA)
             msaRef.current.setHighlight(masterIdx, masterIdx);
         }
-    }, [msaRef]);
+    }, [msaRef, dispatch]);
 
     const handleMolstarHoverEnd = useCallback(() => {
         msaRef.current?.clearHighlight();
-    }, [msaRef]);
+        dispatch(setHoveredChain(null));
+    }, [msaRef, dispatch]);
 
     const handleMSAHover = useCallback((seqId: string, position: number) => {
         if (!molstarInstance) return;

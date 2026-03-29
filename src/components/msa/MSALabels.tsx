@@ -167,7 +167,7 @@ export function MSALabels({
                 ${isSelected
                   ? 'bg-green-100 text-green-800 font-medium'
                   : isHovered
-                    ? 'bg-blue-50 text-gray-700'
+                    ? 'bg-green-50 text-gray-700'
                     : isMaster
                       ? 'text-gray-400'
                       : 'text-gray-600'

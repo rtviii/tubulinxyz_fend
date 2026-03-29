@@ -145,14 +145,19 @@ export default function StructureProfilePage() {
   }, [primaryChainKey, viewMode, dispatch]);
 
 
-  const [selectedMSACell, setSelectedMSACell] = useState<{ row: number; column: number } | null>(null);
+  const chainRowMapRef = useRef<Record<string, { chainKey: string; displayRow: number }>>({});
+
+  const handleMolstarResidueSelect = useCallback((ck: string, masterIdx: number, authSeqId: number) => {
+    msaRef.current?.selectResidueByChainKey(ck, masterIdx, authSeqId);
+  }, [msaRef]);
 
   const { handleMSAHover, handleMSAHoverEnd, handleDisplayRangeChange, clearWindowMask } = useViewerSync({
     chainKey,
     molstarInstance: instance,
     msaRef,
     visibleSequenceIds: allVisibleSequenceIds,
-    selectedCell: selectedMSACell,
+    chainRowMap: chainRowMapRef.current,
+    onMolstarResidueSelect: handleMolstarResidueSelect,
   });
 
 
@@ -443,7 +448,7 @@ export default function StructureProfilePage() {
                   alignedStructures={isMonomerView ? alignedStructures : undefined}
                   onResidueHover={handleMSAHover}
                   onResidueLeave={handleMSAHoverEnd}
-                  onResidueSelect={setSelectedMSACell}
+                  onChainRowMapChange={(map) => { chainRowMapRef.current = map; }}
                   onClearColors={handleClearAllAnnotations}
                   onWindowMaskChange={handleDisplayRangeChange}
                   onWindowMaskClear={clearWindowMask}

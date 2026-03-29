@@ -1089,6 +1089,30 @@ const color = getMolstarGhostColor(family);
     this.viewer.highlightLoci(loci);
   }
 
+  /** Select a single residue. Caller must call viewer.clearSelection() first. */
+  selectResidue(chainId: string, authSeqId: number): void {
+    const structure = this.viewer.getCurrentStructure();
+    if (!structure) return;
+    const loci = executeQuery(buildResidueQuery(chainId, authSeqId), structure);
+    this.viewer.addToSelection(loci);
+  }
+
+  /** Select a single residue on an aligned chain. Caller must call viewer.clearSelection() first. */
+  selectAlignedResidue(
+    targetChainId: string,
+    alignedStructureId: string,
+    sourceChainId: string,
+    authSeqId: number
+  ): void {
+    const chainState = this.getMonomerChainState(targetChainId);
+    const aligned = chainState?.alignedStructures[alignedStructureId];
+    if (!aligned) return;
+    const structure = this.viewer.getStructureFromRef(aligned.chainComponentRef);
+    if (!structure) return;
+    const loci = executeQuery(buildResidueQuery(sourceChainId, authSeqId), structure);
+    this.viewer.addToSelection(loci);
+  }
+
   clearHighlight(): void {
     this.viewer.highlightLoci(null);
   }
