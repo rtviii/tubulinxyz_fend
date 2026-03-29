@@ -253,15 +253,22 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         onMolstarResidueSelectRef.current?.(ck, masterIdx, authSeqId);
     }, []);
 
-    // Double click in Molstar: focus camera + MSA range adjustment
+    // Track visible MSA range for skip-if-visible logic
+    const visibleRangeRef = useRef<[number, number] | null>(null);
+
+    // Double click in Molstar: focus camera + MSA range adjustment (only if off-screen)
     const handleMolstarDoubleClick = useCallback((chainId: string, authSeqId: number) => {
         const reverseMap = allAuthToMasterRef.current[chainId];
         const masterIdx = reverseMap?.[authSeqId];
 
-        // MSA range adjustment
         if (masterIdx !== undefined && msaRef.current) {
-            const WINDOW = 15;
-            msaRef.current.jumpToRange(Math.max(1, masterIdx - WINDOW), masterIdx + WINDOW);
+            const range = visibleRangeRef.current;
+            const MARGIN = 3;
+            const isVisible = range && masterIdx >= range[0] + MARGIN && masterIdx <= range[1] - MARGIN;
+            if (!isVisible) {
+                const WINDOW = 15;
+                msaRef.current.jumpToRange(Math.max(1, masterIdx - WINDOW), masterIdx + WINDOW);
+            }
         }
 
         // Camera focus
@@ -371,6 +378,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
     // ============================================================
 
     const handleDisplayRangeChange = useCallback((masterStart: number, masterEnd: number) => {
+        visibleRangeRef.current = [masterStart, masterEnd];
         if (!molstarInstance) return;
 
         if (windowMaskTimerRef.current) clearTimeout(windowMaskTimerRef.current);

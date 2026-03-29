@@ -265,6 +265,16 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
     const handleDisplayRangeChange = useCallback((start: number, end: number) => {
       currentRangeRef.current = [start, end];
       if (inRangeOnly) onWindowMaskChange?.(start, end);
+      // Re-flush selection highlight after nightingale redraws (range changes wipe highlight regions)
+      const sel = selectedResidueRef.current;
+      if (sel) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const idx = displaySequencesRef.current.findIndex(s => s.id === sel.seqId);
+            if (idx >= 0) msaRef.current?.setSelectionHighlight(idx, sel.column);
+          });
+        });
+      }
     }, [inRangeOnly, onWindowMaskChange]);
 
     const handleInRangeToggle = useCallback((checked: boolean) => {
@@ -304,6 +314,10 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
 
     // ── Persistent residue selection ──
     const [selectedResidue, setSelectedResidue] = useState<SelectedResidue | null>(null);
+    const selectedResidueRef = useRef(selectedResidue);
+    selectedResidueRef.current = selectedResidue;
+    const displaySequencesRef = useRef(displaySequences);
+    displaySequencesRef.current = displaySequences;
 
     // Clear selection on chain or family change
     useEffect(() => {
@@ -374,15 +388,27 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
         if (authSeqId === undefined) return;
         const authAsymId = authAsymIdFromChainKey(ck);
 
-        // Double-click detection -> focus camera + MSA range adjustment
+        // Double-click detection -> focus camera + MSA range adjustment (only if target is off-screen)
         const now = Date.now();
         const last = lastMSAClickRef.current;
         if (last && last.seqId === seqId && last.position === position && now - last.time < DOUBLE_CLICK_MS) {
           lastMSAClickRef.current = null;
-          if (instance) instance.focusResidue(authAsymId, authSeqId);
-          const WINDOW = 15;
           const masterIdx = position + 1;
-          msaRef.current?.jumpToRange(Math.max(1, masterIdx - WINDOW), masterIdx + WINDOW);
+          const range = currentRangeRef.current;
+          const MARGIN = 3;
+          const isVisible = range && masterIdx >= range[0] + MARGIN && masterIdx <= range[1] - MARGIN;
+          if (!isVisible) {
+            const WINDOW = 15;
+            msaRef.current?.jumpToRange(Math.max(1, masterIdx - WINDOW), masterIdx + WINDOW);
+            // Re-flush selection highlight after range change (nightingale redraw wipes regions)
+            if (selectedResidue) {
+              const selIdx = displaySequences.findIndex(s => s.id === selectedResidue.seqId);
+              if (selIdx >= 0) {
+                requestAnimationFrame(() => msaRef.current?.setSelectionHighlight(selIdx, selectedResidue.column));
+              }
+            }
+          }
+          if (instance) instance.focusResidue(authAsymId, authSeqId);
           return;
         }
         lastMSAClickRef.current = { seqId, position, time: now };
