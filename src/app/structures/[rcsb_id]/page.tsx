@@ -6,7 +6,7 @@ import { useAppSelector, useAppDispatch } from '@/store/store';
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
 
 import { useStructureHoverSync } from '@/hooks/useStructureHoverSync';
-import { selectSequencesForFamily } from '@/store/slices/sequence_registry';
+import { selectSequencesForFamily, selectPositionMapping } from '@/store/slices/sequence_registry';
 import {
   selectLoadedStructure,
   selectPolymerComponents,
@@ -25,6 +25,8 @@ import { StructureSidebar } from '@/components/structure/StructureSidebar';
 import { ViewerToolbar } from '@/components/structure/ViewerToolbar';
 import { MonomerSidebar } from '@/components/monomer/MonomerSidebar';
 import { SequenceAlignmentPanel } from '@/components/msa/SequenceAlignmentPanel';
+import { ResidueContextMenu, type ContextMenuTarget } from '@/components/msa/ResidueContextMenu';
+import { MolstarResiduePopup, type MolstarPopupTarget } from '@/components/molstar/overlay/MolstarResiduePopup';
 import { API_BASE_URL } from '@/config';
 import type { MSAHandle } from '@/components/msa/types';
 import { makeChainKey } from '@/lib/chain_key';
@@ -151,7 +153,7 @@ export default function StructureProfilePage() {
     msaRef.current?.selectResidueByChainKey(ck, masterIdx, authSeqId);
   }, [msaRef]);
 
-  const { handleMSAHover, handleMSAHoverEnd, handleDisplayRangeChange, clearWindowMask } = useViewerSync({
+  const { handleMSAHover, handleMSAHoverEnd, handleDisplayRangeChange, clearWindowMask, lastHoveredMolstarResidueRef } = useViewerSync({
     chainKey,
     molstarInstance: instance,
     msaRef,
@@ -159,6 +161,40 @@ export default function StructureProfilePage() {
     chainRowMap: chainRowMapRef.current,
     onMolstarResidueSelect: handleMolstarResidueSelect,
   });
+
+  // ── Residue context menus ──
+  // MSA right-click: static dropdown
+  const [contextMenuTarget, setContextMenuTarget] = useState<ContextMenuTarget | null>(null);
+  // Molstar right-click: 3D-anchored popup with connector line
+  const [molstarPopupTarget, setMolstarPopupTarget] = useState<MolstarPopupTarget | null>(null);
+
+  const handleMolstarContextMenu = useCallback((e: React.MouseEvent) => {
+    const hovered = lastHoveredMolstarResidueRef.current;
+    if (!hovered || !hovered.position3d) return;
+    e.preventDefault();
+
+    // Close MSA menu if open
+    setContextMenuTarget(null);
+
+    const { chainId: hovChainId, authSeqId, masterIdx, position3d } = hovered;
+    let residueLetter = '?';
+    let chainLabel = `${loadedStructure}:${hovChainId}`;
+    const seq = pdbSequences.find(s => s.chainRef?.chainId === hovChainId);
+    if (seq) {
+      const col = masterIdx - 1;
+      residueLetter = seq.sequence[col] ?? '?';
+      if (seq.chainRef) chainLabel = `${seq.chainRef.pdbId}:${seq.chainRef.chainId}`;
+    }
+
+    setMolstarPopupTarget({
+      residueLetter,
+      chainLabel,
+      authSeqId,
+      chainId: hovChainId,
+      masterIndex: masterIdx,
+      position3d,
+    });
+  }, [lastHoveredMolstarResidueRef, pdbSequences, loadedStructure]);
 
 
   // Inside the component, after the existing hook calls:
@@ -334,7 +370,7 @@ export default function StructureProfilePage() {
       ))}
 
       {/* ── Full-viewport Molstar viewer (base layer) ── */}
-      <div ref={containerRef} className="absolute inset-0 w-full h-full" />
+      <div ref={containerRef} className="absolute inset-0 w-full h-full" onContextMenu={handleMolstarContextMenu} />
 
       {(!isInitialized || isLoading) && (
         <LoadingOverlay
@@ -452,6 +488,7 @@ export default function StructureProfilePage() {
                   onClearColors={handleClearAllAnnotations}
                   onWindowMaskChange={handleDisplayRangeChange}
                   onWindowMaskClear={clearWindowMask}
+                  onResidueContextMenu={setContextMenuTarget}
                 />
               )}
             </div>
@@ -459,6 +496,8 @@ export default function StructureProfilePage() {
           </div>
         </div>
       )}
+      <ResidueContextMenu target={contextMenuTarget} onClose={() => setContextMenuTarget(null)} />
+      <MolstarResiduePopup target={molstarPopupTarget} instance={instance} onClose={() => setMolstarPopupTarget(null)} />
     </div>
   );
 }

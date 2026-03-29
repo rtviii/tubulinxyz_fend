@@ -302,12 +302,17 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
     // Hover Handlers
     // ============================================================
 
-    const handleMolstarHover = useCallback((chainId: string, authSeqId: number) => {
+    // Track last hovered Molstar residue for context menu
+    const lastHoveredMolstarResidueRef = useRef<{ chainId: string; authSeqId: number; masterIdx: number; position3d?: [number, number, number]; pageCoords?: [number, number] } | null>(null);
+
+    const handleMolstarHover = useCallback((chainId: string, authSeqId: number, position3d?: [number, number, number], pageCoords?: [number, number]) => {
         // Look up masterIdx from any chain's reverse mapping
         const reverseMap = allAuthToMasterRef.current[chainId];
         if (!reverseMap) return;
         const masterIdx = reverseMap[authSeqId];
         if (masterIdx === undefined || !msaRef.current) return;
+
+        lastHoveredMolstarResidueRef.current = { chainId, authSeqId, masterIdx, position3d, pageCoords };
 
         // Look up the display row for this chain
         const rowInfo = chainRowMapRef.current?.[chainId];
@@ -325,6 +330,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
     const handleMolstarHoverEnd = useCallback(() => {
         msaRef.current?.clearHighlight();
         dispatch(setHoveredChain(null));
+        lastHoveredMolstarResidueRef.current = null;
     }, [msaRef, dispatch]);
 
     const handleMSAHover = useCallback((seqId: string, position: number) => {
@@ -367,7 +373,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
     useEffect(() => {
         if (!molstarInstance?.viewer) return;
         const unsubscribe = molstarInstance.viewer.subscribeToHover((info) => {
-            if (info) handleMolstarHover(info.chainId, info.authSeqId);
+            if (info) handleMolstarHover(info.chainId, info.authSeqId, info.position3d, info.pageCoords);
             else handleMolstarHoverEnd();
         });
         return unsubscribe;
@@ -507,5 +513,6 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         focusMutation,
         handleDisplayRangeChange,
         clearWindowMask,
+        lastHoveredMolstarResidueRef,
     };
 }
