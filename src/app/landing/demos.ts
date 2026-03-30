@@ -299,12 +299,12 @@ function extractLigandBonds(
     const locA = StructureElement.Location.create(structure, uA, uA.elements[memberA]);
     const locB = StructureElement.Location.create(structure, uB, uB.elements[memberB]);
 
-    const compA = StructureProperties.atom.label_comp_id(locA);
-    const compB = StructureProperties.atom.label_comp_id(locB);
+    const compA  = StructureProperties.atom.label_comp_id(locA);
+    const compB  = StructureProperties.atom.label_comp_id(locB);
     const chainA = StructureProperties.chain.auth_asym_id(locA);
     const chainB = StructureProperties.chain.auth_asym_id(locB);
-    const seqA = StructureProperties.residue.auth_seq_id(locA);
-    const seqB = StructureProperties.residue.auth_seq_id(locB);
+    const seqA   = StructureProperties.residue.auth_seq_id(locA);
+    const seqB   = StructureProperties.residue.auth_seq_id(locB);
 
     const typeLabel = interactionTypeLabel(edge.props.type);
 
