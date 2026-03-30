@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Home, LayoutGrid, Mail, ChevronDown } from 'lucide-react';
+import { Home, LayoutGrid, Mail, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
 import LandingViewer from '@/app/landing/LandingViewer';
 import { useExistingInstance } from '@/components/molstar/services/MolstarInstanceManager';
 import { LANDING_DEMOS, DEMO_CATEGORY_LABELS, type DemoCategory, type DemoResult } from '@/app/landing/demos';
@@ -42,6 +42,7 @@ export default function Page() {
   const [demoOpen, setDemoOpen] = useState(false);
   const [activeDemo, setActiveDemo] = useState<string | null>(null);
   const [demoExplanation, setDemoExplanation] = useState<DemoExplanation | null>(null);
+  const [expandedViewer, setExpandedViewer] = useState<number | null>(null);
   const demoRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
 
@@ -147,7 +148,7 @@ export default function Page() {
               onClick={() => setDemoOpen(v => !v)}
               className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full font-medium transition-colors
                          ${activeDemo
-                  ? 'bg-violet-50 text-violet-700'
+                  ? 'bg-slate-100 text-slate-700'
                   : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                 }`}
             >
@@ -170,7 +171,7 @@ export default function Page() {
                           onClick={() => runDemo(demo.id)}
                           className={`w-full text-left px-3 py-1.5 flex items-center justify-between
                                      hover:bg-slate-50 transition-colors
-                                     ${activeDemo === demo.id ? 'text-violet-700 bg-violet-50/50' : 'text-slate-600'}`}
+                                     ${activeDemo === demo.id ? 'text-slate-800 bg-slate-50' : 'text-slate-600'}`}
                         >
                           <span className="font-medium">{demo.label}</span>
                           {demo.target && (
@@ -231,37 +232,57 @@ export default function Page() {
 
       {/* ---- Viewers ---- */}
       <main className="max-w-[1400px] w-full mx-auto px-6 flex-1 min-h-0 pb-2">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-full">
-          {STRUCTURES.map((s, idx) => (
-            <div
-              key={s.pdbId}
-              className="relative rounded-xl border border-slate-200/60 bg-white overflow-hidden"
-            >
-              <LandingViewer
-                pdbId={s.pdbId}
-                instanceId={s.instanceId}
-                type={s.type}
-                description={s.description}
-                citation={s.citation}
-                spinning={spinning}
-                showLigands={showLigands}
-                showNucleotides={showNucleotides}
-                {...(s.chainFilter ? { chainFilter: s.chainFilter } : {})}
-              />
-              {/* Explanation card overlay */}
-              {demoExplanation && (
-                (demoExplanation.target === 'both' ||
-                 (demoExplanation.target === 'heterodimer' && idx === 0) ||
-                 (demoExplanation.target === 'lattice' && idx === 1)) && (
-                  <DemoExplanationCard
-                    explanation={demoExplanation}
-                    onDismiss={dismissDemo}
-                    instance={idx === 0 ? heterodimer : lattice}
-                  />
-                )
-              )}
-            </div>
-          ))}
+        <div className={`grid gap-3 h-full ${expandedViewer === null ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+          {STRUCTURES.map((s, idx) => {
+            const isHidden = expandedViewer !== null && expandedViewer !== idx;
+            const isExpanded = expandedViewer === idx;
+
+            return (
+              <div
+                key={s.pdbId}
+                className={`relative rounded-xl border border-slate-200/60 bg-white overflow-hidden transition-all duration-200
+                  ${isHidden ? 'hidden' : ''}
+                  ${isExpanded ? 'h-full' : ''}`}
+              >
+                <LandingViewer
+                  pdbId={s.pdbId}
+                  instanceId={s.instanceId}
+                  type={s.type}
+                  description={s.description}
+                  citation={s.citation}
+                  spinning={spinning}
+                  showLigands={showLigands}
+                  showNucleotides={showNucleotides}
+                  {...(s.chainFilter ? { chainFilter: s.chainFilter } : {})}
+                />
+
+                {/* Fullscreen toggle */}
+                <button
+                  onClick={() => setExpandedViewer(isExpanded ? null : idx)}
+                  className="absolute top-2 right-2 z-10 p-1.5 rounded-md
+                             bg-white/40 backdrop-blur-sm border border-slate-200/30
+                             text-slate-400/60 hover:text-slate-600 hover:bg-white/70
+                             transition-all"
+                  title={isExpanded ? 'Exit fullscreen' : 'Expand viewer'}
+                >
+                  {isExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                </button>
+
+                {/* Explanation card overlay */}
+                {demoExplanation && (
+                  (demoExplanation.target === 'both' ||
+                   (demoExplanation.target === 'heterodimer' && idx === 0) ||
+                   (demoExplanation.target === 'lattice' && idx === 1)) && (
+                    <DemoExplanationCard
+                      explanation={demoExplanation}
+                      onDismiss={dismissDemo}
+                      instance={idx === 0 ? heterodimer : lattice}
+                    />
+                  )
+                )}
+              </div>
+            );
+          })}
         </div>
       </main>
 

@@ -18,7 +18,7 @@ import {
   executeQuery,
 } from '@/components/molstar/core/queries';
 import { STYLIZED_POSTPROCESSING } from '@/components/molstar/rendering/postprocessing-config';
-import { getMolstarGhostColor } from '@/components/molstar/colors/palette';
+import { getMolstarGhostColor, getGhostHexForFamily } from '@/components/molstar/colors/palette';
 
 export type DemoCategory = 'ligands' | 'contacts' | 'modifications' | 'mutations';
 export type DemoCleanup = () => void;
@@ -112,6 +112,13 @@ function getPolymerChainIds(instance: MolstarInstance, instanceId: string): stri
 function getClassification(instance: MolstarInstance, instanceId: string): Record<string, string> {
   const store = instance['getState']();
   return store.molstarInstances.instances[instanceId]?.tubulinClassification ?? {};
+}
+
+/** Build a chainId -> hex color map for the explanation card chain dots */
+function buildChainColors(classification: Record<string, string>, chainIds: string[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const id of chainIds) result[id] = getGhostHexForFamily(classification[id]);
+  return result;
 }
 
 export interface BondPairInfo {
@@ -560,6 +567,7 @@ async function showGdpGtp(ctx: LandingDemoContext): Promise<DemoResult> {
       body: 'Each tubulin monomer binds one guanine nucleotide. Hover residues to see contacts.',
       target: 'heterodimer',
       tabs,
+      chainColors: buildChainColors(getClassification(inst, 'landing_9mlf'), ['A', 'B']),
     },
   };
 }
@@ -758,9 +766,10 @@ async function showIntraDimerContacts(ctx: LandingDemoContext): Promise<DemoResu
     },
     explanation: {
       title: 'Intra-dimer interface',
-      body: 'Non-covalent bonds at the alpha-beta contact surface holding the heterodimer together. Hover to inspect individual contacts.',
+      body: 'Non-covalent bonds at the alpha-beta contact surface holding the heterodimer together. Hover to inspect, click to focus.',
       target: 'heterodimer',
       bondPairs: bonds.pairs,
+      chainColors: buildChainColors(classification, ['A', 'B']),
     },
   };
 }
@@ -896,9 +905,10 @@ async function showInterDimerContacts(ctx: LandingDemoContext): Promise<DemoResu
     },
     explanation: {
       title: 'Inter-dimer contacts',
-      body: 'Longitudinal bonds between adjacent dimers in the protofilament. These hold the microtubule lattice together. Hover to inspect.',
+      body: 'Longitudinal bonds between adjacent dimers in the protofilament. These hold the microtubule lattice together. Hover to inspect, click to focus.',
       target: 'lattice',
       bondPairs: allPairs,
+      chainColors: buildChainColors(classification, chainIds),
     },
   };
 }
