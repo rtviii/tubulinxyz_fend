@@ -4,6 +4,8 @@ import { renderReact18 } from 'molstar/lib/mol-plugin-ui/react18';
 import { PluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
 import { PluginCommands } from 'molstar/lib/mol-plugin/commands';
 import { Color } from 'molstar/lib/mol-util/color';
+import { Vec3 } from 'molstar/lib/mol-math/linear-algebra/3d/vec3';
+import { Vec4 } from 'molstar/lib/mol-math/linear-algebra/3d/vec4';
 import { StateSelection } from 'molstar/lib/mol-state';
 import { Structure } from 'molstar/lib/mol-model/structure';
 import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state';
@@ -134,7 +136,7 @@ export class MolstarViewer {
 
 
   subscribeToHover(
-    callback: (info: { chainId: string; authSeqId: number } | null) => void
+    callback: (info: { chainId: string; authSeqId: number; position3d?: [number, number, number]; pageCoords?: [number, number] } | null) => void
   ): () => void {
     if (!this.ctx) {
       console.warn('[MolstarViewer] Cannot subscribe to hover - not initialized');
@@ -143,13 +145,31 @@ export class MolstarViewer {
 
     const subscription = this.ctx.behaviors.interaction.hover.subscribe((e) => {
       if (StructureElement.Loci.is(e.current.loci) && !StructureElement.Loci.isEmpty(e.current.loci)) {
-        // Extract first residue's info
         let emitted = false;
         StructureElement.Loci.forEachLocation(e.current.loci, (location) => {
-          if (emitted) return; // Only emit first
+          if (emitted) return;
           const chainId = StructureProperties.chain.auth_asym_id(location);
           const authSeqId = StructureProperties.residue.auth_seq_id(location);
-          callback({ chainId, authSeqId });
+
+          // Use event's picking position (world space, accounts for all transforms).
+          // Fall back to atom properties (model space) only if picking position unavailable.
+          let position3d: [number, number, number] | undefined;
+          if ((e as any).position) {
+            const p = (e as any).position;
+            position3d = [p[0], p[1], p[2]];
+          } else {
+            position3d = [
+              StructureProperties.atom.x(location),
+              StructureProperties.atom.y(location),
+              StructureProperties.atom.z(location),
+            ];
+          }
+
+          const pageCoords: [number, number] | undefined = (e as any).page
+            ? [(e as any).page[0], (e as any).page[1]]
+            : undefined;
+
+          callback({ chainId, authSeqId, position3d, pageCoords });
           emitted = true;
         });
       } else {
@@ -168,6 +188,8 @@ export class MolstarViewer {
     }
 
     const subscription = this.ctx.behaviors.interaction.click.subscribe((e) => {
+      // Ignore right-clicks (secondary button) -- those trigger context menus, not selection
+      if ((e as any).button === 2) return;
       if (StructureElement.Loci.is(e.current.loci) && !StructureElement.Loci.isEmpty(e.current.loci)) {
         let emitted = false;
         StructureElement.Loci.forEachLocation(e.current.loci, (location) => {
@@ -197,6 +219,51 @@ export class MolstarViewer {
 
   setSelection(loci: StructureElement.Loci): void {
     this.ctx?.managers.structure.selection.fromLoci('set', loci);
+  }
+
+  // --- 3D to 2D projection ---
+
+  /**
+   * Project a 3D world position to page-relative pixel coordinates.
+   * cameraProject outputs device pixels in WebGL window coords (Y=0 at bottom).
+   * We convert to CSS pixels (Y=0 at top) and add the canvas page offset.
+   */
+  projectToScreen(position3d: [number, number, number]): { x: number; y: number } | null {
+    const canvas3d = this.ctx?.canvas3d;
+    if (!canvas3d) return null;
+
+    const camera = canvas3d.camera;
+    const viewport = camera.viewport;
+    const point = Vec3.create(position3d[0], position3d[1], position3d[2]);
+    const projected = Vec4.create(0, 0, 0, 0);
+    camera.project(projected, point);
+
+    const canvasEl = canvas3d.webgl.gl.canvas;
+    const rect = canvasEl instanceof HTMLElement ? canvasEl.getBoundingClientRect() : null;
+    if (!rect) return null;
+
+    // cameraProject outputs device pixels with Y=0 at bottom (WebGL convention).
+    // Convert to CSS pixels with Y=0 at top (DOM convention).
+    const scale = viewport.width / rect.width;
+    const cssX = projected[0] / scale;
+    const cssY = (viewport.height - projected[1]) / scale;
+
+    return {
+      x: cssX + rect.left + window.scrollX,
+      y: cssY + rect.top + window.scrollY,
+    };
+  }
+
+  /**
+   * Subscribe to post-render events (fires every frame, including smooth
+   * animations). More reliable than camera.stateChanged for tracking DOM
+   * elements anchored to 3D positions.
+   */
+  subscribeToDidDraw(callback: () => void): () => void {
+    const canvas3d = this.ctx?.canvas3d;
+    if (!canvas3d) return () => {};
+    const subscription = canvas3d.didDraw.subscribe(callback);
+    return () => subscription.unsubscribe();
   }
 
   // --- Cleanup ---

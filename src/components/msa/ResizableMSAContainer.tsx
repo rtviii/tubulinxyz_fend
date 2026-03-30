@@ -33,6 +33,7 @@ interface ResizableMSAContainerProps {
   onResidueLeave?: () => void;
   onResidueClick?: (seqId: string, position: number) => void;
   onDisplayRangeChange?: (start: number, end: number) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 
   visibleChainKeys?: Set<string>;
   onToggleChainVisibility?: (chainKey: string) => void;
@@ -77,6 +78,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       onResidueLeave,
       onResidueClick,
       onDisplayRangeChange,
+      onContextMenu,
 
       visibleChainKeys,
       onToggleChainVisibility,
@@ -547,7 +549,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
     // ----------------------------------------------------------------
 
     return (
-      <div ref={outerRef} className="w-full h-full flex">
+      <div ref={outerRef} className="w-full h-full flex" onContextMenu={onContextMenu}>
         {showLabels && (
           <>
             <div className="flex-shrink-0 flex flex-col" style={{ width: effectiveLabelWidth }}>

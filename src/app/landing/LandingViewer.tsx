@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
 import { createClassificationFromProfile } from '@/services/profile_service';
@@ -20,42 +20,52 @@ import {
 import {
   getHexForLigand,
   getMolstarGhostColor,
-  getMolstarLigandColor,
   TUBULIN_GHOST_COLORS,
 } from '@/components/molstar/colors/palette';
 import { formatFamilyShort } from '@/lib/formatters';
 
+const EMPTY_CLASSIFICATION: Record<string, string> = {};
+
 /** Human-readable names for common nucleotides */
 const NUCLEOTIDE_NAMES: Record<string, string> = {
-  GTP: 'GTP (energy molecule)',
-  GDP: 'GDP (spent energy molecule)',
-  GNP: 'GTP analog (non-hydrolyzable)',
+  GTP: 'GTP',
+  GDP: 'GDP',
+  GNP: 'GTP analog',
   GSP: 'GTP analog',
-  ATP: 'ATP (energy molecule)',
-  ADP: 'ADP (spent energy molecule)',
+  ATP: 'ATP',
+  ADP: 'ADP',
   ANP: 'ATP analog',
   ACP: 'ATP analog',
 };
 
 /** Human-readable names for common drugs/ligands */
 const LIGAND_NAMES: Record<string, string> = {
-  TXL: 'Taxol (anti-cancer drug)',
-  TA1: 'Taxol (paclitaxel)',
-  EP: 'Epothilone A (anti-cancer)',
-  EPB: 'Epothilone B (anti-cancer)',
-  VLB: 'Vinblastine (anti-cancer drug)',
-  COL: 'Colchicine (anti-inflammatory)',
+  TXL: 'Taxol',
+  TA1: 'Paclitaxel',
+  EP: 'Epothilone A',
+  EPB: 'Epothilone B',
+  VLB: 'Vinblastine',
+  COL: 'Colchicine',
   LOC: 'Colchicine analog',
   CN2: 'Colchicine derivative',
-  MG: 'Magnesium ion',
-  ZN: 'Zinc ion',
-  CA: 'Calcium ion',
+  MG: 'Mg ion',
+  ZN: 'Zn ion',
+  CA: 'Ca ion',
 };
 
 const NUCLEOTIDE_IDS = new Set([
   'GTP', 'GDP', 'GNP', 'GSP', 'GMPPCP', 'GMPPNP', 'GPPNHP', 'GTPS',
   'ATP', 'ADP', 'ANP', 'ACP',
 ]);
+
+/** Friendly names for tubulin families */
+const FAMILY_FRIENDLY: Record<string, string> = {
+  tubulin_alpha: 'Alpha tubulin',
+  tubulin_beta: 'Beta tubulin',
+  tubulin_gamma: 'Gamma tubulin',
+  tubulin_delta: 'Delta tubulin',
+  tubulin_epsilon: 'Epsilon tubulin',
+};
 
 const LANDING_SPEC = {
   ...DefaultPluginUISpec(),
@@ -98,19 +108,25 @@ type Props = {
   type: string;
   description: string;
   citation: string;
+  spinning?: boolean;
+  showLigands?: boolean;
+  showNucleotides?: boolean;
+  chainFilter?: string[];
 };
 
-export default function LandingViewer({ pdbId, instanceId, type, description, citation }: Props) {
+export default function LandingViewer({
+  pdbId, instanceId, type, description, citation,
+  spinning: spinningProp = true,
+  showLigands: showLigandsProp = false,
+  showNucleotides: showNucleotidesProp = false,
+  chainFilter,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   // @ts-ignore
   const { instance, isInitialized } = useMolstarInstance(containerRef, instanceId, LANDING_SPEC as PluginUISpec);
   const loadedRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [spinning, setSpinning] = useState(true);
-  const [showLigands, setShowLigands] = useState(false);
-  const [showNucleotides, setShowNucleotides] = useState(false);
-  const [hoverInfo, setHoverInfo] = useState<{ text: string; color: string } | null>(null);
 
   // Selectors for components
   const polymerComponents = useAppSelector(s => selectPolymerComponents(s, instanceId));
@@ -120,12 +136,13 @@ export default function LandingViewer({ pdbId, instanceId, type, description, ci
   const nucleotideLigands = ligandComponents.filter(l => NUCLEOTIDE_IDS.has(l.compId));
   const drugLigands = ligandComponents.filter(l => !NUCLEOTIDE_IDS.has(l.compId));
 
-  // Get classification for hover labels
+  // Get classification for hover labels (stable reference via shallowEqual)
   const classification = useAppSelector(
-    s => s.molstarInstances.instances[instanceId]?.tubulinClassification ?? {}
+    s => s.molstarInstances.instances[instanceId]?.tubulinClassification ?? EMPTY_CLASSIFICATION,
   );
 
-  // Hover: 3D labels (ghost colors) + info bar
+
+  // Hover: show friendly 3D labels only (no separate info bar)
   useEffect(() => {
     if (!instance) return;
 
@@ -143,33 +160,20 @@ export default function LandingViewer({ pdbId, instanceId, type, description, ci
           instance.hideComponentLabel();
           prevKey = null;
         }
-        setHoverInfo(null);
         return;
       }
 
-      // Identify what was hovered
       const ligMatch = ligLookup.get(`${info.chainId}_${info.authSeqId}`);
       let key: string | null = null;
 
       if (ligMatch) {
         key = ligMatch.uniqueKey;
-        const name = NUCLEOTIDE_NAMES[ligMatch.compId] ?? LIGAND_NAMES[ligMatch.compId] ?? ligMatch.compId;
-        setHoverInfo({
-          text: name,
-          color: getHexForLigand(ligMatch.compId),
-        });
-        // Show 3D label with ligand color
         instance.showComponentLabel(key);
       } else if (chainIds.has(info.chainId)) {
         key = info.chainId;
         const family = classification[info.chainId];
-        const familyName = family ? formatFamilyShort(family) : 'Protein';
-        const friendly = familyFriendly(family);
-        setHoverInfo({
-          text: `${familyName} (Chain ${info.chainId})${friendly ? ' -- ' + friendly : ''}`,
-          color: ghostHex(family ?? 'Default'),
-        });
-        // Show 3D label with ghost color
+        const friendly = FAMILY_FRIENDLY[family] ?? 'Protein';
+
         const mgr = (instance as any).ensureLabelManager?.();
         if (mgr) {
           const comp = (instance as any).getComponent?.(key);
@@ -179,16 +183,12 @@ export default function LandingViewer({ pdbId, instanceId, type, description, ci
               const { structureToLoci } = require('@/components/molstar/core/queries');
               const loci = structureToLoci(structure);
               const ghostColor = getMolstarGhostColor(family);
-              const text = familyName
-                ? `Chain ${info.chainId} \u00B7 ${familyName}`
-                : `Chain ${info.chainId}`;
-              mgr.showHover(loci, text, ghostColor);
+              mgr.showHover(loci, friendly, ghostColor);
             }
           }
         }
       } else {
         if (prevKey) instance.hideComponentLabel();
-        setHoverInfo(null);
         key = null;
       }
 
@@ -209,7 +209,7 @@ export default function LandingViewer({ pdbId, instanceId, type, description, ci
         const profile: StructureProfile = await res.json();
         const cls = createClassificationFromProfile(profile);
 
-        const ok = await instance.loadStructure(pdbId.toUpperCase(), cls);
+        const ok = await instance.loadStructure(pdbId.toUpperCase(), cls, chainFilter);
         if (!ok) throw new Error('loadStructure failed');
 
         await instance.setStructureGhostColors(true);
@@ -244,7 +244,18 @@ export default function LandingViewer({ pdbId, instanceId, type, description, ci
               animate: { name: 'spin', params: { speed: 0.12 } },
             },
           });
-          plugin.managers.camera.reset();
+          plugin.managers.camera.reset(undefined, 0);
+          // Zoom in closer after reset
+          setTimeout(() => {
+            if (plugin.canvas3d) {
+              const snapshot = plugin.canvas3d.camera.getSnapshot();
+              const radius = snapshot.radius;
+              plugin.canvas3d.requestCameraReset({
+                snapshot: { ...snapshot, radius: radius * 0.75 },
+                durationMs: 0,
+              });
+            }
+          }, 100);
         }
       } catch (e) {
         console.error(`[LandingViewer:${instanceId}]`, e);
@@ -266,42 +277,35 @@ export default function LandingViewer({ pdbId, instanceId, type, description, ci
     return () => obs.disconnect();
   }, [instance]);
 
-  // Toggle handlers
-  const toggleSpin = useCallback(() => {
+  // Sync spin from props
+  useEffect(() => {
     const plugin = instance?.viewer?.ctx;
     if (!plugin?.canvas3d) return;
-    const next = !spinning;
     plugin.canvas3d.setProps({
       trackball: {
         ...plugin.canvas3d.props.trackball,
-        animate: next
+        animate: spinningProp
           ? { name: 'spin', params: { speed: 0.12 } }
           : { name: 'off', params: {} },
       },
     });
-    setSpinning(next);
-  }, [instance, spinning]);
+  }, [instance, spinningProp]);
 
-  const toggleLigands = useCallback(() => {
+  // Sync ligand visibility from props
+  useEffect(() => {
     if (!instance) return;
-    const next = !showLigands;
     for (const lig of drugLigands) {
-      instance.setLigandVisibility(lig.uniqueKey, next);
+      instance.setLigandVisibility(lig.uniqueKey, showLigandsProp);
     }
-    setShowLigands(next);
-  }, [instance, showLigands, drugLigands]);
+  }, [instance, showLigandsProp, drugLigands]);
 
-  const toggleNucleotides = useCallback(() => {
+  // Sync nucleotide visibility from props
+  useEffect(() => {
     if (!instance) return;
-    const next = !showNucleotides;
     for (const lig of nucleotideLigands) {
-      instance.setLigandVisibility(lig.uniqueKey, next);
+      instance.setLigandVisibility(lig.uniqueKey, showNucleotidesProp);
     }
-    setShowNucleotides(next);
-  }, [instance, showNucleotides, nucleotideLigands]);
-
-  const hasLigands = drugLigands.length > 0;
-  const hasNucleotides = nucleotideLigands.length > 0;
+  }, [instance, showNucleotidesProp, nucleotideLigands]);
 
   return (
     <div
@@ -309,153 +313,42 @@ export default function LandingViewer({ pdbId, instanceId, type, description, ci
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
-      <div ref={containerRef} className="w-full h-full" />
+      <div ref={containerRef} className="w-full h-full rounded-xl overflow-hidden" />
 
-      {/* Structure label — top-left, clickable link to detail page */}
+      {/* Structure label -- bottom-left, transparent overlay */}
       <Link
         href={`/structures/${pdbId}`}
-        className="absolute top-3 left-3 z-10 max-w-[70%]
-                   px-3 py-2 rounded-lg bg-white/85 backdrop-blur
-                   border border-slate-200/60
-                   hover:bg-white hover:border-slate-300 hover:shadow-sm
-                   transition-all duration-150 group/label"
+        className="absolute bottom-3 left-3 z-10 max-w-[80%]
+                   px-2.5 py-1.5 rounded-lg bg-white/40 backdrop-blur-sm
+                   hover:bg-white/70 transition-all duration-150 group/label"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-1.5 text-[13px] font-medium text-slate-800
-                        group-hover/label:text-blue-600 transition-colors">
-          <span className="font-mono">{pdbId}</span>
-          <span className="text-slate-300">&mdash;</span>
-          <span>{type}</span>
-          <span aria-hidden className="text-slate-400 text-[10px] ml-0.5 group-hover/label:translate-x-0.5 transition-transform">&rarr;</span>
+        <div className="flex items-center gap-1.5 text-[12px] font-medium text-slate-700/80
+                        group-hover/label:text-slate-900 transition-colors">
+          <span className="font-mono font-semibold">{pdbId}</span>
+          <span className="text-slate-400/60">&mdash;</span>
+          <span className="font-light">{type}</span>
+          <span aria-hidden className="text-slate-400/60 text-[10px] ml-0.5 opacity-0
+                group-hover/label:opacity-100 group-hover/label:translate-x-0.5 transition-all">
+            &rarr;
+          </span>
         </div>
-        <p className="mt-0.5 text-[10px] text-slate-400 leading-relaxed line-clamp-2">
-          {description} <span className="text-slate-300">{citation}</span>
+        <p className="mt-0.5 text-[9px] text-slate-400/70 leading-relaxed line-clamp-1
+                      group-hover/label:text-slate-500">
+          {description}
         </p>
       </Link>
 
-      {/* Controls row — bottom-right */}
-      {!loading && !error && (
-        <div className="absolute bottom-3 right-3 z-10 flex items-center gap-1.5">
-          {hasNucleotides && (
-            <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleNucleotides(); }}
-              className={`flex items-center gap-1 px-2 h-7 rounded-full text-[11px] font-medium
-                         backdrop-blur border transition-all duration-150 shadow-sm
-                         ${showNucleotides
-                  ? 'bg-blue-50/90 border-blue-300 text-blue-700'
-                  : 'bg-white/80 border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-white'
-                }`}
-              title={showNucleotides ? 'Hide nucleotides (GTP, GDP -- energy molecules bound to tubulin)' : 'Show nucleotides (GTP, GDP -- energy molecules bound to tubulin)'}
-            >
-              <NucleotideIcon active={showNucleotides} />
-              <span>Nucleotides</span>
-            </button>
-          )}
-          {hasLigands && (
-            <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleLigands(); }}
-              className={`flex items-center gap-1 px-2 h-7 rounded-full text-[11px] font-medium
-                         backdrop-blur border transition-all duration-150 shadow-sm
-                         ${showLigands
-                  ? 'bg-green-50/90 border-green-300 text-green-700'
-                  : 'bg-white/80 border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-white'
-                }`}
-              title={showLigands ? 'Hide bound drugs and small molecules' : 'Show bound drugs and small molecules'}
-            >
-              <LigandIcon active={showLigands} />
-              <span>Taxol</span>
-            </button>
-          )}
-          <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSpin(); }}
-            className="flex items-center justify-center w-7 h-7 rounded-full
-                       bg-white/80 backdrop-blur border border-slate-200
-                       text-slate-500 hover:text-slate-700 hover:bg-white
-                       transition-all duration-150 shadow-sm"
-            title={spinning ? 'Pause rotation' : 'Resume rotation'}
-          >
-            {spinning ? (
-              <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor">
-                <rect x="3" y="2" width="3" height="10" rx="0.5" />
-                <rect x="8" y="2" width="3" height="10" rx="0.5" />
-              </svg>
-            ) : (
-              <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor">
-                <path d="M3 1.5v11l9-5.5z" />
-              </svg>
-            )}
-          </button>
-        </div>
-      )}
-
-      {/* Hover info bar — bottom-left */}
-      {hoverInfo && (
-        <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2
-                        px-2.5 py-1 rounded-md bg-white/90 backdrop-blur border border-slate-200
-                        shadow-sm transition-opacity duration-100">
-          <span
-            className="w-2 h-2 rounded-full flex-shrink-0"
-            style={{ backgroundColor: hoverInfo.color }}
-          />
-          <span className="text-[11px] font-medium text-slate-600 whitespace-nowrap">
-            {hoverInfo.text}
-          </span>
-        </div>
-      )}
-
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/80">
+        <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-xl">
           <div className="animate-spin h-6 w-6 border-2 border-slate-400 border-t-transparent rounded-full" />
         </div>
       )}
       {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/80">
+        <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-xl">
           <p className="text-sm text-slate-400">Failed to load {pdbId}</p>
         </div>
       )}
     </div>
-  );
-}
-
-// ── Helpers ──
-
-/** Short beginner-friendly description for tubulin families */
-function familyFriendly(family?: string | null): string {
-  if (!family) return '';
-  const map: Record<string, string> = {
-    tubulin_alpha: 'one half of the tubulin dimer',
-    tubulin_beta: 'the other half of the tubulin dimer',
-    tubulin_gamma: 'nucleates new microtubules',
-    tubulin_delta: 'found at centrioles',
-    tubulin_epsilon: 'found at centrioles',
-  };
-  return map[family] ?? '';
-}
-
-/** Convert ghost color to hex for the hover info bar */
-function ghostHex(family: string): string {
-  const c = TUBULIN_GHOST_COLORS[family] ?? TUBULIN_GHOST_COLORS.Default;
-  const r = (c >> 16) & 0xFF;
-  const g = (c >> 8) & 0xFF;
-  const b = c & 0xFF;
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-}
-
-// ── Mini icons ──
-
-function NucleotideIcon({ active }: { active: boolean }) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <circle cx="8" cy="8" r="3" fill={active ? 'currentColor' : 'none'} />
-      <path d="M8 2v3M8 11v3M2 8h3M11 8h3" />
-    </svg>
-  );
-}
-
-function LigandIcon({ active }: { active: boolean }) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M8 3L13 6v4l-5 3-5-3V6z" fill={active ? 'currentColor' : 'none'} />
-    </svg>
   );
 }

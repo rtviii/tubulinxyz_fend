@@ -32,8 +32,8 @@ export function FloatingNav() {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
 
-  // Hide on structure detail pages — nav is merged into ViewerToolbar there
-  if (pathname.match(/^\/structures\/[^/]+$/)) return null;
+  // Hide on landing page (nav integrated) and structure detail pages (ViewerToolbar)
+  if (pathname === '/' || pathname.match(/^\/structures\/[^/]+$/)) return null;
 
   const navItems = [
     { href: '/', icon: ICONS.home, label: 'Home' },

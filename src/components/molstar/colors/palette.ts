@@ -214,6 +214,17 @@ export function getHexForFamily(family?: string | null): string {
   return TUBULIN_HEX[family] ?? MAP_HEX[family] ?? '#94a3b8';
 }
 
+const TUBULIN_GHOST_HEX: Record<string, string> = {
+  tubulin_alpha: '#D4C4A8',
+  tubulin_beta: '#B8C4D0',
+  Default: '#CCCCCC',
+};
+
+export function getGhostHexForFamily(family?: string | null): string {
+  if (!family) return TUBULIN_GHOST_HEX.Default;
+  return TUBULIN_GHOST_HEX[family] ?? TUBULIN_GHOST_HEX.Default;
+}
+
 export function getHexForLigand(compId: string): string {
   return LIGAND_HEX[compId] ?? _hashHex(compId, 70, 50);
 }

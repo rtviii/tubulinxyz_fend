@@ -49,6 +49,22 @@ interface SelectedResidue {
   authSeqId: number;
 }
 
+/** Info emitted from MSA right-click. Page uses this to construct a ResiduePopupTarget. */
+export interface MSAContextMenuEvent {
+  residueLetter: string;
+  masterIndex: number;
+  screenX: number;
+  screenY: number;
+  /** Present only for structural (PDB) sequences */
+  structural?: {
+    chainLabel: string;  // "PDB:chainId"
+    authSeqId: number;
+    chainId: string;     // auth_asym_id
+  };
+  /** Present only for non-structural (master/custom) sequences */
+  sequenceName?: string;
+}
+
 interface SequenceAlignmentPanelProps {
   chainId: string;
   onChainChange: (chainId: string) => void;
@@ -66,6 +82,7 @@ interface SequenceAlignmentPanelProps {
   onClearColors?: () => void;
   onWindowMaskChange?: (masterStart: number, masterEnd: number) => void;
   onWindowMaskClear?: () => void;
+  onResidueContextMenu?: (event: MSAContextMenuEvent) => void;
 }
 
 // ────────────────────────────────────────────
@@ -115,6 +132,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       onClearColors,
       onWindowMaskChange,
       onWindowMaskClear,
+      onResidueContextMenu,
     } = props;
 
     const msaRef = useRef<ResizableMSAContainerHandle>(null);
@@ -319,6 +337,9 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
     const displaySequencesRef = useRef(displaySequences);
     displaySequencesRef.current = displaySequences;
 
+    // Track last hovered residue for context menu (both structural and non-structural)
+    const lastHoveredResidueRef = useRef<Omit<MSAContextMenuEvent, 'screenX' | 'screenY'> | null>(null);
+
     // Clear selection on chain or family change
     useEffect(() => {
       setSelectedResidue(null);
@@ -339,31 +360,51 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
 
     const handleResidueHover = useCallback(
       (seqId: string, position: number) => {
-        // Highlight in the MSA itself
         const seq = displaySequences.find(s => s.id === seqId);
         if (seq && seq.originType === 'pdb') {
           // Structural sequence: crosshair (dim column + bold cell)
           const rowIdx = displaySequences.indexOf(seq);
           if (rowIdx >= 0) msaRef.current?.setCrosshairHighlight(rowIdx, position);
-          // Highlight label row
           if (seq.chainRef) {
-            dispatch(setHoveredChain(makeChainKey(seq.chainRef.pdbId, seq.chainRef.chainId)));
+            const ck = makeChainKey(seq.chainRef.pdbId, seq.chainRef.chainId);
+            dispatch(setHoveredChain(ck));
+
+            const mapping = ck === sequenceKey ? positionMapping : allPositionMappings[ck] ?? null;
+            const authSeq = mapping ? mapping[position + 1] : undefined;
+            if (authSeq !== undefined) {
+              lastHoveredResidueRef.current = {
+                residueLetter: seq.sequence[position] ?? '?',
+                masterIndex: position + 1,
+                structural: {
+                  chainLabel: `${seq.chainRef.pdbId}:${seq.chainRef.chainId}`,
+                  authSeqId: authSeq,
+                  chainId: seq.chainRef.chainId,
+                },
+              };
+            }
           }
-        } else {
-          // Non-structural (master/custom): highlight whole column
+        } else if (seq) {
+          // Non-structural (master/custom): highlight whole column + track for context menu
           msaRef.current?.setHighlight(position + 1, position + 1);
           dispatch(setHoveredChain(null));
+          lastHoveredResidueRef.current = {
+            residueLetter: seq.sequence[position] ?? '?',
+            masterIndex: position + 1,
+            sequenceName: seq.name || seq.id,
+          };
+        } else {
+          lastHoveredResidueRef.current = null;
         }
-        // Forward to Molstar highlight
         onResidueHover?.(seqId, position);
       },
-      [onResidueHover, displaySequences, dispatch]
+      [onResidueHover, displaySequences, dispatch, sequenceKey, positionMapping, allPositionMappings]
     );
 
     const handleResidueLeave = useCallback(
       () => {
         msaRef.current?.clearHighlight();
         dispatch(setHoveredChain(null));
+        lastHoveredResidueRef.current = null;
         onResidueLeave?.();
       },
       [onResidueLeave, dispatch]
@@ -492,6 +533,18 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       }
     };
 
+    // ── Context menu on right-click ──
+    const handleContextMenu = useCallback(
+      (e: React.MouseEvent) => {
+        const hovered = lastHoveredResidueRef.current;
+        if (!hovered || !onResidueContextMenu) return;
+        e.preventDefault();
+        onResidueContextMenu({ ...hovered, screenX: e.clientX, screenY: e.clientY });
+      },
+      [onResidueContextMenu]
+    );
+
+
     // ── Loading state ──
     if (!nglLoaded || !family || maxLength === 0 || !isAligned) {
       return (
@@ -570,6 +623,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
             onResidueHover={handleResidueHover}
             onResidueLeave={handleResidueLeave}
             onResidueClick={handleResidueClick}
+            onContextMenu={handleContextMenu}
             onDisplayRangeChange={handleDisplayRangeChange}
             visibleChainKeys={visibleChainKeys}
             onToggleChainVisibility={handleToggleChainVisibility}

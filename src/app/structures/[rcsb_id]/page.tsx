@@ -24,7 +24,9 @@ import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { StructureSidebar } from '@/components/structure/StructureSidebar';
 import { ViewerToolbar } from '@/components/structure/ViewerToolbar';
 import { MonomerSidebar } from '@/components/monomer/MonomerSidebar';
-import { SequenceAlignmentPanel } from '@/components/msa/SequenceAlignmentPanel';
+import { SequenceAlignmentPanel, type MSAContextMenuEvent } from '@/components/msa/SequenceAlignmentPanel';
+import { ResiduePopupLayer } from '@/components/residue_popup/ResiduePopup';
+import type { ResiduePopupTarget } from '@/components/residue_popup/types';
 import { API_BASE_URL } from '@/config';
 import type { MSAHandle } from '@/components/msa/types';
 import { makeChainKey } from '@/lib/chain_key';
@@ -151,7 +153,7 @@ export default function StructureProfilePage() {
     msaRef.current?.selectResidueByChainKey(ck, masterIdx, authSeqId);
   }, [msaRef]);
 
-  const { handleMSAHover, handleMSAHoverEnd, handleDisplayRangeChange, clearWindowMask } = useViewerSync({
+  const { handleMSAHover, handleMSAHoverEnd, handleDisplayRangeChange, clearWindowMask, lastHoveredMolstarResidueRef } = useViewerSync({
     chainKey,
     molstarInstance: instance,
     msaRef,
@@ -159,6 +161,84 @@ export default function StructureProfilePage() {
     chainRowMap: chainRowMapRef.current,
     onMolstarResidueSelect: handleMolstarResidueSelect,
   });
+
+  // ── Residue popups (multi-popup, unified for MSA + Molstar) ──
+  const [popups, setPopups] = useState<ResiduePopupTarget[]>([]);
+
+  const addPopup = useCallback((target: ResiduePopupTarget) => {
+    setPopups(prev => {
+      const filtered = prev.filter(p => p.id !== target.id);
+      return [...filtered, target];
+    });
+  }, []);
+
+  const removePopup = useCallback((id: string) => {
+    setPopups(prev => prev.filter(p => p.id !== id));
+  }, []);
+
+  const clearPopups = useCallback(() => setPopups([]), []);
+
+  // Molstar right-click → anchored popup
+  const handleMolstarContextMenu = useCallback((e: React.MouseEvent) => {
+    const hovered = lastHoveredMolstarResidueRef.current;
+    if (!hovered || !hovered.position3d) return;
+    e.preventDefault();
+
+    const { chainId: hovChainId, authSeqId, masterIdx, position3d } = hovered;
+    let residueLetter = '?';
+    let chainLabel = `${loadedStructure}:${hovChainId}`;
+    const seq = pdbSequences.find(s => s.chainRef?.chainId === hovChainId);
+    if (seq) {
+      residueLetter = seq.sequence[masterIdx - 1] ?? '?';
+      if (seq.chainRef) chainLabel = `${seq.chainRef.pdbId}:${seq.chainRef.chainId}`;
+    }
+
+    addPopup({
+      id: `${chainLabel}:${authSeqId}`,
+      residueLetter,
+      label: chainLabel,
+      masterIndex: masterIdx,
+      authSeqId,
+      chainId: hovChainId,
+      anchor: { mode: 'anchored', position3d },
+    });
+  }, [lastHoveredMolstarResidueRef, pdbSequences, loadedStructure, addPopup, instance]);
+
+  // MSA right-click → anchored (if structural + 3D position available) or static
+  const handleMSAContextMenu = useCallback((event: MSAContextMenuEvent) => {
+    if (event.structural && instance) {
+      // Structural sequence: try to get 3D center for anchored popup
+      const { chainLabel, authSeqId, chainId: cId } = event.structural;
+      const position3d = instance.getResidueCenterPosition(cId, authSeqId);
+      if (position3d) {
+        addPopup({
+          id: `${chainLabel}:${authSeqId}`,
+          residueLetter: event.residueLetter,
+          label: chainLabel,
+          masterIndex: event.masterIndex,
+          authSeqId,
+          chainId: cId,
+          anchor: { mode: 'anchored', position3d },
+        });
+        return;
+      }
+    }
+    // Non-structural or no 3D position: static popup
+    const label = event.structural?.chainLabel ?? event.sequenceName ?? 'Unknown';
+    const idKey = event.structural
+      ? `${event.structural.chainLabel}:${event.structural.authSeqId}`
+      : `${event.sequenceName}:${event.masterIndex}`;
+
+    addPopup({
+      id: idKey,
+      residueLetter: event.residueLetter,
+      label,
+      masterIndex: event.masterIndex,
+      authSeqId: event.structural?.authSeqId,
+      chainId: event.structural?.chainId,
+      anchor: { mode: 'static', screenX: event.screenX, screenY: event.screenY },
+    });
+  }, [instance, addPopup]);
 
 
   // Inside the component, after the existing hook calls:
@@ -334,7 +414,7 @@ export default function StructureProfilePage() {
       ))}
 
       {/* ── Full-viewport Molstar viewer (base layer) ── */}
-      <div ref={containerRef} className="absolute inset-0 w-full h-full" />
+      <div ref={containerRef} className="absolute inset-0 w-full h-full" onContextMenu={handleMolstarContextMenu} />
 
       {(!isInitialized || isLoading) && (
         <LoadingOverlay
@@ -452,6 +532,7 @@ export default function StructureProfilePage() {
                   onClearColors={handleClearAllAnnotations}
                   onWindowMaskChange={handleDisplayRangeChange}
                   onWindowMaskClear={clearWindowMask}
+                  onResidueContextMenu={handleMSAContextMenu}
                 />
               )}
             </div>
@@ -459,6 +540,7 @@ export default function StructureProfilePage() {
           </div>
         </div>
       )}
+      <ResiduePopupLayer popups={popups} instance={instance} onClose={removePopup} onCloseAll={clearPopups} />
     </div>
   );
 }
