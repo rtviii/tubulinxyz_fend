@@ -17,7 +17,7 @@ function stripNulls(params: Record<string, any> | undefined) {
   return out;
 }
 
-const rawBaseQuery = fetchBaseQuery({ baseUrl: "http://localhost:8000/" });
+const rawBaseQuery = fetchBaseQuery({ baseUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/" });
 
 const baseQuery: typeof rawBaseQuery = async (args, api, extraOptions) => {
   if (typeof args === "object" && args != null && "params" in args) {
