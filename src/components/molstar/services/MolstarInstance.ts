@@ -701,7 +701,7 @@ const color = getMolstarGhostColor(family);
   // Structure Loading
   // ============================================================
 
-  async loadStructure(pdbId: string, classification: TubulinClassification): Promise<boolean> {
+  async loadStructure(pdbId: string, classification: TubulinClassification, chainFilter?: string[]): Promise<boolean> {
     try {
       await this.clearCurrentStructure();
 
@@ -716,6 +716,7 @@ const color = getMolstarGhostColor(family);
         {
           pdbId: pdbId.toUpperCase(),
           tubulinClassification: classification,
+          chainFilter: chainFilter ?? null,
         }
       );
 

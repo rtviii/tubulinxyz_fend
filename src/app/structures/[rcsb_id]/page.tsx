@@ -202,7 +202,7 @@ export default function StructureProfilePage() {
       chainId: hovChainId,
       anchor: { mode: 'anchored', position3d },
     });
-  }, [lastHoveredMolstarResidueRef, pdbSequences, loadedStructure, addPopup]);
+  }, [lastHoveredMolstarResidueRef, pdbSequences, loadedStructure, addPopup, instance]);
 
   // MSA right-click → anchored (if structural + 3D position available) or static
   const handleMSAContextMenu = useCallback((event: MSAContextMenuEvent) => {

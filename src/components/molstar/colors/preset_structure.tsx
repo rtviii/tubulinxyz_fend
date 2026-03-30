@@ -32,6 +32,7 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
         ...StructureRepresentationPresetProvider.CommonParams,
         pdbId: PD.Text('', { description: 'PDB ID' }),
         tubulinClassification: PD.Value<TubulinClassification>({}, { isHidden: true }),
+        chainFilter: PD.Value<string[] | null>(null, { isHidden: true, description: 'If set, only these chain IDs get representations' }),
     }),
 
     async apply(ref, params, plugin): Promise<Partial<PresetObjects>> {
@@ -47,8 +48,12 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
         const { auth_asym_id } = structure.model.atomicHierarchy.chains;
         const chainCount = structure.model.atomicHierarchy.chains._rowCount;
 
+        const chainFilterSet = Array.isArray(params.chainFilter) && params.chainFilter.length > 0
+            ? new Set(params.chainFilter) : null;
+
         for (let cI = 0; cI < chainCount; cI++) {
             const chainId = auth_asym_id.value(cI);
+            if (chainFilterSet && !chainFilterSet.has(chainId)) continue;
             const eI = structure.model.atomicHierarchy.index.getEntityFromChain(cI);
             if (structure.model.entities.data.type.value(eI) !== 'polymer') continue;
 
@@ -85,6 +90,7 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
         const ligandInstances = getLigandInstances(structure);
         for (const instance of ligandInstances) {
             if (LIGAND_IGNORE_IDS.has(instance.compId)) continue;
+            if (chainFilterSet && !chainFilterSet.has(instance.auth_asym_id)) continue;
 
             const ligandSelection = MS.struct.generator.atomGroups({
                 'residue-test': MS.core.logic.and([

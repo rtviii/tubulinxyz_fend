@@ -1,17 +1,23 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
+import { Home, LayoutGrid, Mail, ChevronDown } from 'lucide-react';
 import LandingViewer from '@/app/landing/LandingViewer';
+import { useExistingInstance } from '@/components/molstar/services/MolstarInstanceManager';
+import { LANDING_DEMOS, DEMO_CATEGORY_LABELS, type DemoCategory, type DemoResult } from '@/app/landing/demos';
+import { DemoExplanationCard, type DemoExplanation } from '@/app/landing/DemoExplanationCard';
 
 const STRUCTURES = [
   {
-    pdbId: '1JFF',
-    instanceId: 'landing_1jff' as const,
+    pdbId: '9MLF',
+    instanceId: 'landing_9mlf' as const,
     type: 'Heterodimer',
     description:
-      'Refined structure of alpha-beta tubulin from zinc-induced sheets stabilized with taxol.',
-    citation: 'Lowe et al., 2001',
+      'Alpha-beta tubulin dimer from a stathmin complex, straight conformation.',
+    citation: '',
+    chainFilter: ['A', 'B'],
   },
   {
     pdbId: '6WVM',
@@ -23,52 +29,213 @@ const STRUCTURES = [
   },
 ];
 
+// Group demos by category
+const DEMOS_BY_CATEGORY = LANDING_DEMOS.reduce((acc, demo) => {
+  (acc[demo.category] ??= []).push(demo);
+  return acc;
+}, {} as Record<DemoCategory, typeof LANDING_DEMOS>);
+
 export default function Page() {
+  const [spinning, setSpinning] = useState(true);
+  const [showLigands, setShowLigands] = useState(false);
+  const [showNucleotides, setShowNucleotides] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false);
+  const [activeDemo, setActiveDemo] = useState<string | null>(null);
+  const [demoExplanation, setDemoExplanation] = useState<DemoExplanation | null>(null);
+  const demoRef = useRef<HTMLDivElement>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  // Access landing Molstar instances
+  const heterodimer = useExistingInstance('landing_9mlf');
+  const lattice = useExistingInstance('landing_6wvm');
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!demoOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (demoRef.current && !demoRef.current.contains(e.target as Node)) {
+        setDemoOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [demoOpen]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (cleanupRef.current) cleanupRef.current();
+    };
+  }, []);
+
+  const dismissDemo = useCallback(() => {
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
+    setActiveDemo(null);
+    setDemoExplanation(null);
+  }, []);
+
+  const runDemo = useCallback(async (demoId: string) => {
+    // Clean up previous demo
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+      setDemoExplanation(null);
+    }
+
+    // Toggle off if same demo
+    if (activeDemo === demoId) {
+      setActiveDemo(null);
+      setDemoOpen(false);
+      return;
+    }
+
+    const demo = LANDING_DEMOS.find(d => d.id === demoId);
+    if (!demo) return;
+
+    const result: DemoResult = await demo.run({ heterodimer, lattice });
+    cleanupRef.current = result.cleanup;
+    setDemoExplanation(result.explanation);
+    setActiveDemo(demoId);
+    setDemoOpen(false);
+  }, [activeDemo, heterodimer, lattice]);
+
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="h-screen flex flex-col bg-white overflow-hidden">
       {/* ---- Header ---- */}
-      <header className="max-w-6xl w-full mx-auto px-8 pt-14 pb-2">
-        <h1 className="text-2xl tracking-wide text-slate-700 font-light">
-          <span className="font-mono font-normal text-slate-900">tube</span>
-          <span className="font-mono font-light text-slate-400">.xyz</span>
+      <header className="max-w-[1400px] w-full mx-auto px-6 pt-5 pb-3">
+        <h1 className="text-4xl tracking-[0.01em]">
+          <span className="font-bold text-slate-800">tube</span>
+          <span className="font-light text-slate-400">.xyz</span>
         </h1>
-        <p className="mt-2 text-sm text-slate-500 max-w-lg leading-relaxed">
-          Structures and annotations of tubulin, microtubules, their mutations, ligands and
-          post-translational modifications.
+        <p className="mt-1 text-[13px] text-slate-400 font-light tracking-wide">
+          Tubulin structures, ligands, mutations &amp; modifications
         </p>
       </header>
 
-      {/* ---- Main ---- */}
-      <main className="max-w-6xl w-full mx-auto px-8 flex-1 pb-16">
-        {/* Assistant placeholder */}
-        <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50/60 p-4">
-          <div className="flex items-baseline gap-2 mb-3">
-            <span className="text-sm font-medium text-slate-700">Assistant</span>
-            <span className="text-[11px] text-slate-400 tracking-wide">coming soon</span>
-          </div>
-          <div className="flex gap-2">
-            <input
-              disabled
-              placeholder="Ask about structures, binding sites, ligands, mutations..."
-              className="flex-1 h-9 rounded-md border border-slate-200 bg-white px-3 text-sm
-                         text-slate-400 placeholder:text-slate-400"
-            />
+      {/* ---- Toolbar row: controls | assistant | nav ---- */}
+      <div className="max-w-[1400px] w-full mx-auto px-6 pb-4 flex items-center gap-3 relative z-20">
+        {/* Controls: pause + demos dropdown */}
+        <div className="flex items-center gap-0 rounded-full border border-slate-200/60
+                        bg-white/80 backdrop-blur shadow-sm px-1 py-0.5 text-[11px]">
+          <button
+            onClick={() => setSpinning(v => !v)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full font-medium transition-colors
+                       text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+            title={spinning ? 'Pause rotation' : 'Resume rotation'}
+          >
+            {spinning ? (
+              <svg width="11" height="11" viewBox="0 0 14 14" fill="currentColor">
+                <rect x="3" y="2" width="3" height="10" rx="0.5" />
+                <rect x="8" y="2" width="3" height="10" rx="0.5" />
+              </svg>
+            ) : (
+              <svg width="11" height="11" viewBox="0 0 14 14" fill="currentColor">
+                <path d="M3 1.5v11l9-5.5z" />
+              </svg>
+            )}
+            {spinning ? 'Pause' : 'Spin'}
+          </button>
+
+          <div className="w-px h-4 bg-slate-200 mx-0.5" />
+
+          {/* Demos dropdown */}
+          <div className="relative" ref={demoRef}>
             <button
-              disabled
-              className="h-9 px-4 rounded-md bg-slate-200 text-slate-500 text-sm font-medium"
+              onClick={() => setDemoOpen(v => !v)}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full font-medium transition-colors
+                         ${activeDemo
+                  ? 'bg-violet-50 text-violet-700'
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                }`}
             >
-              Send
+              Explore
+              <ChevronDown size={11} className={`transition-transform ${demoOpen ? 'rotate-180' : ''}`} />
             </button>
+
+            {demoOpen && (
+              <div className="absolute top-full left-0 mt-1.5 w-56 rounded-lg border border-slate-200
+                              bg-white shadow-lg z-50 py-1 text-[11px]">
+                {(Object.entries(DEMOS_BY_CATEGORY) as [DemoCategory, typeof LANDING_DEMOS][]).map(
+                  ([category, demos]) => (
+                    <div key={category}>
+                      <div className="px-3 pt-2 pb-1 text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
+                        {DEMO_CATEGORY_LABELS[category]}
+                      </div>
+                      {demos.map(demo => (
+                        <button
+                          key={demo.id}
+                          onClick={() => runDemo(demo.id)}
+                          className={`w-full text-left px-3 py-1.5 flex items-center justify-between
+                                     hover:bg-slate-50 transition-colors
+                                     ${activeDemo === demo.id ? 'text-violet-700 bg-violet-50/50' : 'text-slate-600'}`}
+                        >
+                          <span className="font-medium">{demo.label}</span>
+                          {demo.target && (
+                            <span className="text-[9px] text-slate-400 font-mono">{demo.target}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Structure viewers -- taller panels */}
-        <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {STRUCTURES.map((s) => (
+        {/* Assistant search bar (center) */}
+        <div className="flex-1 max-w-md mx-auto relative">
+          <input
+            disabled
+            placeholder="Ask about structures, binding sites, ligands, mutations..."
+            className="w-full h-8 rounded-full border border-slate-200/60 bg-white/80 backdrop-blur
+                       shadow-sm px-4 pr-24 text-[11px]
+                       text-slate-400 placeholder:text-slate-400"
+          />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-slate-300
+                           tracking-wider font-medium uppercase">
+            coming soon
+          </span>
+        </div>
+
+        {/* Navigation pill (ViewerToolbar style) */}
+        <div className="flex items-center gap-0 rounded-full border border-slate-200/60
+                        bg-white/80 backdrop-blur shadow-sm px-1 py-0.5 text-[11px]">
+          <Link
+            href="/"
+            className="p-1.5 rounded-full text-slate-600 hover:text-slate-800 transition-colors"
+            title="Home"
+          >
+            <Home size={13} />
+          </Link>
+          <Link
+            href="/structures"
+            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 transition-colors"
+            title="Structures"
+          >
+            <LayoutGrid size={13} />
+          </Link>
+          <div className="w-px h-4 bg-slate-200" />
+          <a
+            href="mailto:feedback@tube.xyz?subject=tube.xyz%20feedback"
+            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 transition-colors"
+            title="Send feedback"
+          >
+            <Mail size={13} />
+          </a>
+        </div>
+      </div>
+
+      {/* ---- Viewers ---- */}
+      <main className="max-w-[1400px] w-full mx-auto px-6 flex-1 min-h-0 pb-2">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-full">
+          {STRUCTURES.map((s, idx) => (
             <div
               key={s.pdbId}
-              className="h-[36rem] rounded-xl border border-slate-200/80 bg-white overflow-hidden
-                         transition-shadow duration-200 hover:shadow-md hover:border-slate-300"
+              className="relative rounded-xl border border-slate-200/60 bg-white overflow-hidden"
             >
               <LandingViewer
                 pdbId={s.pdbId}
@@ -76,54 +243,64 @@ export default function Page() {
                 type={s.type}
                 description={s.description}
                 citation={s.citation}
+                spinning={spinning}
+                showLigands={showLigands}
+                showNucleotides={showNucleotides}
+                {...(s.chainFilter ? { chainFilter: s.chainFilter } : {})}
               />
+              {/* Explanation card overlay */}
+              {demoExplanation && (
+                (demoExplanation.target === 'both' ||
+                 (demoExplanation.target === 'heterodimer' && idx === 0) ||
+                 (demoExplanation.target === 'lattice' && idx === 1)) && (
+                  <DemoExplanationCard
+                    explanation={demoExplanation}
+                    onDismiss={dismissDemo}
+                    instance={idx === 0 ? heterodimer : lattice}
+                  />
+                )
+              )}
             </div>
           ))}
         </div>
       </main>
 
       {/* ---- Footer ---- */}
-      <footer className="border-t border-slate-100 bg-slate-50/40">
-        <div className="max-w-6xl mx-auto px-8 py-14 flex flex-col items-center gap-8 text-center">
-          {/* Logos -- bigger, more breathing room */}
-          <div className="flex items-center justify-center gap-14 flex-wrap">
-            <Image
-              src="/landing/Logo_Curie.png"
-              alt="Institut Curie"
-              width={300}
-              height={80}
-              className="h-14 w-auto opacity-60 hover:opacity-100 transition-opacity"
-            />
-            <Image
-              src="/landing/PSI-Logo.png"
-              alt="Paul Scherrer Institute"
-              width={300}
-              height={80}
-              className="h-14 w-auto opacity-60 hover:opacity-100 transition-opacity"
-            />
-            <Image
-              src="/landing/pdb_logo.png"
-              alt="RCSB PDB"
-              width={300}
-              height={80}
-              className="h-14 w-auto opacity-60 hover:opacity-100 transition-opacity"
-            />
+      <footer className="border-t border-slate-100">
+        <div className="max-w-[1400px] mx-auto px-6 py-3 flex flex-col items-center gap-2">
+          <div className="flex items-center gap-6">
+            <a href="https://institut-curie.org" target="_blank" rel="noopener noreferrer">
+              <Image src="/landing/Logo_Curie.png" alt="Institut Curie" width={300} height={80}
+                     className="h-11 w-auto opacity-60 hover:opacity-100 transition-opacity" />
+            </a>
+            <a href="https://www.psi.ch" target="_blank" rel="noopener noreferrer">
+              <Image src="/landing/PSI-Logo.png" alt="Paul Scherrer Institute" width={300} height={80}
+                     className="h-11 w-auto opacity-60 hover:opacity-100 transition-opacity" />
+            </a>
+            <div className="w-px h-9 bg-slate-200" />
+            <a href="https://www.rcsb.org" target="_blank" rel="noopener noreferrer">
+              <Image src="/landing/pdb_logo.png" alt="RCSB PDB" width={120} height={40}
+                     className="h-6 w-auto opacity-40 hover:opacity-80 transition-opacity" />
+            </a>
+            <a href="https://www.uniprot.org" target="_blank" rel="noopener noreferrer">
+              <Image src="/landing/uniprot.png" alt="UniProt" width={120} height={40}
+                     className="h-6 w-auto opacity-40 hover:opacity-80 transition-opacity" />
+            </a>
+            <a href="http://hmmer.org" target="_blank" rel="noopener noreferrer">
+              <Image src="/landing/logo_hmmer.png" alt="HMMER" width={120} height={40}
+                     className="h-6 w-auto opacity-40 hover:opacity-80 transition-opacity" />
+            </a>
+            <a href="https://molstar.org" target="_blank" rel="noopener noreferrer">
+              <Image src="/landing/logo_molstar.png" alt="Mol*" width={120} height={40}
+                     className="h-6 w-auto opacity-40 hover:opacity-80 transition-opacity" />
+            </a>
+            <a href="https://neo4j.com" target="_blank" rel="noopener noreferrer">
+              <Image src="/landing/logo_neo4j.png" alt="Neo4j" width={120} height={40}
+                     className="h-6 w-auto opacity-40 hover:opacity-80 transition-opacity" />
+            </a>
           </div>
-
-          <p className="text-xs text-slate-500">
-            Built with structural data from the Protein Data Bank
-          </p>
-
-          <div className="flex items-center gap-3 text-xs text-slate-400">
-            <span>Institut Curie</span>
-            <span>&middot;</span>
-            <span>Paul Scherrer Institute</span>
-            <span>&middot;</span>
-            <span>RCSB PDB</span>
-          </div>
-
-          <p className="text-[10px] text-slate-300">
-            Content and code licensed under CC BY 4.0 unless otherwise noted.
+          <p className="text-[9px] text-slate-300 tracking-wide">
+            Built with structural data from the Protein Data Bank. Content licensed under CC BY 4.0.
           </p>
         </div>
       </footer>
