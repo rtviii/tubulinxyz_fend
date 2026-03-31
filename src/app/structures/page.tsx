@@ -10,9 +10,21 @@ import {
   type StructureSummary,
 } from "@/store/tubxz_api";
 
+import { createPortal } from "react-dom";
 import { StructureFiltersPanel, type UiFilters } from "./StructureFiltersPanel";
 import { API_BASE_URL } from "@/config";
 import { LIGAND_IGNORE_IDS } from "@/components/molstar/colors/palette";
+
+/** Nucleotides + ions to hide from the card ligand display (they're ubiquitous and uninteresting) */
+const CARD_LIGAND_HIDE = new Set([
+  ...LIGAND_IGNORE_IDS,
+  // Nucleotides
+  "GTP", "GDP", "GCP", "GSP", "G2P", "G2N", "ANP", "ACP", "ATP", "ADP", "GP2", "O3G",
+  // Ions
+  "MG", "ZN", "CA", "MN", "NA", "K", "CL", "ZPN",
+  // Phosphate mimics
+  "BEF", "AF3", "ALF",
+]);
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState(value);
@@ -25,9 +37,12 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
 
 const DEFAULT_LIMIT = 100;
 
+// ── Ligand name lookup type ──
+type LigandLookup = Record<string, string>; // chemical_id -> chemical_name
+
 // ── Structure Card ──
 
-const StructureCard = ({ structure }: { structure: StructureSummary }) => {
+const StructureCard = ({ structure, ligandLookup }: { structure: StructureSummary; ligandLookup: LigandLookup }) => {
   const organism = structure.src_organism_names?.[0] || "Unknown";
   const imageUrl = `${API_BASE_URL}/structures/${structure.rcsb_id}/thumbnail`;
 
@@ -39,7 +54,8 @@ const StructureCard = ({ structure }: { structure: StructureSummary }) => {
   const { genus, species } = formatOrganism(organism);
 
   const allLigandIds = structure.ligand_ids ?? [];
-  const meaningfulLigands = allLigandIds.filter(id => !LIGAND_IGNORE_IDS.has(id));
+  const meaningfulLigands = allLigandIds.filter(id => !CARD_LIGAND_HIDE.has(id));
+  const mapFamilies = (structure.polymer_families ?? []).filter(f => f.startsWith("map_"));
   const authors = structure.citation_rcsb_authors ?? [];
   const authorLine = authors.length === 0 ? null
     : authors.length <= 2 ? authors.join(", ")
@@ -105,11 +121,10 @@ const StructureCard = ({ structure }: { structure: StructureSummary }) => {
             </span>
           )}
           {meaningfulLigands.length > 0 && (
-            <Tooltip text={meaningfulLigands.join(", ")}>
-              <span className="bg-emerald-50 text-emerald-500 px-1.5 py-0.5 rounded">
-                {meaningfulLigands.length} lig
-              </span>
-            </Tooltip>
+            <LigandPopover ligandIds={meaningfulLigands} lookup={ligandLookup} />
+          )}
+          {mapFamilies.length > 0 && (
+            <MapPopover families={mapFamilies} />
           )}
         </div>
       </div>
@@ -117,14 +132,107 @@ const StructureCard = ({ structure }: { structure: StructureSummary }) => {
   );
 };
 
-/** Tiny inline tooltip -- avoids importing antd Tooltip for this one use */
-function Tooltip({ text, children }: { text: string; children: React.ReactNode }) {
-  return (
-    <span className="relative group/tip">
+/** Shared portal popover that positions above the anchor */
+function HoverPopover({
+  anchor, open, children,
+}: {
+  anchor: React.RefObject<HTMLElement | null>;
+  open: boolean;
+  children: React.ReactNode;
+}) {
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (open && anchor.current) {
+      const rect = anchor.current.getBoundingClientRect();
+      setPos({ top: rect.top + window.scrollY - 6, left: rect.left + window.scrollX });
+    }
+  }, [open, anchor]);
+
+  if (!open) return null;
+  return createPortal(
+    <div
+      className="absolute z-[9999] w-56 p-1.5 rounded-lg border border-slate-200/60 bg-white/95 backdrop-blur-sm shadow-lg"
+      style={{ top: pos.top, left: pos.left, transform: "translateY(-100%)" }}
+    >
       {children}
-      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-1.5 py-0.5 bg-gray-800 text-white text-[8px] rounded whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-10">
-        {text}
+    </div>,
+    document.body,
+  );
+}
+
+const formatChemName = (name: string) =>
+  name.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+
+const MAP_LABEL: Record<string, string> = {
+  map_eb_family: "EB family",
+  map_ckap5_chtog: "CKAP5 / ch-TOG",
+  map_ttll_glutamylase_short: "TTLL glutamylase (short)",
+  map_ttll_glutamylase_long: "TTLL glutamylase (long)",
+  map_ccp_deglutamylase: "CCP deglutamylase",
+};
+
+function formatMapFamily(f: string): string {
+  if (MAP_LABEL[f]) return MAP_LABEL[f];
+  return f.replace(/^map_/, "").split("_")
+    .map(w => w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+/** Ligand popover with rich rows showing chemical ID + name */
+function LigandPopover({ ligandIds, lookup }: { ligandIds: string[]; lookup: LigandLookup }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  return (
+    <span
+      ref={ref}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onClick={(e) => e.preventDefault()}
+    >
+      <span className="bg-emerald-50 text-emerald-500 px-1.5 py-0.5 rounded cursor-default">
+        {ligandIds.length} {ligandIds.length === 1 ? "ligand" : "ligands"}
       </span>
+      <HoverPopover anchor={ref} open={open}>
+        {ligandIds.map(id => {
+          const name = lookup[id];
+          return (
+            <div key={id} className="flex items-baseline gap-1.5 px-1.5 py-0.5 rounded hover:bg-gray-50">
+              <span className="text-[9px] font-mono font-semibold text-gray-700 flex-shrink-0">{id}</span>
+              {name && (
+                <span className="text-[8px] text-gray-400 truncate">{formatChemName(name)}</span>
+              )}
+            </div>
+          );
+        })}
+      </HoverPopover>
+    </span>
+  );
+}
+
+/** MAP families popover */
+function MapPopover({ families }: { families: string[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  return (
+    <span
+      ref={ref}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onClick={(e) => e.preventDefault()}
+    >
+      <span className="bg-violet-50 text-violet-500 px-1.5 py-0.5 rounded cursor-default">
+        {families.length} {families.length === 1 ? "MAP" : "MAPs"}
+      </span>
+      <HoverPopover anchor={ref} open={open}>
+        {families.map(f => (
+          <div key={f} className="flex items-baseline gap-1.5 px-1.5 py-0.5 rounded hover:bg-gray-50">
+            <span className="text-[9px] font-medium text-violet-600">{formatMapFamily(f)}</span>
+          </div>
+        ))}
+      </HoverPopover>
     </span>
   );
 }
@@ -203,6 +311,15 @@ export default function StructureCataloguePage() {
   }, [queryArgs]);
 
   const { data: facets } = useGetStructureFacetsQuery();
+
+  const ligandLookup = useMemo((): LigandLookup => {
+    const map: LigandLookup = {};
+    for (const l of facets?.top_ligands ?? []) {
+      if (l.chemical_name) map[l.chemical_id] = l.chemical_name;
+    }
+    return map;
+  }, [facets]);
+
   const { data: sourceTaxTree } = useGetTaxonomyTreeQuery({ taxType: "source" });
   const { data: hostTaxTree } = useGetTaxonomyTreeQuery({ taxType: "host" });
 
@@ -330,7 +447,7 @@ export default function StructureCataloguePage() {
                     ))
                   ) : items.length > 0 ? (
                     items.map((structure) => (
-                      <StructureCard key={structure.rcsb_id} structure={structure} />
+                      <StructureCard key={structure.rcsb_id} structure={structure} ligandLookup={ligandLookup} />
                     ))
                   ) : (
                     <div className="col-span-full flex flex-col items-center justify-center text-center text-gray-500 h-80 bg-white rounded-lg border-2 border-dashed border-gray-200">

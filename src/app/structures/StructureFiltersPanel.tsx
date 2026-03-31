@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Input, Select, TreeSelect } from "antd";
 import type { TreeSelectProps } from "antd";
 import {
@@ -145,33 +146,54 @@ function PanelHeader({ label, right }: { label: string; right?: React.ReactNode 
 /** Small info popover that matches the panel style */
 function AnnotationInfo() {
     const [open, setOpen] = useState(false);
+    const btnRef = useRef<HTMLButtonElement>(null);
+    const [pos, setPos] = useState({ top: 0, left: 0 });
+
+    const handleClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!open && btnRef.current) {
+            const rect = btnRef.current.getBoundingClientRect();
+            // Position above the button, right-aligned
+            setPos({ top: rect.top - 8, left: rect.right - 256 }); // 256 = w-64
+        }
+        setOpen(o => !o);
+    };
+
     return (
-        <div className="relative">
+        <>
             <button
-                onClick={() => setOpen(o => !o)}
+                ref={btnRef}
+                onClick={handleClick}
                 className="text-[9px] text-gray-300 hover:text-gray-400 transition-colors cursor-help"
             >
                 ?
             </button>
-            {open && (
+            {open && createPortal(
                 <>
-                    <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-                    <div className="absolute right-0 top-5 z-50 w-64 p-2.5 rounded-lg border border-slate-200/60 bg-white/95 backdrop-blur-sm shadow-lg text-[10px] text-gray-500 leading-relaxed space-y-1.5">
+                    <div className="fixed inset-0 z-[9998]" onClick={() => setOpen(false)} />
+                    <div
+                        className="fixed z-[9999] w-64 p-2.5 rounded-lg border border-slate-200/60 bg-white/95 backdrop-blur-sm shadow-lg text-[10px] text-gray-500 leading-relaxed space-y-1.5"
+                        style={{ top: pos.top, left: Math.max(8, pos.left), transform: 'translateY(-100%)' }}
+                    >
                         <p>
                             <span className="font-medium text-gray-700">Structural annotations</span> are
-                            sequence variants detected by aligning each chain against the family consensus.
+                            sequence variants detected by aligning each chain against the family
+                            consensus (<a href="/msa/tubulin_alpha" className="text-blue-500 hover:underline">{"\u03B1"}</a>,{" "}
+                            <a href="/msa/tubulin_beta" className="text-blue-500 hover:underline">{"\u03B2"}</a>).
                             These are real sequence differences observed in resolved PDB structures.
                         </p>
                         <p>
-                            <span className="font-medium text-gray-700">Literature annotations</span> (Morisette
-                            database) are curated mutations and PTMs from published studies. These are
-                            associated with tubulin families, not individual structures, and appear in the
-                            chain viewer when exploring a monomer.
+                            <span className="font-medium text-gray-700">Literature annotations</span> are
+                            curated mutations and PTMs from published studies
+                            (<a href="https://doi.org/10.1083/jcb.202311021" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Galvin et al., 2024</a>).
+                            These are associated with tubulin families, not individual structures, and
+                            appear in the chain viewer when exploring a monomer.
                         </p>
                     </div>
-                </>
+                </>,
+                document.body
             )}
-        </div>
+        </>
     );
 }
 

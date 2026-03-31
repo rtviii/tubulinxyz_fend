@@ -484,6 +484,7 @@ export type StructureSummary = {
   entity_count?: number | null;
   ligand_count?: number | null;
   ligand_ids?: string[];
+  polymer_families?: string[];
 };
 export type StructureListResponse = {
   data: StructureSummary[];
