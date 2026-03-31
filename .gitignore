@@ -21,6 +21,7 @@
 
 # production
 /build
+plan.md
 
 # misc
 .DS_Store
