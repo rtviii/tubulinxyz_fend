@@ -3,6 +3,7 @@ import { useCallback, useMemo } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/store';
 import {
     setVariantsVisible,
+    setModificationsVisible,
     toggleLigandSite,
     showAllLigands,
     hideAllLigands,
@@ -25,6 +26,9 @@ export function useAnnotationVisibility(chainKey: string) {
         setShowVariants: (visible: boolean) =>
             dispatch(setVariantsVisible({ chainKey, visible })),
 
+        setShowModifications: (visible: boolean) =>
+            dispatch(setModificationsVisible({ chainKey, visible })),
+
         toggleLigand: (siteId: string) =>
             dispatch(toggleLigandSite({ chainKey, siteId })),
 
@@ -34,6 +38,7 @@ export function useAnnotationVisibility(chainKey: string) {
 
         clearAll: () => {
             dispatch(setVariantsVisible({ chainKey, visible: false }));
+            dispatch(setModificationsVisible({ chainKey, visible: false }));
             dispatch(hideAllLigands(chainKey));
         },
     }), [dispatch, chainKey]);
@@ -41,8 +46,10 @@ export function useAnnotationVisibility(chainKey: string) {
     return {
         ligandSites: data?.ligandSites ?? [],
         variants: data?.variants ?? [],
+        modifications: data?.modifications ?? [],
         family: data?.family ?? null,
         showVariants: visibility?.showVariants ?? false,
+        showModifications: visibility?.showModifications ?? false,
         visibleLigandIds,
         ...actions,
     };

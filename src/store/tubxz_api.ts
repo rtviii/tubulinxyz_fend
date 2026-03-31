@@ -44,6 +44,7 @@ const injectedRtkApi = api
             ligands: queryArg.ligands,
             family: queryArg.family,
             uniprot: queryArg.uniprot,
+            isotype: queryArg.isotype,
             hasVariants: queryArg.hasVariants,
             variantFamily: queryArg.variantFamily,
             variantType: queryArg.variantType,
@@ -90,6 +91,15 @@ const injectedRtkApi = api
         }),
         providesTags: ["Structures"],
       }),
+      getStructureThumbnail: build.query<
+        GetStructureThumbnailApiResponse,
+        GetStructureThumbnailApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/structures/${queryArg.rcsbId}/thumbnail`,
+        }),
+        providesTags: ["Structures"],
+      }),
       listPolymers: build.query<ListPolymersApiResponse, ListPolymersApiArg>({
         query: (queryArg) => ({
           url: `/polymers`,
@@ -109,6 +119,7 @@ const injectedRtkApi = api
             hasVariants: queryArg.hasVariants,
             ligands: queryArg.ligands,
             excludeMaps: queryArg.excludeMaps,
+            isotype: queryArg.isotype,
             variantType: queryArg.variantType,
             variantPosMin: queryArg.variantPosMin,
             variantPosMax: queryArg.variantPosMax,
@@ -225,11 +236,48 @@ const injectedRtkApi = api
         query: (queryArg) => ({ url: `/annotations/stats/${queryArg.family}` }),
         providesTags: ["Annotations"],
       }),
+      getModificationsForFamily: build.query<
+        GetModificationsForFamilyApiResponse,
+        GetModificationsForFamilyApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/annotations/modifications/${queryArg.family}`,
+          params: {
+            posMin: queryArg.posMin,
+            posMax: queryArg.posMax,
+            modType: queryArg.modType,
+          },
+        }),
+        providesTags: ["Annotations"],
+      }),
+      getModificationsAtPosition: build.query<
+        GetModificationsAtPositionApiResponse,
+        GetModificationsAtPositionApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/annotations/modifications/${queryArg.family}/${queryArg.position}`,
+        }),
+        providesTags: ["Annotations"],
+      }),
       healthHealthGet: build.query<
         HealthHealthGetApiResponse,
         HealthHealthGetApiArg
       >({
         query: () => ({ url: `/health` }),
+        providesTags: ["Health"],
+      }),
+      ingestStatusIngestStatusGet: build.query<
+        IngestStatusIngestStatusGetApiResponse,
+        IngestStatusIngestStatusGetApiArg
+      >({
+        query: () => ({ url: `/ingest-status` }),
+        providesTags: ["Health"],
+      }),
+      bootstrapStatusBootstrapStatusGet: build.query<
+        BootstrapStatusBootstrapStatusGetApiResponse,
+        BootstrapStatusBootstrapStatusGetApiArg
+      >({
+        query: () => ({ url: `/bootstrap-status` }),
         providesTags: ["Health"],
       }),
     }),
@@ -259,6 +307,7 @@ export type ListStructuresApiArg = {
   ligands?: string[] | null;
   family?: string[] | null;
   uniprot?: string[] | null;
+  isotype?: string[] | null;
   hasVariants?: boolean | null;
   variantFamily?: string | null;
   variantType?: string | null;
@@ -290,6 +339,11 @@ export type GetStructureProfileApiResponse =
 export type GetStructureProfileApiArg = {
   rcsbId: string;
 };
+export type GetStructureThumbnailApiResponse =
+  /** status 200 Successful Response */ any;
+export type GetStructureThumbnailApiArg = {
+  rcsbId: string;
+};
 export type ListPolymersApiResponse =
   /** status 200 Successful Response */ PolypeptideListResponse;
 export type ListPolymersApiArg = {
@@ -308,6 +362,7 @@ export type ListPolymersApiArg = {
   hasVariants?: boolean | null;
   ligands?: string | null;
   excludeMaps?: boolean | null;
+  isotype?: string[] | null;
   variantType?: string | null;
   variantPosMin?: number | null;
   variantPosMax?: number | null;
@@ -380,9 +435,29 @@ export type GetVariantStatsApiResponse =
 export type GetVariantStatsApiArg = {
   family: string;
 };
+export type GetModificationsForFamilyApiResponse =
+  /** status 200 Successful Response */ ModificationsResponse;
+export type GetModificationsForFamilyApiArg = {
+  family: string;
+  posMin?: number | null;
+  posMax?: number | null;
+  modType?: string | null;
+};
+export type GetModificationsAtPositionApiResponse =
+  /** status 200 Successful Response */ ModificationsResponse;
+export type GetModificationsAtPositionApiArg = {
+  family: string;
+  position: number;
+};
 export type HealthHealthGetApiResponse =
   /** status 200 Successful Response */ any;
 export type HealthHealthGetApiArg = void;
+export type IngestStatusIngestStatusGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type IngestStatusIngestStatusGetApiArg = void;
+export type BootstrapStatusBootstrapStatusGetApiResponse =
+  /** status 200 Successful Response */ any;
+export type BootstrapStatusBootstrapStatusGetApiArg = void;
 export type TaxonomyTreeNode = {
   value: number;
   title: string;
@@ -404,9 +479,11 @@ export type StructureSummary = {
   citation_year?: number | null;
   deposition_date?: string | null;
   src_organism_names?: string[];
+  citation_rcsb_authors?: string[];
   pdbx_keywords?: string | null;
   entity_count?: number | null;
   ligand_count?: number | null;
+  ligand_ids?: string[];
 };
 export type StructureListResponse = {
   data: StructureSummary[];
@@ -452,6 +529,7 @@ export type FilterFacets = {
   total_structures: number;
   exp_methods?: FacetValue[];
   tubulin_families?: FacetValue[];
+  isotypes?: FacetValue[];
   year_range: RangeValue;
   resolution_range: RangeValue;
   top_ligands?: LigandFacet[];
@@ -558,6 +636,13 @@ export type SequenceVariant = {
   uniprot_id?: string | null;
   phenotype?: string | null;
   reference?: string | null;
+  species?: string | null;
+  tubulin_type?: string | null;
+  family?: string | null;
+  reference_link?: string | null;
+  keywords?: string | null;
+  notes?: string | null;
+  utn_position?: number | null;
 };
 export type PolypeptideEntity = {
   type?: "polymer";
@@ -574,6 +659,9 @@ export type PolypeptideEntity = {
   host_organism_ids?: number[];
   family?: TubulinFamily | MapFamily | null;
   uniprot_accessions?: string[];
+  isotype?: string | null;
+  isotype_method?: string | null;
+  isotype_confidence?: number | null;
   entity_index_mapping?: EntityIndexMapping | null;
   chain_index_mappings?: {
     [key: string]: ChainIndexMappingData;
@@ -718,6 +806,9 @@ export type PolypeptideEntitySummary = {
   entity_id: string;
   pdbx_description?: string | null;
   family?: string | null;
+  isotype?: string | null;
+  isotype_method?: string | null;
+  isotype_confidence?: number | null;
   sequence_length?: number | null;
   src_organism_names?: string[];
   uniprot_accessions?: string[];
@@ -831,8 +922,15 @@ export type VariantAnnotation = {
   uniprot_id?: string | null;
   phenotype?: string | null;
   reference?: string | null;
-  rcsb_id: string;
-  entity_id: string;
+  rcsb_id?: string | null;
+  entity_id?: string | null;
+  species?: string | null;
+  tubulin_type?: string | null;
+  family?: string | null;
+  reference_link?: string | null;
+  keywords?: string | null;
+  notes?: string | null;
+  utn_position?: number | null;
 };
 export type PositionAnnotationsResponse = {
   position: number;
@@ -852,12 +950,28 @@ export type VariantRangeSummary = {
     }[];
   };
 };
+export type ModificationAnnotation = {
+  master_index: number;
+  amino_acid: string;
+  modification_type: string;
+  uniprot_id?: string | null;
+  species?: string | null;
+  tubulin_type?: string | null;
+  family?: string | null;
+  phenotype?: string | null;
+  utn_position?: number | null;
+  database_source?: string | null;
+  database_link?: string | null;
+  keywords?: string | null;
+  notes?: string | null;
+};
 export type PolymerAnnotationsResponse = {
   rcsb_id: string;
   auth_asym_id: string;
   entity_id: string;
   family: string | null;
   variants: VariantAnnotation[];
+  modifications?: ModificationAnnotation[];
   total_count: number;
 };
 export type VariantStats = {
@@ -870,6 +984,11 @@ export type VariantStats = {
   };
   total_variants: number;
 };
+export type ModificationsResponse = {
+  family: string;
+  modifications: ModificationAnnotation[];
+  total_count: number;
+};
 export const {
   useGetTaxonomyTreeQuery,
   useListStructuresQuery,
@@ -878,6 +997,7 @@ export const {
   useListFamiliesQuery,
   useGetStructureQuery,
   useGetStructureProfileQuery,
+  useGetStructureThumbnailQuery,
   useListPolymersQuery,
   useListLigandsQuery,
   useListLigandOptionsQuery,
@@ -889,5 +1009,9 @@ export const {
   useGetVariantsInRangeQuery,
   useGetPolymerAnnotationsQuery,
   useGetVariantStatsQuery,
+  useGetModificationsForFamilyQuery,
+  useGetModificationsAtPositionQuery,
   useHealthHealthGetQuery,
+  useIngestStatusIngestStatusGetQuery,
+  useBootstrapStatusBootstrapStatusGetQuery,
 } = injectedRtkApi;

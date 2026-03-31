@@ -9,6 +9,7 @@ import {
     ChainAnnotationData,
     LigandSite,
     Variant,
+    Modification,
     VariantType,
 } from '@/store/slices/annotationsSlice';
 import {
@@ -117,11 +118,28 @@ export function ChainAnnotationFetcher({ rcsbId, authAsymId, chainKey }: ChainTo
                 phenotype: v.phenotype ?? null,
                 source: v.source ?? null,
                 uniprotId: v.uniprot_id ?? null,
+                species: v.species ?? null,
+                tubulinType: v.tubulin_type ?? null,
+                referenceLink: v.reference_link ?? null,
+                keywords: v.keywords ?? null,
+                notes: v.notes ?? null,
+                utnPosition: v.utn_position ?? null,
             }));
+
+        const modifications: Modification[] = (variantsQuery.data.modifications ?? []).map(m => ({
+            masterIndex: m.master_index,
+            aminoAcid: m.amino_acid,
+            modificationType: m.modification_type,
+            species: m.species ?? null,
+            tubulinType: m.tubulin_type ?? null,
+            phenotype: m.phenotype ?? null,
+            databaseLink: m.database_link ?? null,
+            utnPosition: m.utn_position ?? null,
+        }));
 
         dispatch(setChainAnnotations({
             chainKey,
-            data: { ligandSites, variants, family: variantsQuery.data.family ?? null },
+            data: { ligandSites, variants, modifications, family: variantsQuery.data.family ?? null },
         }));
     }, [chainKey, variantsQuery.data, ligandsQuery.data, positionMapping, existingEntry?.data, dispatch]);
 

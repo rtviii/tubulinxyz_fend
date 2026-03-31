@@ -160,6 +160,42 @@ export const LIGAND_COLORS: Record<string, Color> = {
 };
 
 // ============================================================
+// Isotype colors - stable per-isotype assignments for UI use
+// ============================================================
+
+export const ISOTYPE_HEX: Record<string, string> = {
+  // Alpha isotypes
+  TUBA1A: '#3B82F6', // blue-500
+  TUBA1B: '#60A5FA', // blue-400
+  TUBA1C: '#93C5FD', // blue-300
+  TUBA3C: '#2563EB', // blue-600
+  TUBA3D: '#1D4ED8', // blue-700
+  TUBA3E: '#1E40AF', // blue-800
+  TUBA4A: '#6366F1', // indigo-500
+  TUBA4B: '#818CF8', // indigo-400
+  TUBA8:  '#4F46E5', // indigo-600
+  // Beta isotypes
+  TUBB:   '#F97316', // orange-500
+  TUBB1:  '#FB923C', // orange-400
+  TUBB2A: '#EA580C', // orange-600
+  TUBB2B: '#C2410C', // orange-700
+  TUBB3:  '#EF4444', // red-500
+  TUBB4A: '#F59E0B', // amber-500
+  TUBB4B: '#D97706', // amber-600
+  TUBB5:  '#DC2626', // red-600
+  TUBB6:  '#E11D48', // rose-600
+  TUBB8:  '#BE185D', // pink-700
+  TUBB8B: '#DB2777', // pink-600
+  // Gamma
+  TUBG1:  '#A855F7', // purple-500
+  TUBG2:  '#9333EA', // purple-600
+};
+
+export function getHexForIsotype(isotype: string): string {
+  return ISOTYPE_HEX[isotype] ?? '#94a3b8';
+}
+
+// ============================================================
 // Polymer hex colors (for Tailwind / inline styles)
 // ============================================================
 

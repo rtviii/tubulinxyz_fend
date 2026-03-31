@@ -13,6 +13,7 @@ import {
 import { useGetStructureProfileQuery } from '@/store/tubxz_api';
 import { VariantsPanel } from '@/components/annotations/VariantsPanel';
 import { LigandsPanel } from '@/components/annotations/LigandsPanel';
+import { ModificationsPanel } from '@/components/annotations/ModificationsPanel';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { MSAHandle } from '@/components/msa/types';
 import type { VariantType } from '@/store/slices/annotationsSlice';
@@ -78,6 +79,23 @@ function getChainOrganism(
   return null;
 }
 
+function getChainIsotype(
+  profile: TubulinStructure | undefined,
+  chainId: string
+): string | null {
+  if (!profile) return null;
+  for (const entity of Object.values(profile.entities)) {
+    if (
+      'pdbx_strand_ids' in entity &&
+      (entity as any).pdbx_strand_ids?.includes(chainId) &&
+      'isotype' in entity
+    ) {
+      return (entity as any).isotype ?? null;
+    }
+  }
+  return null;
+}
+
 export function ChainRow({
   chainKey,
   pdbId,
@@ -110,13 +128,20 @@ export function ChainRow({
     () => getChainOrganism(chainProfile, chainId),
     [chainProfile, chainId]
   );
+  const isotype = useMemo(
+    () => getChainIsotype(chainProfile, chainId),
+    [chainProfile, chainId]
+  );
 
   const {
     ligandSites,
     variants,
+    modifications,
     showVariants,
+    showModifications,
     visibleLigandIds,
     setShowVariants,
+    setShowModifications,
     toggleLigand,
     showAll,
     hideAll,
@@ -219,6 +244,11 @@ export function ChainRow({
             {familyLabel && (
               <span className="text-[10px] text-gray-400 flex-shrink-0">{familyLabel}</span>
             )}
+            {isotype && (
+              <span className="text-[9px] px-1 py-px bg-indigo-50 text-indigo-600 rounded flex-shrink-0">
+                {isotype}
+              </span>
+            )}
             {isPrimary && (
               <span className="text-[9px] px-1 py-px bg-blue-100 text-blue-600 rounded flex-shrink-0">
                 pri
@@ -242,6 +272,7 @@ export function ChainRow({
           {variantCounts.deletion && <span className="text-red-400">{variantCounts.deletion}del</span>}
           {variantCounts.substitution && <span className="text-orange-400">{variantCounts.substitution}sub</span>}
           {variantCounts.insertion && <span className="text-green-400">{variantCounts.insertion}ins</span>}
+          {modifications.length > 0 && <span className="text-indigo-400">{modifications.length}ptm</span>}
           {ligandSites.length > 0 && <span className="text-blue-400">{ligandSites.length}lig</span>}
         </div>
 
@@ -281,7 +312,7 @@ export function ChainRow({
       {/* ── Expanded: nested annotation sub-tables ── */}
       {expanded && (
         <div className="mx-3 mb-2 rounded border border-gray-100 bg-gray-50/60 overflow-hidden">
-          {variants.length === 0 && ligandSites.length === 0 ? (
+          {variants.length === 0 && modifications.length === 0 && ligandSites.length === 0 ? (
             <p className="text-[10px] text-gray-300 py-2 px-2">No annotations</p>
           ) : (
             <>
@@ -292,6 +323,15 @@ export function ChainRow({
                     showVariants={showVariants}
                     onToggleVariants={setShowVariants}
                     onFocusVariant={handleFocusVariant}
+                  />
+                </div>
+              )}
+              {modifications.length > 0 && (
+                <div className="px-2 pt-1.5 pb-1 border-b border-gray-100 last:border-b-0">
+                  <ModificationsPanel
+                    modifications={modifications}
+                    showModifications={showModifications}
+                    onToggleModifications={setShowModifications}
                   />
                 </div>
               )}

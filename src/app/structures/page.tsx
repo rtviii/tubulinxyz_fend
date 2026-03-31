@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Eye } from "lucide-react";
+import { Eye, ArrowRight } from "lucide-react";
 import {
   useGetStructureFacetsQuery,
   useGetTaxonomyTreeQuery,
@@ -11,6 +11,8 @@ import {
 } from "@/store/tubxz_api";
 
 import { StructureFiltersPanel, type UiFilters } from "./StructureFiltersPanel";
+import { API_BASE_URL } from "@/config";
+import { LIGAND_IGNORE_IDS } from "@/components/molstar/colors/palette";
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState(value);
@@ -23,73 +25,111 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
 
 const DEFAULT_LIMIT = 100;
 
+// ── Structure Card ──
+
 const StructureCard = ({ structure }: { structure: StructureSummary }) => {
   const organism = structure.src_organism_names?.[0] || "Unknown";
-  const imageUrl = `/output/${structure.rcsb_id}.png`;
+  const imageUrl = `${API_BASE_URL}/structures/${structure.rcsb_id}/thumbnail`;
 
   const formatOrganism = (name: string) => {
     if (!name || name === "Unknown") return { genus: "Unknown", species: "" };
     const parts = name.split(" ");
-    return {
-      genus: parts[0],
-      species: parts.slice(1).join(" "),
-    };
+    return { genus: parts[0], species: parts.slice(1).join(" ") };
   };
-
   const { genus, species } = formatOrganism(organism);
+
+  const allLigandIds = structure.ligand_ids ?? [];
+  const meaningfulLigands = allLigandIds.filter(id => !LIGAND_IGNORE_IDS.has(id));
+  const authors = structure.citation_rcsb_authors ?? [];
+  const authorLine = authors.length === 0 ? null
+    : authors.length <= 2 ? authors.join(", ")
+    : `${authors[0]} et al.`;
 
   return (
     <a href={`/structures/${structure.rcsb_id}`} className="group block h-full">
       <div className="w-full h-full bg-white rounded-lg border border-gray-200 overflow-hidden transition-all duration-200 hover:shadow-md hover:border-gray-300 flex flex-col">
-        {/* Image Section */}
-        <div className="relative h-44 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
+        {/* Image */}
+        <div className="relative h-48 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
           <img
             src={imageUrl}
             alt={`Structure ${structure.rcsb_id}`}
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            className="w-full h-full object-cover transition-all duration-300 group-hover:brightness-110 group-hover:blur-[1px]"
             onError={(e) => {
               const target = e.target as HTMLImageElement;
               target.onerror = null;
               target.src = `https://placehold.co/400x300/f8fafc/94a3b8?text=${structure.rcsb_id}`;
             }}
           />
-          <div className="absolute top-2 left-2 bg-black/75 text-white text-[10px] font-mono font-bold px-1.5 py-0.5 rounded">
+          <div className="absolute top-2 left-2 bg-black/70 text-white text-[11px] font-mono font-bold px-2 py-0.5 rounded">
             {structure.rcsb_id}
           </div>
-          {structure.citation_year && (
-            <div className="absolute top-2 right-2 bg-white/90 text-gray-600 text-[10px] font-medium px-1.5 py-0.5 rounded">
-              {structure.citation_year}
-            </div>
-          )}
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <ArrowRight className="w-8 h-8 text-white/30" strokeWidth={1.5} />
+          </div>
         </div>
 
-        {/* Content Section */}
-        <div className="p-2.5 flex-grow flex flex-col">
-          <p className="font-medium text-gray-900 text-xs leading-tight">
-            <span className="italic">{genus}</span>
-            {species && <span className="italic text-gray-600"> {species}</span>}
+        {/* Content */}
+        <div className="p-3 flex-grow flex flex-col gap-1.5">
+          <p className="text-[13px] leading-tight">
+            <span className="italic font-medium text-gray-900">{genus}</span>
+            {species && <span className="italic text-gray-500"> {species}</span>}
           </p>
 
           <p
-            className="text-[11px] text-gray-500 line-clamp-2 mt-1 flex-grow leading-snug"
+            className="text-[11px] text-gray-400 line-clamp-2 leading-snug flex-grow"
             title={structure.citation_title || undefined}
           >
             {structure.citation_title || "No title available"}
           </p>
 
-          <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-[10px] text-gray-500">
-            <span className="truncate max-w-[60%]" title={structure.expMethod || undefined}>
-              {structure.expMethod || "—"}
+          {authorLine && (
+            <p className="text-[9px] text-gray-300 truncate" title={authors.join(", ")}>
+              {authorLine}
+            </p>
+          )}
+        </div>
+
+        {/* Bottom metadata */}
+        <div className="px-3 pb-2.5 flex items-center gap-1.5 flex-wrap text-[9px] text-gray-400">
+          {structure.citation_year && (
+            <span className="bg-gray-50 px-1.5 py-0.5 rounded">{structure.citation_year}</span>
+          )}
+          {structure.resolution && (
+            <span className="bg-gray-50 px-1.5 py-0.5 rounded">{structure.resolution.toFixed(1)} A</span>
+          )}
+          {structure.expMethod && (
+            <span className="bg-gray-50 px-1.5 py-0.5 rounded truncate max-w-[80px]" title={structure.expMethod}>
+              {structure.expMethod === "ELECTRON MICROSCOPY" ? "cryo-EM"
+                : structure.expMethod === "X-RAY DIFFRACTION" ? "X-ray"
+                : structure.expMethod}
             </span>
-            <span className="font-medium text-gray-700">
-              {structure.resolution ? `${structure.resolution.toFixed(2)} Å` : "—"}
-            </span>
-          </div>
+          )}
+          {meaningfulLigands.length > 0 && (
+            <Tooltip text={meaningfulLigands.join(", ")}>
+              <span className="bg-emerald-50 text-emerald-500 px-1.5 py-0.5 rounded">
+                {meaningfulLigands.length} lig
+              </span>
+            </Tooltip>
+          )}
         </div>
       </div>
     </a>
   );
 };
+
+/** Tiny inline tooltip -- avoids importing antd Tooltip for this one use */
+function Tooltip({ text, children }: { text: string; children: React.ReactNode }) {
+  return (
+    <span className="relative group/tip">
+      {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-1.5 py-0.5 bg-gray-800 text-white text-[8px] rounded whitespace-nowrap opacity-0 group-hover/tip:opacity-100 transition-opacity z-10">
+        {text}
+      </span>
+    </span>
+  );
+}
+
+// ── Page ──
 
 export default function StructureCataloguePage() {
   const [cursor, setCursor] = useState<string | null>(null);
@@ -102,6 +142,7 @@ export default function StructureCataloguePage() {
     expMethod: [],
     polyState: [],
     family: [],
+    isotype: [],
     ligands: [],
     uniprot: [],
     sourceTaxa: [],
@@ -136,6 +177,7 @@ export default function StructureCataloguePage() {
       expMethod: filters.expMethod.length ? filters.expMethod : null,
       polyState: filters.polyState.length ? filters.polyState : null,
       family: filters.family.length ? filters.family : null,
+      isotype: filters.isotype.length ? filters.isotype : null,
       ligands: filters.ligands.length ? filters.ligands : null,
       uniprot: filters.uniprot.length ? filters.uniprot : null,
       resMin: filters.resMin ?? null,
@@ -156,11 +198,7 @@ export default function StructureCataloguePage() {
   }, [cursor, filters]);
 
   const filterSignature = useMemo(() => {
-    const { ...rest } = queryArgs;
-    // @ts-expect-error
-    delete rest.cursor;
-    // @ts-expect-error
-    delete rest.limit;
+    const { cursor: _c, limit: _l, ...rest } = queryArgs;
     return JSON.stringify(rest);
   }, [queryArgs]);
 
@@ -187,31 +225,21 @@ export default function StructureCataloguePage() {
 
   useEffect(() => {
     if (!data?.data) return;
-
     setTotalCount(data.total_count ?? 0);
-
     setItems((prev) => {
       const incoming = data.data;
-
       if (cursor === null) {
         const seen = new Set<string>();
         const unique: StructureSummary[] = [];
         for (const s of incoming) {
-          if (!seen.has(s.rcsb_id)) {
-            seen.add(s.rcsb_id);
-            unique.push(s);
-          }
+          if (!seen.has(s.rcsb_id)) { seen.add(s.rcsb_id); unique.push(s); }
         }
         return unique;
       }
-
       const seen = new Set(prev.map((x) => x.rcsb_id));
       const merged = [...prev];
       for (const s of incoming) {
-        if (!seen.has(s.rcsb_id)) {
-          seen.add(s.rcsb_id);
-          merged.push(s);
-        }
+        if (!seen.has(s.rcsb_id)) { seen.add(s.rcsb_id); merged.push(s); }
       }
       return merged;
     });
@@ -223,31 +251,15 @@ export default function StructureCataloguePage() {
   const clearAll = () => {
     setSearchText("");
     setFilters({
-      search: "",
-      ids: [],
-      expMethod: [],
-      polyState: [],
-      family: [],
-      ligands: [],
-      uniprot: [],
-      sourceTaxa: [],
-      hostTaxa: [],
-      resMin: undefined,
-      resMax: undefined,
-      yearMin: undefined,
-      yearMax: undefined,
-      hasVariants: undefined,
-      variantFamily: undefined,
-      variantType: undefined,
-      variantPosMin: undefined,
-      variantPosMax: undefined,
-      variantWildType: undefined,
-      variantObserved: undefined,
-      variantSource: undefined,
+      search: "", ids: [], expMethod: [], polyState: [], family: [], isotype: [],
+      ligands: [], uniprot: [], sourceTaxa: [], hostTaxa: [],
+      resMin: undefined, resMax: undefined, yearMin: undefined, yearMax: undefined,
+      hasVariants: undefined, variantFamily: undefined, variantType: undefined,
+      variantPosMin: undefined, variantPosMax: undefined, variantWildType: undefined,
+      variantObserved: undefined, variantSource: undefined,
     });
     setCursor(null);
-    setItems([]);
-    setTotalCount(0);
+    // Don't manually clear items/totalCount -- let the data effect repopulate from the query
   };
 
   const updateFilter = <K extends keyof UiFilters>(key: K, value: UiFilters[K]) => {
@@ -282,7 +294,7 @@ export default function StructureCataloguePage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Sidebar */}
           <div className="lg:col-span-3">
-            <div className="sticky top-4">
+            <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: '#e5e7eb transparent' }}>
               <StructureFiltersPanel
                 filters={filters}
                 facets={facets}
@@ -311,13 +323,10 @@ export default function StructureCataloguePage() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {isLoading ? (
-                    Array.from({ length: 10 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="w-full h-72 bg-gray-100 animate-pulse rounded-lg"
-                      />
+                    Array.from({ length: 8 }).map((_, i) => (
+                      <div key={i} className="w-full h-80 bg-gray-100 animate-pulse rounded-lg" />
                     ))
                   ) : items.length > 0 ? (
                     items.map((structure) => (
@@ -326,17 +335,12 @@ export default function StructureCataloguePage() {
                   ) : (
                     <div className="col-span-full flex flex-col items-center justify-center text-center text-gray-500 h-80 bg-white rounded-lg border-2 border-dashed border-gray-200">
                       <Eye className="h-12 w-12 mb-3 text-gray-300" />
-                      <h3 className="text-lg font-medium text-gray-600">
-                        No Structures Found
-                      </h3>
-                      <p className="text-sm text-gray-400 mt-1">
-                        Try adjusting your filters
-                      </p>
+                      <h3 className="text-lg font-medium text-gray-600">No Structures Found</h3>
+                      <p className="text-sm text-gray-400 mt-1">Try adjusting your filters</p>
                     </div>
                   )}
                 </div>
 
-                {/* Load more */}
                 {!isLoading && hasMore && nextCursor && (
                   <div className="mt-8 flex justify-center">
                     <button
@@ -344,7 +348,7 @@ export default function StructureCataloguePage() {
                       disabled={isFetching}
                       className="px-6 py-2 bg-white text-gray-700 border border-gray-300 font-medium rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 text-sm"
                     >
-                      {isFetching ? "Loading..." : `Load More`}
+                      {isFetching ? "Loading..." : "Load More"}
                     </button>
                   </div>
                 )}

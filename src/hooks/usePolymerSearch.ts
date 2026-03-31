@@ -9,6 +9,7 @@ import {
 
 export interface PolymerSearchFilters {
     family: string[];
+    isotype: string[];
     sourceTaxa: number[];
     uniprot: string;
     hasVariants: boolean | null;
@@ -23,6 +24,7 @@ export interface PolymerSearchFilters {
 
 const DEFAULT_FILTERS: PolymerSearchFilters = {
     family: [],
+    isotype: [],
     sourceTaxa: [],
     uniprot: '',
     hasVariants: null,
@@ -61,6 +63,7 @@ export function usePolymerSearch(lockedFamily?: string) {
         cursor,
         limit: 40,
         family: debouncedFilters.family.length ? debouncedFilters.family : null,
+        isotype: debouncedFilters.isotype.length ? debouncedFilters.isotype : null,
         sourceTaxa: debouncedFilters.sourceTaxa.length
             ? debouncedFilters.sourceTaxa.join(',')
             : null,

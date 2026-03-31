@@ -1,9 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronRight, Eye, EyeOff, Focus } from 'lucide-react';
+import { ChevronRight, Eye, EyeOff, Focus, ExternalLink } from 'lucide-react';
 import { Variant, VariantType } from '@/store/slices/annotationsSlice';
 import { VARIANT_COLORS } from '@/store/slices/colorRulesSelector';
+
+const SOURCE_BADGE: Record<string, { label: string; className: string }> = {
+  structural: { label: 'PDB', className: 'bg-gray-100 text-gray-500' },
+  morisette: { label: 'LIT', className: 'bg-amber-50 text-amber-600' },
+};
 
 interface VariantsPanelProps {
   variants: Variant[];
@@ -61,9 +66,14 @@ export function VariantsPanel({
                 : v.type === 'insertion'
                   ? `${v.masterIndex}ins${v.toResidue}`
                   : `${v.fromResidue}${v.masterIndex}${v.toResidue}`;
+            const badge = SOURCE_BADGE[v.source ?? 'structural'] ?? SOURCE_BADGE.structural;
+            const isLiterature = v.source === 'morisette';
+            const detail = isLiterature
+              ? [v.species, v.tubulinType, v.phenotype].filter(Boolean).join(' / ')
+              : (v.phenotype ?? v.uniprotId ?? '');
             return (
               <div
-                key={`${v.masterIndex}-${i}`}
+                key={`${v.masterIndex}-${v.source}-${i}`}
                 className="group flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-gray-50 text-[10px] border-b border-gray-50 last:border-b-0"
               >
                 <span
@@ -72,12 +82,29 @@ export function VariantsPanel({
                 >
                   {TYPE_LABEL[v.type]}
                 </span>
+                <span
+                  className={`text-[8px] px-1 py-px rounded font-medium flex-shrink-0 ${badge.className}`}
+                >
+                  {badge.label}
+                </span>
                 <span className="w-16 font-mono font-medium text-gray-700 flex-shrink-0">
                   {label}
                 </span>
-                <span className="flex-1 min-w-0 text-gray-400 truncate" title={v.phenotype ?? v.uniprotId ?? ''}>
-                  {v.phenotype ?? v.uniprotId ?? ''}
+                <span className="flex-1 min-w-0 text-gray-400 truncate" title={detail}>
+                  {detail}
                 </span>
+                {isLiterature && v.referenceLink && (
+                  <a
+                    href={v.referenceLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-0.5 text-gray-200 hover:text-blue-500 opacity-0 group-hover:opacity-100 flex-shrink-0"
+                    title="View reference"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <ExternalLink size={10} />
+                  </a>
+                )}
                 {onFocusVariant && (
                   <button
                     onClick={() => onFocusVariant(v.masterIndex)}

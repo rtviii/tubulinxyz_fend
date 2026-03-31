@@ -29,16 +29,36 @@ export interface Variant {
   phenotype: string | null;
   source: string | null;
   uniprotId: string | null;
+  // Literature-specific fields (Morisette database)
+  species: string | null;
+  tubulinType: string | null;
+  referenceLink: string | null;
+  keywords: string | null;
+  notes: string | null;
+  utnPosition: number | null;
+}
+
+export interface Modification {
+  masterIndex: number;
+  aminoAcid: string;
+  modificationType: string;
+  species: string | null;
+  tubulinType: string | null;
+  phenotype: string | null;
+  databaseLink: string | null;
+  utnPosition: number | null;
 }
 
 export interface ChainAnnotationData {
   ligandSites: LigandSite[];
   variants: Variant[];
+  modifications: Modification[];
   family: string | null;
 }
 
 export interface ChainVisibility {
   showVariants: boolean;
+  showModifications: boolean;
   visibleLigandIds: string[];
 }
 
@@ -64,7 +84,8 @@ const initialState: AnnotationsState = {
 };
 
 const DEFAULT_VISIBILITY: ChainVisibility = {
-  showVariants: false,            // <-- changed from true
+  showVariants: false,
+  showModifications: false,
   visibleLigandIds: [],
 };
 
@@ -110,7 +131,8 @@ export const annotationsSlice = createSlice({
       state.chains[chainKey] = {
         data,
         visibility: existing?.visibility ?? {
-          showVariants: isPrimary,       // <-- auto-enable only for primary
+          showVariants: isPrimary,
+          showModifications: false,
           visibleLigandIds: [],
         },
         isLoading: false,
@@ -130,6 +152,13 @@ export const annotationsSlice = createSlice({
       const chain = state.chains[action.payload.chainKey];
       if (chain) {
         chain.visibility.showVariants = action.payload.visible;
+      }
+    },
+
+    setModificationsVisible: (state, action: PayloadAction<{ chainKey: string; visible: boolean }>) => {
+      const chain = state.chains[action.payload.chainKey];
+      if (chain) {
+        chain.visibility.showModifications = action.payload.visible;
       }
     },
 
@@ -227,6 +256,7 @@ export const {
   setChainAnnotations,
   setChainError,
   setVariantsVisible,
+  setModificationsVisible,
   toggleLigandSite,
   showAllLigands,
   hideAllLigands,

@@ -6,6 +6,7 @@ import { getHexForFamily, getHexForLigand } from '@/components/molstar/colors/pa
 import { LIGAND_IGNORE_IDS } from '@/components/molstar/colors/palette';
 import { makeChainKey } from '@/lib/chain_key';
 import type { PolypeptideEntitySummary } from '@/store/tubxz_api';
+import { useGetStructureFacetsQuery } from '@/store/tubxz_api';
 
 const TUBULIN_FAMILIES = [
   'tubulin_alpha', 'tubulin_beta', 'tubulin_gamma', 'tubulin_delta', 'tubulin_epsilon',
@@ -52,6 +53,12 @@ export function PolymerBrowser({ defaultFamily, alignedChainKeys, onSelectChain 
     addLigand, removeLigand, ligandSearch, setLigandSearch, ligandOptions,
     resetFilters, results, totalCount, hasMore, loadMore, isFetching, isError,
   } = usePolymerSearch(defaultFamily);
+
+  const { data: facets } = useGetStructureFacetsQuery();
+  const isotopeOptions = useMemo(
+    () => facets?.isotypes?.map(i => i.value) ?? [],
+    [facets]
+  );
 
   const [ligandDropdownOpen, setLigandDropdownOpen] = useState(false);
   const ligandInputRef = useRef<HTMLInputElement>(null);
@@ -165,7 +172,34 @@ export function PolymerBrowser({ defaultFamily, alignedChainKeys, onSelectChain 
           </div>
         </div>
 
-        {/* Row 2: Ligands */}
+        {/* Row 2: Isotype */}
+        {isotopeOptions.length > 0 && (
+          <div>
+            <label className="text-[9px] text-gray-400 uppercase tracking-wider font-medium">Isotype</label>
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {isotopeOptions.map(iso => {
+                const active = filters.isotype.includes(iso);
+                return (
+                  <button
+                    key={iso}
+                    onClick={() => {
+                      const next = active
+                        ? filters.isotype.filter(x => x !== iso)
+                        : [...filters.isotype, iso];
+                      updateFilter('isotype', next);
+                    }}
+                    className={`px-2 py-0.5 text-[10px] font-medium rounded-full border transition-colors
+                      ${active ? 'bg-indigo-600 text-white border-indigo-600' : 'text-gray-500 border-gray-200 hover:border-gray-300 bg-white'}`}
+                  >
+                    {iso}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Row 3: Ligands */}
         <div>
           <label className="text-[9px] text-gray-400 uppercase tracking-wider font-medium">Ligands</label>
           <div className="flex flex-wrap items-center gap-1 mt-0.5">
@@ -292,6 +326,7 @@ export function PolymerBrowser({ defaultFamily, alignedChainKeys, onSelectChain 
         <SortableHeader field="pdb" label="PDB" width="w-14" sort={sort} onSort={handleSort} />
         <SortableHeader field="chain" label="Ch" width="w-5" sort={sort} onSort={handleSort} />
         <SortableHeader field="family" label="Fam" width="w-6" sort={sort} onSort={handleSort} />
+        <span className="w-16">Isotype</span>
         <SortableHeader field="organism" label="Organism" width="flex-1 min-w-0" sort={sort} onSort={handleSort} />
         <span className="w-28">Ligands</span>
         <SortableHeader field="variants" label="Var" width="w-8 text-right" sort={sort} onSort={handleSort} />
@@ -386,6 +421,9 @@ function PolymerChainRow({
         title={entity.family ?? undefined}
       >
         {familyLabel}
+      </span>
+      <span className="w-16 text-[9px] text-gray-500 truncate flex-shrink-0" title={entity.isotype ?? undefined}>
+        {entity.isotype ?? ''}
       </span>
       <span className="flex-1 min-w-0 text-gray-400 italic truncate" title={organism ?? undefined}>
         {shortOrganism}
