@@ -41,6 +41,7 @@ export interface ChainOption {
   organism: string | undefined;
   seqLength: number;
   uniprotId: string | undefined;
+  isotype: string | undefined;
 }
 
 interface SelectedResidue {
@@ -95,7 +96,7 @@ interface SequenceAlignmentPanelProps {
 // Auxiliary Track Helpers
 // ────────────────────────────────────────────
 
-/** Build auxiliary MsaSequence rows for a primary sequence based on its annotation data. */
+/** Build auxiliary MsaSequence rows (variants + ligands only -- modifications are top-level). */
 function buildAuxiliarySequences(
   primary: MsaSequence,
   annotationEntry: ChainAnnotationEntry | null,
@@ -114,7 +115,7 @@ function buildAuxiliarySequences(
       id: `aux__${primary.id}__variants`,
       name: `variants`,
       sequence: gapSequence,
-      rowIndex: -1, // placeholder, assigned during interleave
+      rowIndex: -1,
       originType: 'auxiliary',
       family: primary.family,
       parentSequenceId: primary.id,
@@ -139,11 +140,25 @@ function buildAuxiliarySequences(
     });
   }
 
-  // One layer per visible modification type
+  return auxiliaries;
+}
+
+/** Build top-level modification tracks from the primary chain's annotation data. */
+function buildModificationSequences(
+  primary: MsaSequence,
+  annotationEntry: ChainAnnotationEntry | null,
+  maxLength: number,
+): MsaSequence[] {
+  if (!annotationEntry?.data) return [];
+
+  const gapSequence = ' '.repeat(maxLength);
+  const tracks: MsaSequence[] = [];
+  const { data, visibility } = annotationEntry;
+
   for (const modType of visibility.visibleModificationTypes ?? []) {
     const modsOfType = data.modifications.filter(m => m.modificationType === modType);
     if (modsOfType.length === 0) continue;
-    auxiliaries.push({
+    tracks.push({
       id: `aux__${primary.id}__ptm__${modType}`,
       name: modType,
       sequence: gapSequence,
@@ -156,10 +171,10 @@ function buildAuxiliarySequences(
     });
   }
 
-  return auxiliaries;
+  return tracks;
 }
 
-/** Interleave auxiliary sequences after their parent in the display list. */
+/** Interleave auxiliary sequences after their parent, then append top-level modification tracks. */
 function interleaveAuxiliaries(
   primaries: MsaSequence[],
   expandedSet: Set<string>,
@@ -167,12 +182,12 @@ function interleaveAuxiliaries(
   maxLength: number,
 ): MsaSequence[] {
   const result: MsaSequence[] = [];
+  const modificationTracks: MsaSequence[] = [];
 
   for (const seq of primaries) {
     result.push(seq);
 
-    // Only PDB sequences can be expanded (masters don't have annotations)
-    if (seq.originType !== 'pdb' || !expandedSet.has(seq.id)) continue;
+    if (seq.originType !== 'pdb') continue;
 
     const chainKey = seq.chainRef
       ? makeChainKey(seq.chainRef.pdbId, seq.chainRef.chainId)
@@ -180,10 +195,21 @@ function interleaveAuxiliaries(
     if (!chainKey) continue;
 
     const entry = annotationChains[chainKey] ?? null;
+
+    // Collect top-level modification tracks from all PDB chains
+    modificationTracks.push(...buildModificationSequences(seq, entry, maxLength));
+
+    // Variant/ligand auxiliaries only show when expanded
+    if (!expandedSet.has(seq.id)) continue;
     const auxiliaries = buildAuxiliarySequences(seq, entry, maxLength);
     for (const aux of auxiliaries) {
       result.push(aux);
     }
+  }
+
+  // Append modification tracks at the end as top-level rows
+  for (const mod of modificationTracks) {
+    result.push(mod);
   }
 
   return result;
@@ -193,26 +219,31 @@ function interleaveAuxiliaries(
 // Helpers
 // ────────────────────────────────────────────
 
+const TUBULIN_FAMILIES = new Set(['tubulin_alpha', 'tubulin_beta']);
+
 function buildChainOptions(
   profile: StructureProfile | null,
   polymerComponents: PolymerComponent[]
 ): ChainOption[] {
   if (!profile) return [];
 
-  return polymerComponents.map(pc => {
-    const poly = profile.polypeptides.find(p => p.auth_asym_id === pc.chainId);
-    const entity = poly ? profile.entities[poly.entity_id] as PolypeptideEntity | undefined : undefined;
-    const family = entity && 'family' in entity ? (entity.family ?? undefined) : undefined;
+  return polymerComponents
+    .map(pc => {
+      const poly = profile.polypeptides.find(p => p.auth_asym_id === pc.chainId);
+      const entity = poly ? profile.entities[poly.entity_id] as PolypeptideEntity | undefined : undefined;
+      const family = entity && 'family' in entity ? (entity.family ?? undefined) : undefined;
 
-    return {
-      chainId: pc.chainId,
-      family,
-      familyLabel: family ? formatFamilyShort(family) : undefined,
-      organism: entity?.src_organism_names?.[0],
-      seqLength: entity?.sequence_length ?? 0,
-      uniprotId: entity?.uniprot_accessions?.[0],
-    };
-  });
+      return {
+        chainId: pc.chainId,
+        family,
+        familyLabel: family ? formatFamilyShort(family) : undefined,
+        organism: entity?.src_organism_names?.[0],
+        seqLength: entity?.sequence_length ?? 0,
+        uniprotId: entity?.uniprot_accessions?.[0],
+        isotype: entity && 'isotype' in entity ? ((entity as any).isotype ?? undefined) : undefined,
+      };
+    })
+    .filter(opt => opt.family && TUBULIN_FAMILIES.has(opt.family));
 }
 
 // ────────────────────────────────────────────
@@ -816,9 +847,10 @@ function ChainDropdownHeader({
           {chainOptions.map(opt => (
             <option key={opt.chainId} value={opt.chainId}>
               {opt.chainId}
-              {opt.familyLabel ? ` -- ${opt.familyLabel}` : ''}
-              {opt.organism ? ` -- ${opt.organism}` : ''}
-              {opt.seqLength ? ` -- ${opt.seqLength} aa` : ''}
+              {opt.familyLabel ? ` \u2014 ${opt.familyLabel}` : ''}
+              {opt.isotype ? ` (${opt.isotype})` : ''}
+              {opt.organism ? ` \u2014 ${opt.organism}` : ''}
+              {opt.seqLength ? ` \u2014 ${opt.seqLength} aa` : ''}
             </option>
           ))}
         </select>

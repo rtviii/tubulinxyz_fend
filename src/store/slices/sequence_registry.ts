@@ -18,6 +18,7 @@ export interface MsaSequence {
   chainRef?: ChainRef;
   family?: string;
   organism?: string;
+  isotype?: string;
   /** For auxiliary tracks: the id of the parent sequence this track belongs to */
   parentSequenceId?: string;
   /** Layer identifier, e.g. 'variants', 'ligand:GTP', 'ptm:acetylation' */
@@ -54,8 +55,9 @@ export const sequenceRegistrySlice = createSlice({
       chainRef?: ChainRef;
       family?: string;
       organism?: string;
+      isotype?: string;
     }>) => {
-      const { id, name, sequence, originType, chainRef, family, organism } = action.payload;
+      const { id, name, sequence, originType, chainRef, family, organism, isotype } = action.payload;
       const existingRowIndex = state.sequences[id]?.rowIndex;
 
       state.sequences[id] = {
@@ -67,6 +69,7 @@ export const sequenceRegistrySlice = createSlice({
         chainRef,
         family,
         organism,
+        isotype,
       };
 
       if (existingRowIndex === undefined) {

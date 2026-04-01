@@ -42,6 +42,7 @@ interface ParsedLabel {
   species: string;
   family: string;
   structure: string;
+  isotype: string;
 }
 
 function parseLabel(seq: MsaSequence): ParsedLabel {
@@ -52,6 +53,7 @@ function parseLabel(seq: MsaSequence): ParsedLabel {
       species: seq.organism ?? '',
       family: greek,
       structure: `${seq.chainRef.pdbId}:${seq.chainRef.chainId}`,
+      isotype: seq.isotype ?? '',
     };
   }
 
@@ -59,7 +61,7 @@ function parseLabel(seq: MsaSequence): ParsedLabel {
     return parseMasterLabel(seq.name);
   }
 
-  return { name: seq.name, species: '', family: '', structure: '' };
+  return { name: seq.name, species: '', family: '', structure: '', isotype: '' };
 }
 
 function parseMasterLabel(name: string): ParsedLabel {
@@ -71,11 +73,11 @@ function parseMasterLabel(name: string): ParsedLabel {
     if (underIdx > 0) {
       const protName = entry.substring(0, underIdx);
       const species = entry.substring(underIdx + 1);
-      return { name: protName, species, family: '', structure: '' };
+      return { name: protName, species, family: '', structure: '', isotype: '' };
     }
-    return { name: entry, species: '', family: '', structure: '' };
+    return { name: entry, species: '', family: '', structure: '', isotype: '' };
   }
-  return { name, species: '', family: '', structure: '' };
+  return { name, species: '', family: '', structure: '', isotype: '' };
 }
 
 function chainKeyForSequence(seq: MsaSequence): string | null {
@@ -111,7 +113,7 @@ export function MSALabels({
     let maxWidth = 0;
     for (const seq of sequences) {
       const p = parseLabel(seq);
-      const text = [p.name, p.species, p.family, p.structure].filter(Boolean).join('  ');
+      const text = [p.name, p.species, p.family, p.structure, p.isotype].filter(Boolean).join('  ');
       measureEl.textContent = text;
       maxWidth = Math.max(maxWidth, measureEl.offsetWidth);
     }
@@ -172,6 +174,23 @@ export function MSALabels({
 
           // ── Auxiliary track label ──
           if (isAux) {
+            const isTopLevelMod = seq.layerType?.startsWith('ptm:');
+            if (isTopLevelMod) {
+              // Modification tracks render as top-level rows (no indentation)
+              return (
+                <div
+                  key={seq.id}
+                  className="flex items-center gap-1 px-1.5 select-none whitespace-nowrap text-[10px] font-mono text-gray-500"
+                  style={{
+                    height: rowHeight,
+                    lineHeight: `${rowHeight}px`,
+                  }}
+                  title={seq.layerLabel ?? seq.name}
+                >
+                  <span className="text-orange-500">{seq.layerLabel ?? seq.name}</span>
+                </div>
+              );
+            }
             return (
               <div
                 key={seq.id}
@@ -241,6 +260,9 @@ export function MSALabels({
               )}
               {parsed.structure && (
                 <span className="text-gray-700 flex-shrink-0">{parsed.structure}</span>
+              )}
+              {parsed.isotype && (
+                <span className="text-blue-500 flex-shrink-0">{parsed.isotype}</span>
               )}
               {parsed.name && (
                 <span className={isMaster ? 'text-gray-500' : 'text-gray-700'}>{parsed.name}</span>

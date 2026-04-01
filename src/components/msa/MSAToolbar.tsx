@@ -55,8 +55,6 @@ export function MSAToolbar({
   onInRangeOnlyChange,
 }: MSAToolbarProps) {
 
-  const [jumpStart, setJumpStart] = useState(1);
-  const [jumpEnd, setJumpEnd] = useState(100);
   const [showLegend, setShowLegend] = useState(false);
   const helpRef = useRef<HTMLDivElement>(null);
   const [legendPos, setLegendPos] = useState<{ top: number; left: number } | null>(null);
@@ -69,13 +67,6 @@ export function MSAToolbar({
       setLegendPos(null);
     }
   }, [showLegend]);
-
-  const quickRanges = [
-    { label: '1-100', start: 1, end: 100 },
-    { label: '100-200', start: 100, end: 200 },
-    { label: '200-300', start: 200, end: 300 },
-    { label: 'Full', start: 1, end: maxLength },
-  ];
 
   const isSubstitution = currentScheme === 'substitution';
 
@@ -135,56 +126,20 @@ export function MSAToolbar({
         )}
       </div>
       <div className="w-px h-4 bg-gray-300" />
-
-      <div className="flex items-center gap-1">
-        {quickRanges.map((r) => (
-          <button
-            key={r.label}
-            onClick={() => onJumpToRange(r.start, r.end)}
-            className="px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-          >
-            {r.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="w-px h-4 bg-gray-300" />
-      <div className="flex items-center gap-1">
-        <input
-          type="number"
-          value={jumpStart}
-          onChange={(e) => setJumpStart(Number(e.target.value))}
-          className="w-14 px-1.5 py-0.5 border rounded text-center"
-          min={1}
-          max={maxLength}
-        />
-        <span className="text-gray-400">-</span>
-        <input
-          type="number"
-          value={jumpEnd}
-          onChange={(e) => setJumpEnd(Number(e.target.value))}
-          className="w-14 px-1.5 py-0.5 border rounded text-center"
-          min={1}
-          max={maxLength}
-        />
-        <button
-          onClick={() => onJumpToRange(jumpStart, jumpEnd)}
-          className="px-2 py-0.5 rounded bg-blue-100 hover:bg-blue-200 text-blue-700"
-        >
-          Go
-        </button>
-      </div>
+      <button
+        onClick={() => onJumpToRange(1, maxLength)}
+        className="px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
+      >
+        Full
+      </button>
       {onReset && (
-        <>
-          <div className="w-px h-4 bg-gray-300" />
-          <button
-            onClick={onReset}
-            className="p-1 rounded hover:bg-gray-100 text-gray-500"
-            title="Reset to default"
-          >
-            <RotateCcw size={14} />
-          </button>
-        </>
+        <button
+          onClick={onReset}
+          className="p-1 rounded hover:bg-gray-100 text-gray-500"
+          title="Reset to default"
+        >
+          <RotateCcw size={14} />
+        </button>
       )}
       {onShowMastersChange != null && (
         <>
