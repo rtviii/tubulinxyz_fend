@@ -155,9 +155,9 @@ export function AlignmentDialog({
         </div>
 
         {/* Body */}
-        <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           {tab === 'browse' ? (
-            <div className="p-4 h-full flex flex-col">
+            <div className="px-4 py-2 h-full flex flex-col min-h-0">
               {pendingAlign && (
                 <div className="mb-2 px-2 py-1 bg-blue-50 rounded text-[10px] text-blue-600 flex-shrink-0">
                   Aligning {pendingAlign.pdbId}:{pendingAlign.chainId}...

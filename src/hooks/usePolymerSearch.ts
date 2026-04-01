@@ -19,7 +19,6 @@ export interface PolymerSearchFilters {
     ligands: string[];
     seqLenMin: number | null;
     seqLenMax: number | null;
-    excludeMaps: boolean;
 }
 
 const DEFAULT_FILTERS: PolymerSearchFilters = {
@@ -34,7 +33,6 @@ const DEFAULT_FILTERS: PolymerSearchFilters = {
     ligands: [],
     seqLenMin: null,
     seqLenMax: null,
-    excludeMaps: true,
 };
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
@@ -53,9 +51,11 @@ export function usePolymerSearch(lockedFamily?: string) {
     }));
 
     const [cursor, setCursor] = useState<string | null>(null);
+    // Accumulate results across pages; reset when filters change
+    const [accumulated, setAccumulated] = useState<import('@/store/tubxz_api').PolypeptideEntitySummary[]>([]);
 
     const filterKey = useMemo(() => JSON.stringify(filters), [filters]);
-    useEffect(() => { setCursor(null); }, [filterKey]);
+    useEffect(() => { setCursor(null); setAccumulated([]); }, [filterKey]);
 
     const debouncedFilters = useDebouncedValue(filters, 300);
 
@@ -77,11 +77,22 @@ export function usePolymerSearch(lockedFamily?: string) {
             : null,
         seqLenMin: debouncedFilters.seqLenMin,
         seqLenMax: debouncedFilters.seqLenMax,
-        excludeMaps: debouncedFilters.excludeMaps || null,
     }), [cursor, debouncedFilters]);
 
     const { data, isFetching, isError } = useListPolymersQuery(queryArgs);
     const { data: familyOptions } = useListFamiliesQuery();
+
+    // Append new page results to accumulated list
+    useEffect(() => {
+        if (!data?.data) return;
+        if (cursor === null) {
+            // First page (filters changed) -- replace
+            setAccumulated(data.data);
+        } else {
+            // Subsequent page -- append
+            setAccumulated(prev => [...prev, ...data.data]);
+        }
+    }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Ligand autocomplete
     const [ligandSearch, setLigandSearch] = useState('');
@@ -140,7 +151,7 @@ export function usePolymerSearch(lockedFamily?: string) {
         setLigandSearch,
         ligandOptions: ligandOptions?.data ?? [],
         resetFilters,
-        results: data?.data ?? [],
+        results: accumulated,
         totalCount: data?.total_count ?? 0,
         hasMore: data?.has_more ?? false,
         nextCursor: data?.next_cursor ?? null,

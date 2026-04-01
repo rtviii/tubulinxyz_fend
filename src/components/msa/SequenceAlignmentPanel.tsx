@@ -88,6 +88,7 @@ interface SequenceAlignmentPanelProps {
   onResidueContextMenu?: (event: MSAContextMenuEvent) => void;
   /** Emits the full display sequence list (including auxiliaries) for correct color rule row indexing */
   onDisplaySequencesChange?: (seqs: MsaSequence[]) => void;
+  onAddAlignment?: () => void;
 }
 
 // ────────────────────────────────────────────
@@ -237,6 +238,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       onWindowMaskClear,
       onResidueContextMenu,
       onDisplaySequencesChange,
+      onAddAlignment,
     } = props;
 
     const msaRef = useRef<ResizableMSAContainerHandle>(null);
@@ -766,6 +768,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
             onSoloChain={handleSoloChain}
             expandedSequences={expandedSequences}
             onToggleExpand={handleToggleExpand}
+            onAddAlignment={onAddAlignment}
           />
         </div>
       </div>

@@ -2,7 +2,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { ChevronRight, ChevronDown } from 'lucide-react';
+import { ChevronRight, ChevronDown, Plus } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/store/store';
 import {
   selectSelectedSequenceId,
@@ -26,6 +26,7 @@ interface MSALabelsProps {
   onSoloChain?: (chainKey: string) => void;
   expandedSequences?: Set<string>;
   onToggleExpand?: (seqId: string) => void;
+  onAddAlignment?: () => void;
 }
 
 const FAMILY_GREEK: Record<string, string> = {
@@ -89,6 +90,7 @@ export function MSALabels({
   onWidthCalculated,
   expandedSequences,
   onToggleExpand,
+  onAddAlignment,
 }: MSALabelsProps) {
   const dispatch = useAppDispatch();
   const selectedId = useAppSelector(selectSelectedSequenceId);
@@ -249,6 +251,16 @@ export function MSALabels({
             </div>
           );
         })}
+        {onAddAlignment && (
+          <button
+            onClick={onAddAlignment}
+            className="flex items-center gap-1 px-1.5 w-full text-[9px] text-gray-400 hover:text-blue-500 hover:bg-blue-50/50 transition-colors"
+            style={{ height: rowHeight, lineHeight: `${rowHeight}px` }}
+          >
+            <Plus size={10} />
+            <span>add polymer</span>
+          </button>
+        )}
       </div>
     </div>
   );

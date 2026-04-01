@@ -33,6 +33,8 @@ export interface MonomerSidebarProps {
   profile: StructureProfile | null;
   masterLength: number;
   msaRef: React.RefObject<MSAHandle>;
+  alignDialogOpen?: boolean;
+  onAlignDialogOpenChange?: (open: boolean) => void;
 }
 
 function downloadJSON(data: any, filename: string) {
@@ -54,9 +56,13 @@ export function MonomerSidebar({
   profile,
   masterLength,
   msaRef,
+  alignDialogOpen: externalOpen,
+  onAlignDialogOpenChange,
 }: MonomerSidebarProps) {
   const dispatch = useAppDispatch();
-  const [alignDialogOpen, setAlignDialogOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const alignDialogOpen = externalOpen ?? internalOpen;
+  const setAlignDialogOpen = onAlignDialogOpenChange ?? setInternalOpen;
 
   const activeFamily = activeChainId
     ? getFamilyForChain(profile, activeChainId)

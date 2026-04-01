@@ -41,6 +41,7 @@ interface ResizableMSAContainerProps {
 
   expandedSequences?: Set<string>;
   onToggleExpand?: (seqId: string) => void;
+  onAddAlignment?: () => void;
 }
 
 export interface ResizableMSAContainerHandle {
@@ -89,6 +90,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
 
       expandedSequences,
       onToggleExpand,
+      onAddAlignment,
     } = props;
 
 
@@ -571,6 +573,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
                   onSoloChain={onSoloChain}
                   expandedSequences={expandedSequences}
                   onToggleExpand={onToggleExpand}
+                  onAddAlignment={onAddAlignment}
                 />
               </div>
             </div>

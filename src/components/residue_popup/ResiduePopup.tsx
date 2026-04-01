@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, GripHorizontal, ExternalLink, Crosshair } from 'lucide-react';
+import { X, GripHorizontal, ExternalLink, Crosshair, Plus } from 'lucide-react';
 import { useGetVariantsAtPositionQuery, useGetModificationsAtPositionQuery } from '@/store/tubxz_api';
 import type { VariantAnnotation, ModificationAnnotation } from '@/store/tubxz_api';
 import { MODIFICATION_COLORS } from '@/components/annotations/ModificationsPanel';
@@ -49,12 +49,13 @@ function useDrag(initialPos: { x: number; y: number }) {
 
 // ── Shared content (the inner card) ──────────────────────────
 
-function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ballStickActive }: {
+function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ballStickActive, onAlignChain }: {
   target: ResiduePopupTarget;
   onClose: () => void;
   onFocus?: () => void;
   onToggleBallStick?: () => void;
   ballStickActive?: boolean;
+  onAlignChain?: (pdbId: string, chainId: string) => void;
 }) {
   const hasFamily = !!target.family;
   const organismMap = useOrganismMap();
@@ -144,7 +145,7 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
                 </div>
                 <div className="space-y-0.5">
                   {subPathGroups.map(({ path, variants: pvs }) => (
-                    <SubstitutionPathRow key={path} path={path} variants={pvs} total={allSubs.length} organismMap={organismMap} />
+                    <SubstitutionPathRow key={path} path={path} variants={pvs} total={allSubs.length} organismMap={organismMap} onAlignChain={onAlignChain} />
                   ))}
                 </div>
               </div>
@@ -237,12 +238,13 @@ function groupSubstitutionsByPath(variants: VariantAnnotation[]): SubPathGroup[]
 
 /** Unified substitution path row: frequency bar + expandable list with literature entries on top */
 function SubstitutionPathRow({
-  path, variants, total, organismMap,
+  path, variants, total, organismMap, onAlignChain,
 }: {
   path: string;
   variants: VariantAnnotation[];
   total: number;
   organismMap: Record<string, string[]> | null;
+  onAlignChain?: (pdbId: string, chainId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const fraction = total > 0 ? variants.length / total : 0;
@@ -292,9 +294,18 @@ function SubstitutionPathRow({
           {structEntries.map((v, i) => {
             const org = v.rcsb_id && organismMap ? organismMap[v.rcsb_id]?.[0] ?? null : null;
             return (
-              <div key={`str-${i}`} className="flex items-center gap-1.5 text-[9px] text-gray-500 py-0.5">
+              <div key={`str-${i}`} className="group/entry flex items-center gap-1.5 text-[9px] text-gray-500 py-0.5">
                 <span className="font-mono text-gray-600">{v.rcsb_id ?? '?'}:{v.entity_id ?? '?'}</span>
-                {org && <span className="text-gray-400 italic truncate">{org}</span>}
+                {org && <span className="text-gray-400 italic truncate flex-1">{org}</span>}
+                {onAlignChain && v.rcsb_id && v.entity_id && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onAlignChain(v.rcsb_id!, v.entity_id!); }}
+                    className="ml-auto p-0.5 text-gray-300 hover:text-blue-500 opacity-0 group-hover/entry:opacity-100 transition-opacity"
+                    title={`Align ${v.rcsb_id}:${v.entity_id}`}
+                  >
+                    <Plus size={9} />
+                  </button>
+                )}
               </div>
             );
           })}
@@ -316,6 +327,7 @@ function AnchoredPopup({
   onFocusResidue,
   onToggleBallStick,
   ballStickActive,
+  onAlignChain,
   stackIndex = 0,
 }: {
   target: ResiduePopupTarget & { anchor: { mode: 'anchored'; position3d: [number, number, number] } };
@@ -324,6 +336,7 @@ function AnchoredPopup({
   onFocusResidue?: (target: ResiduePopupTarget) => void;
   onToggleBallStick?: () => void;
   ballStickActive?: boolean;
+  onAlignChain?: (pdbId: string, chainId: string) => void;
   stackIndex?: number;
 }) {
   const [screenPos, setScreenPos] = useState<{ x: number; y: number } | null>(null);
@@ -383,7 +396,7 @@ function AnchoredPopup({
         >
           <GripHorizontal size={10} />
         </div>
-        <ResiduePopupContent target={target} onClose={onClose} onFocus={onFocusResidue ? () => onFocusResidue(target) : undefined} onToggleBallStick={onToggleBallStick} ballStickActive={ballStickActive} />
+        <ResiduePopupContent target={target} onClose={onClose} onFocus={onFocusResidue ? () => onFocusResidue(target) : undefined} onToggleBallStick={onToggleBallStick} ballStickActive={ballStickActive} onAlignChain={onAlignChain} />
       </div>
     </>
   );
@@ -397,6 +410,7 @@ function StaticPopup({
   onFocusResidue,
   onToggleBallStick,
   ballStickActive,
+  onAlignChain,
   stackIndex = 0,
 }: {
   target: ResiduePopupTarget & { anchor: { mode: 'static'; screenX: number; screenY: number } };
@@ -404,6 +418,7 @@ function StaticPopup({
   onFocusResidue?: (target: ResiduePopupTarget) => void;
   onToggleBallStick?: () => void;
   ballStickActive?: boolean;
+  onAlignChain?: (pdbId: string, chainId: string) => void;
   stackIndex?: number;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -424,7 +439,7 @@ function StaticPopup({
       >
         <GripHorizontal size={10} />
       </div>
-      <ResiduePopupContent target={target} onClose={onClose} onFocus={onFocusResidue ? () => onFocusResidue(target) : undefined} onToggleBallStick={onToggleBallStick} ballStickActive={ballStickActive} />
+      <ResiduePopupContent target={target} onClose={onClose} onFocus={onFocusResidue ? () => onFocusResidue(target) : undefined} onToggleBallStick={onToggleBallStick} ballStickActive={ballStickActive} onAlignChain={onAlignChain} />
     </div>
   );
 }
@@ -436,10 +451,11 @@ interface ResiduePopupProps {
   instance: MolstarInstance | null;
   onClose: () => void;
   onFocusResidue?: (target: ResiduePopupTarget) => void;
+  onAlignChain?: (pdbId: string, chainId: string) => void;
   stackIndex?: number;
 }
 
-function ResiduePopupSingle({ target, instance, onClose, onFocusResidue, stackIndex = 0 }: ResiduePopupProps) {
+function ResiduePopupSingle({ target, instance, onClose, onFocusResidue, onAlignChain, stackIndex = 0 }: ResiduePopupProps) {
   const [ballStickActive, setBallStickActive] = useState(false);
   const cleanupRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -467,6 +483,7 @@ function ResiduePopupSingle({ target, instance, onClose, onFocusResidue, stackIn
     onFocusResidue,
     onToggleBallStick: (instance && target.chainId && target.authSeqId !== undefined) ? handleToggleBallStick : undefined,
     ballStickActive,
+    onAlignChain,
     stackIndex,
   };
 
@@ -484,9 +501,10 @@ interface ResiduePopupLayerProps {
   onClose: (id: string) => void;
   onCloseAll: () => void;
   onFocusResidue?: (target: ResiduePopupTarget) => void;
+  onAlignChain?: (pdbId: string, chainId: string) => void;
 }
 
-export function ResiduePopupLayer({ popups, instance, onClose, onCloseAll, onFocusResidue }: ResiduePopupLayerProps) {
+export function ResiduePopupLayer({ popups, instance, onClose, onCloseAll, onFocusResidue, onAlignChain }: ResiduePopupLayerProps) {
   useEffect(() => {
     if (popups.length === 0) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -507,6 +525,7 @@ export function ResiduePopupLayer({ popups, instance, onClose, onCloseAll, onFoc
           instance={instance}
           onClose={() => onClose(target.id)}
           onFocusResidue={onFocusResidue}
+          onAlignChain={onAlignChain}
           stackIndex={i}
         />
       ))}

@@ -16,7 +16,8 @@ import {
   selectAlignedStructuresForActiveChain,
 } from '@/components/molstar/state/selectors';
 import { setPrimaryChain, hideAllVisibility } from '@/store/slices/annotationsSlice';
-import { useGetMasterProfileQuery } from '@/store/tubxz_api';
+import { useGetMasterProfileQuery, tubxz_api } from '@/store/tubxz_api';
+import { useChainAlignment } from '@/hooks/useChainAlignment';
 import { useViewerSync } from '@/hooks/useViewerSync';
 import { useMultiChainAnnotations, ChainAnnotationFetcher } from '@/hooks/useMultiChainAnnotations';
 import { createClassificationFromProfile } from '@/services/profile_service';
@@ -175,6 +176,46 @@ export default function StructureProfilePage() {
     chainRowMap: chainRowMapRef.current,
     onMolstarResidueSelect: handleMolstarResidueSelect,
   });
+
+  // ── Alignment dialog state (lifted so MSA labels and popups can trigger it) ──
+  const [alignDialogOpen, setAlignDialogOpen] = useState(false);
+  const handleOpenAlignDialog = useCallback(() => setAlignDialogOpen(true), []);
+
+  // ── Direct alignment from popup "+" buttons ──
+  const { alignChainFromProfile } = useChainAlignment();
+  const handleDirectAlign = useCallback(async (pdbId: string, entityOrChainId: string) => {
+    if (!instance || !activeChainId) return;
+    const masterLen = masterData?.alignment_length ?? 0;
+    if (!masterLen) return;
+
+    // Fetch profile imperatively via RTK Query
+    const result = dispatch(tubxz_api.endpoints.getStructureProfile.initiate({ rcsbId: pdbId }));
+    try {
+      const sourceProfile = await result.unwrap();
+      const family = activeFamily;
+
+      // Resolve entity_id to auth_asym_id: the variant stores entity_id (e.g. "1"),
+      // but loadAlignedStructure needs auth_asym_id (e.g. "A").
+      // Look up via polypeptide instances (which have both entity_id and auth_asym_id).
+      let authAsymId = entityOrChainId;
+      const polyInstance = sourceProfile.polypeptides?.find(
+        (p: any) => p.entity_id === entityOrChainId
+      );
+      if (polyInstance?.auth_asym_id) {
+        authAsymId = polyInstance.auth_asym_id;
+      }
+
+      const ok = await instance.loadAlignedStructure(activeChainId, pdbId, authAsymId, family);
+      if (!ok) return;
+
+      const alignResult = alignChainFromProfile(sourceProfile, authAsymId, masterLen);
+      if (alignResult && family) {
+        const alignedId = `${pdbId}_${authAsymId}_on_${activeChainId}`;
+        instance.styleAlignedChainAsGhost(activeChainId, alignedId, family);
+      }
+    } catch { /* profile fetch failed */ }
+    finally { result.unsubscribe(); }
+  }, [instance, activeChainId, activeFamily, masterData, dispatch, alignChainFromProfile]);
 
   // ── Residue popups (multi-popup, unified for MSA + Molstar) ──
   const [popups, setPopups] = useState<ResiduePopupTarget[]>([]);
@@ -511,6 +552,8 @@ export default function StructureProfilePage() {
                   profile={profile}
                   masterLength={masterData?.alignment_length ?? 0}
                   msaRef={msaRef}
+                  alignDialogOpen={alignDialogOpen}
+                  onAlignDialogOpenChange={setAlignDialogOpen}
                 />
               </div>
             </div>
@@ -588,6 +631,7 @@ export default function StructureProfilePage() {
                   onWindowMaskClear={clearWindowMask}
                   onResidueContextMenu={handleMSAContextMenu}
                   onDisplaySequencesChange={handleDisplaySequencesChange}
+                  onAddAlignment={isMonomerView ? handleOpenAlignDialog : undefined}
                 />
               )}
             </div>
@@ -595,7 +639,7 @@ export default function StructureProfilePage() {
           </div>
         </div>
       )}
-      <ResiduePopupLayer popups={popups} instance={instance} onClose={removePopup} onCloseAll={clearPopups} onFocusResidue={handleFocusResidue} />
+      <ResiduePopupLayer popups={popups} instance={instance} onClose={removePopup} onCloseAll={clearPopups} onFocusResidue={handleFocusResidue} onAlignChain={isMonomerView ? handleDirectAlign : undefined} />
     </div>
   );
 }
