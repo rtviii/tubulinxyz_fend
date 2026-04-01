@@ -1,14 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { ChevronRight, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 import type { Modification } from '@/store/slices/annotationsSlice';
-
-interface ModificationsPanelProps {
-  modifications: Modification[];
-  showModifications: boolean;
-  onToggleModifications: (visible: boolean) => void;
-}
 
 export const MODIFICATION_COLORS: Record<string, string> = {
   acetylation: '#6366f1',     // indigo
@@ -27,14 +21,32 @@ function getModColor(type: string): string {
   return MODIFICATION_COLORS[type] ?? '#9ca3af';
 }
 
+interface ModificationsPanelProps {
+  modifications: Modification[];
+  visibleModificationTypes: string[];
+  onToggleModificationType: (modType: string) => void;
+}
+
 export function ModificationsPanel({
   modifications,
-  showModifications,
-  onToggleModifications,
+  visibleModificationTypes,
+  onToggleModificationType,
 }: ModificationsPanelProps) {
   const [expanded, setExpanded] = useState(true);
 
+  // Group by modification type with counts
+  const typeGroups = useMemo(() => {
+    const groups: Record<string, number> = {};
+    for (const m of modifications) {
+      groups[m.modificationType] = (groups[m.modificationType] ?? 0) + 1;
+    }
+    return Object.entries(groups)
+      .sort((a, b) => b[1] - a[1]); // sort by count descending
+  }, [modifications]);
+
   if (modifications.length === 0) return null;
+
+  const visibleSet = new Set(visibleModificationTypes);
 
   return (
     <div>
@@ -49,52 +61,36 @@ export function ModificationsPanel({
         <span className="text-[10px] font-medium text-gray-500">
           Modifications ({modifications.length})
         </span>
-        <div className="ml-auto" onClick={e => e.stopPropagation()}>
-          <button
-            onClick={() => onToggleModifications(!showModifications)}
-            className="p-0.5 text-gray-300 hover:text-gray-600"
-            title={showModifications ? 'Hide modification highlights' : 'Show modification highlights'}
-          >
-            {showModifications ? <Eye size={11} /> : <EyeOff size={11} />}
-          </button>
-        </div>
       </div>
 
       {expanded && (
-        <div className="max-h-36 overflow-y-auto border border-gray-100 rounded bg-white">
-          {modifications.map((m, i) => {
-            const color = getModColor(m.modificationType);
-            const detail = [m.species, m.tubulinType, m.phenotype].filter(Boolean).join(' / ');
+        <div className="border border-gray-100 rounded bg-white">
+          {typeGroups.map(([modType, count]) => {
+            const color = getModColor(modType);
+            const isVisible = visibleSet.has(modType);
             return (
-              <div
-                key={`${m.masterIndex}-${m.modificationType}-${i}`}
-                className="group flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-gray-50 text-[10px] border-b border-gray-50 last:border-b-0"
+              <label
+                key={modType}
+                className="flex items-center gap-2 px-2 py-1 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-b-0"
               >
+                <input
+                  type="checkbox"
+                  checked={isVisible}
+                  onChange={() => onToggleModificationType(modType)}
+                  className="w-3 h-3 rounded accent-current"
+                  style={{ accentColor: color }}
+                />
                 <span
-                  className="w-auto min-w-[3rem] text-center text-[8px] px-1 py-px rounded font-semibold text-white flex-shrink-0 leading-tight"
+                  className="w-2 h-2 rounded-full flex-shrink-0"
                   style={{ backgroundColor: color }}
-                >
-                  {m.modificationType.slice(0, 5).toUpperCase()}
+                />
+                <span className="text-[10px] text-gray-600 flex-1">
+                  {modType.charAt(0).toUpperCase() + modType.slice(1)}
                 </span>
-                <span className="font-mono font-medium text-gray-700 flex-shrink-0">
-                  {m.aminoAcid}{m.masterIndex}
+                <span className="text-[9px] text-gray-400 tabular-nums">
+                  {count}
                 </span>
-                <span className="flex-1 min-w-0 text-gray-400 truncate" title={detail}>
-                  {detail}
-                </span>
-                {m.databaseLink && (
-                  <a
-                    href={m.databaseLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-0.5 text-gray-200 hover:text-blue-500 opacity-0 group-hover:opacity-100 flex-shrink-0"
-                    title="View source"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <ExternalLink size={10} />
-                  </a>
-                )}
-              </div>
+              </label>
             );
           })}
         </div>

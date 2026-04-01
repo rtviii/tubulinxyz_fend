@@ -38,6 +38,9 @@ interface ResizableMSAContainerProps {
   visibleChainKeys?: Set<string>;
   onToggleChainVisibility?: (chainKey: string) => void;
   onSoloChain?: (chainKey: string) => void;
+
+  expandedSequences?: Set<string>;
+  onToggleExpand?: (seqId: string) => void;
 }
 
 export interface ResizableMSAContainerHandle {
@@ -83,6 +86,9 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       visibleChainKeys,
       onToggleChainVisibility,
       onSoloChain,
+
+      expandedSequences,
+      onToggleExpand,
     } = props;
 
 
@@ -563,6 +569,8 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
                   visibleChainKeys={visibleChainKeys}
                   onToggleChainVisibility={onToggleChainVisibility}
                   onSoloChain={onSoloChain}
+                  expandedSequences={expandedSequences}
+                  onToggleExpand={onToggleExpand}
                 />
               </div>
             </div>

@@ -112,18 +112,31 @@ export default function StructureProfilePage() {
     [familySequences]
   );
 
-  // Build the same display order as the MSA panel: masters first, then PDB.
-  // Master IDs don't match any annotation chainKey, so they produce no rules,
-  // but their presence offsets PDB row indices to match the actual MSA rows.
+  // Display sequence IDs (including auxiliaries) emitted by SequenceAlignmentPanel.
+  // This must match the actual MSA display order for correct color rule row indexing.
+  // Fallback to basic masters+pdb order until the panel emits.
   const masterSequenceIds = useMemo(() => {
     if (!masterData?.sequences || !activeFamily) return [];
     return masterData.sequences.map((seq: any, i: number) => `master__${activeFamily}__${seq.id}`);
   }, [masterData, activeFamily]);
 
-  const allVisibleSequenceIds = useMemo(
+  const fallbackVisibleIds = useMemo(
     () => [...masterSequenceIds, ...pdbSequences.map(s => s.id)],
     [masterSequenceIds, pdbSequences]
   );
+
+  const [displaySequenceIds, setDisplaySequenceIds] = useState<string[]>(fallbackVisibleIds);
+  const displaySequencesRef = useRef<import('@/store/slices/sequence_registry').MsaSequence[]>([]);
+
+  // Keep fallback in sync when master/pdb data changes (before panel emits)
+  useEffect(() => {
+    setDisplaySequenceIds(fallbackVisibleIds);
+  }, [fallbackVisibleIds]);
+
+  const handleDisplaySequencesChange = useCallback((seqs: import('@/store/slices/sequence_registry').MsaSequence[]) => {
+    displaySequencesRef.current = seqs;
+    setDisplaySequenceIds(seqs.map(s => s.id));
+  }, []);
 
   // Annotation fetchers
   const { chainsToFetch, primaryChainKey } = useMultiChainAnnotations(
@@ -157,7 +170,8 @@ export default function StructureProfilePage() {
     chainKey,
     molstarInstance: instance,
     msaRef,
-    visibleSequenceIds: allVisibleSequenceIds,
+    visibleSequenceIds: displaySequenceIds,
+    displaySequences: displaySequencesRef.current,
     chainRowMap: chainRowMapRef.current,
     onMolstarResidueSelect: handleMolstarResidueSelect,
   });
@@ -178,11 +192,29 @@ export default function StructureProfilePage() {
 
   const clearPopups = useCallback(() => setPopups([]), []);
 
-  // Molstar right-click → anchored popup
-  const handleMolstarContextMenu = useCallback((e: React.MouseEvent) => {
+  // Right-click popup: track mousedown position, only open popup on mouseup if no drag occurred.
+  // We can't use onContextMenu because on macOS it fires on mousedown (before any drag).
+  const rightMouseDownPos = useRef<{ x: number; y: number } | null>(null);
+
+  const handleContainerMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button === 2) {
+      rightMouseDownPos.current = { x: e.clientX, y: e.clientY };
+    }
+  }, []);
+
+  const handleContainerMouseUp = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 2) return;
+    const down = rightMouseDownPos.current;
+    rightMouseDownPos.current = null;
+    if (!down) return;
+
+    // If the mouse moved more than 5px, it was a camera drag — don't open popup
+    const dx = e.clientX - down.x;
+    const dy = e.clientY - down.y;
+    if (dx * dx + dy * dy > 25) return;
+
     const hovered = lastHoveredMolstarResidueRef.current;
     if (!hovered || !hovered.position3d) return;
-    e.preventDefault();
 
     const { chainId: hovChainId, authSeqId, masterIdx, position3d } = hovered;
     let residueLetter = '?';
@@ -200,9 +232,15 @@ export default function StructureProfilePage() {
       masterIndex: masterIdx,
       authSeqId,
       chainId: hovChainId,
+      family: activeFamily ?? undefined,
       anchor: { mode: 'anchored', position3d },
     });
-  }, [lastHoveredMolstarResidueRef, pdbSequences, loadedStructure, addPopup, instance]);
+  }, [lastHoveredMolstarResidueRef, pdbSequences, loadedStructure, addPopup, instance, activeFamily]);
+
+  // Suppress browser context menu on the viewer so it doesn't flash during right-clicks
+  const handleSuppressContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+  }, []);
 
   // MSA right-click → anchored (if structural + 3D position available) or static
   const handleMSAContextMenu = useCallback((event: MSAContextMenuEvent) => {
@@ -218,6 +256,7 @@ export default function StructureProfilePage() {
           masterIndex: event.masterIndex,
           authSeqId,
           chainId: cId,
+          family: activeFamily ?? undefined,
           anchor: { mode: 'anchored', position3d },
         });
         return;
@@ -236,9 +275,10 @@ export default function StructureProfilePage() {
       masterIndex: event.masterIndex,
       authSeqId: event.structural?.authSeqId,
       chainId: event.structural?.chainId,
+      family: activeFamily ?? undefined,
       anchor: { mode: 'static', screenX: event.screenX, screenY: event.screenY },
     });
-  }, [instance, addPopup]);
+  }, [instance, addPopup, activeFamily]);
 
 
   // Inside the component, after the existing hook calls:
@@ -414,7 +454,7 @@ export default function StructureProfilePage() {
       ))}
 
       {/* ── Full-viewport Molstar viewer (base layer) ── */}
-      <div ref={containerRef} className="absolute inset-0 w-full h-full" onContextMenu={handleMolstarContextMenu} />
+      <div ref={containerRef} className="absolute inset-0 w-full h-full" onMouseDown={handleContainerMouseDown} onMouseUp={handleContainerMouseUp} onContextMenu={handleSuppressContextMenu} />
 
       {(!isInitialized || isLoading) && (
         <LoadingOverlay
@@ -533,6 +573,7 @@ export default function StructureProfilePage() {
                   onWindowMaskChange={handleDisplayRangeChange}
                   onWindowMaskClear={clearWindowMask}
                   onResidueContextMenu={handleMSAContextMenu}
+                  onDisplaySequencesChange={handleDisplaySequencesChange}
                 />
               )}
             </div>

@@ -2,7 +2,12 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, GripHorizontal } from 'lucide-react';
+import { X, GripHorizontal, ExternalLink } from 'lucide-react';
+import { useGetVariantsAtPositionQuery, useGetModificationsAtPositionQuery } from '@/store/tubxz_api';
+import type { VariantAnnotation, ModificationAnnotation } from '@/store/tubxz_api';
+import { MODIFICATION_COLORS } from '@/components/annotations/ModificationsPanel';
+import { VARIANT_COLORS } from '@/store/slices/colorRulesSelector';
+import { useOrganismMap } from '@/services/organism_map';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { ResiduePopupTarget } from './types';
 
@@ -45,17 +50,44 @@ function useDrag(initialPos: { x: number; y: number }) {
 // ── Shared content (the inner card) ──────────────────────────
 
 function ResiduePopupContent({ target, onClose }: { target: ResiduePopupTarget; onClose: () => void }) {
+  const hasFamily = !!target.family;
+  const organismMap = useOrganismMap();
+
+  const { data: variantsData, isLoading: variantsLoading } = useGetVariantsAtPositionQuery(
+    { family: target.family!, position: target.masterIndex },
+    { skip: !hasFamily }
+  );
+  const { data: modsData, isLoading: modsLoading } = useGetModificationsAtPositionQuery(
+    { family: target.family!, position: target.masterIndex },
+    { skip: !hasFamily }
+  );
+
+  const isLoading = variantsLoading || modsLoading;
+  const allVariants = variantsData?.variants ?? [];
+  const modifications = modsData?.modifications ?? [];
+
+  // Unified substitution groups (literature + structural merged by path)
+  const allSubs = allVariants.filter(v => v.type === 'substitution');
+  const subPathGroups = groupSubstitutionsByPath(allSubs);
+  const nonSubs = allVariants.filter(v => v.type !== 'substitution');
+
+  // Group modifications by type
+  const modsByType: Record<string, ModificationAnnotation[]> = {};
+  for (const m of modifications) {
+    if (!modsByType[m.modification_type]) modsByType[m.modification_type] = [];
+    modsByType[m.modification_type].push(m);
+  }
+
   return (
     <>
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
-        <div>
-          <span className="font-semibold text-gray-900 text-base">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-100">
+        <div className="flex items-baseline gap-1.5">
+          <span className="font-mono font-bold text-gray-900 text-sm">
             {target.residueLetter}
             {target.authSeqId !== undefined ? target.authSeqId : ''}
           </span>
-          <span className="text-xs text-gray-500 ml-2">
-            {target.label}
-          </span>
+          <span className="text-[10px] text-gray-500">{target.label}</span>
+          <span className="text-[9px] text-gray-400">col {target.masterIndex}</span>
         </div>
         <button
           onClick={onClose}
@@ -64,22 +96,193 @@ function ResiduePopupContent({ target, onClose }: { target: ResiduePopupTarget; 
           <X size={14} />
         </button>
       </div>
-      <div className="px-3 py-2">
-        <div className="text-xs text-gray-500">
-          MSA position {target.masterIndex}
-        </div>
-        <div className="mt-2 text-xs text-gray-400 italic">
-          Actions coming soon
-        </div>
+
+      <div className="px-3 py-1.5 max-h-[400px] overflow-y-auto" style={{ minWidth: 280 }}>
+        {!hasFamily && (
+          <div className="text-[10px] text-gray-400 italic">No family data available</div>
+        )}
+
+        {isLoading && (
+          <div className="flex items-center gap-2 py-2">
+            <div className="animate-spin h-3 w-3 border border-gray-300 border-t-transparent rounded-full" />
+            <span className="text-[10px] text-gray-400">Loading...</span>
+          </div>
+        )}
+
+        {!isLoading && hasFamily && (
+          <>
+            {/* Unified substitutions -- all sources merged by path */}
+            {subPathGroups.length > 0 && (
+              <div className="mb-2">
+                <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                  Substitutions ({allSubs.length})
+                </div>
+                <div className="space-y-0.5">
+                  {subPathGroups.map(({ path, variants: pvs }) => (
+                    <SubstitutionPathRow key={path} path={path} variants={pvs} total={allSubs.length} organismMap={organismMap} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Non-substitution variants (del/ins) */}
+            {nonSubs.length > 0 && (
+              <div className="mb-2">
+                <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                  Del/Ins ({nonSubs.length})
+                </div>
+                <div className="border border-gray-100 rounded bg-gray-50/50">
+                  {nonSubs.map((v, i) => {
+                    const color = VARIANT_COLORS[v.type as keyof typeof VARIANT_COLORS] ?? '#9ca3af';
+                    const org = v.source === 'structural' && v.rcsb_id && organismMap
+                      ? organismMap[v.rcsb_id]?.[0] : v.species;
+                    return (
+                      <div key={i} className="flex items-center gap-1.5 px-1.5 py-0.5 text-[10px] border-b border-gray-50 last:border-b-0">
+                        <span className="text-[8px] px-1 py-px rounded font-semibold text-white" style={{ backgroundColor: color }}>
+                          {v.type.slice(0, 3).toUpperCase()}
+                        </span>
+                        {v.rcsb_id && <span className="font-mono text-gray-600">{v.rcsb_id}:{v.entity_id ?? '?'}</span>}
+                        {org && <span className="text-gray-400 truncate">{org}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Modifications grouped by type */}
+            {Object.keys(modsByType).length > 0 && (
+              <div className="mb-2">
+                <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                  Modifications ({modifications.length})
+                </div>
+                <div className="space-y-0.5">
+                  {Object.entries(modsByType).map(([type, mods]) => {
+                    const color = MODIFICATION_COLORS[type] ?? '#9ca3af';
+                    const species = [...new Set(mods.map(m => m.species).filter(Boolean))];
+                    return (
+                      <div key={type} className="flex items-center gap-1.5 text-[10px]">
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                        <span className="text-gray-600">
+                          {type.charAt(0).toUpperCase() + type.slice(1)}
+                        </span>
+                        <span className="text-[9px] text-gray-400">x{mods.length}</span>
+                        {species.length > 0 && (
+                          <span className="text-[9px] text-gray-400 truncate flex-1" title={species.join(', ')}>
+                            {species.slice(0, 2).join(', ')}{species.length > 2 ? '...' : ''}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Empty state */}
+            {allVariants.length === 0 && modifications.length === 0 && (
+              <div className="text-[10px] text-gray-400 py-1">No annotations at this position</div>
+            )}
+          </>
+        )}
       </div>
     </>
+  );
+}
+
+// ── Popup helpers ──
+
+interface SubPathGroup {
+  path: string;
+  variants: VariantAnnotation[];
+}
+
+function groupSubstitutionsByPath(variants: VariantAnnotation[]): SubPathGroup[] {
+  const groups: Record<string, VariantAnnotation[]> = {};
+  for (const v of variants) {
+    if (v.type !== 'substitution' || !v.wild_type || !v.observed) continue;
+    const path = `${v.wild_type}\u2192${v.observed}`;
+    if (!groups[path]) groups[path] = [];
+    groups[path].push(v);
+  }
+  return Object.entries(groups)
+    .map(([path, vs]) => ({ path, variants: vs }))
+    .sort((a, b) => b.variants.length - a.variants.length);
+}
+
+/** Unified substitution path row: frequency bar + expandable list with literature entries on top */
+function SubstitutionPathRow({
+  path, variants, total, organismMap,
+}: {
+  path: string;
+  variants: VariantAnnotation[];
+  total: number;
+  organismMap: Record<string, string[]> | null;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const fraction = total > 0 ? variants.length / total : 0;
+  const color = VARIANT_COLORS.substitution;
+
+  const litEntries = variants.filter(v => v.source !== 'structural');
+  const structEntries = variants.filter(v => v.source === 'structural');
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-1.5 text-[10px] cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5"
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span className="font-mono font-bold text-gray-800 w-10 flex-shrink-0">{path}</span>
+        <div className="flex-1 h-2.5 bg-gray-100 rounded-sm overflow-hidden" title={`${variants.length} / ${total}`}>
+          <div className="h-full rounded-sm" style={{ width: `${Math.max(fraction * 100, 4)}%`, backgroundColor: color }} />
+        </div>
+        <span className="text-[9px] text-gray-500 tabular-nums w-6 text-right">{variants.length}</span>
+      </div>
+      {expanded && (
+        <div className="ml-3 pl-2 border-l border-gray-200 mt-0.5 mb-1.5 max-h-52 overflow-y-auto">
+          {/* Literature entries -- amber left border, breathing room */}
+          {litEntries.map((v, i) => {
+            const detail = [v.species, v.tubulin_type].filter(Boolean).join(' / ');
+            return (
+              <div key={`lit-${i}`} className="pl-2 py-1 my-0.5 border-l-2 border-amber-300 bg-amber-50/40 rounded-r text-[9px]">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-amber-800 font-medium">{detail || 'Literature'}</span>
+                  {v.reference_link && (
+                    <a href={v.reference_link} target="_blank" rel="noopener noreferrer"
+                      className="text-amber-400 hover:text-blue-500 flex-shrink-0 ml-auto" onClick={e => e.stopPropagation()}>
+                      <ExternalLink size={8} />
+                    </a>
+                  )}
+                </div>
+                {v.phenotype && (
+                  <div className="text-[8px] text-amber-600/70 mt-0.5 leading-snug">{v.phenotype}</div>
+                )}
+                {v.reference && (
+                  <div className="text-[8px] text-gray-400 italic mt-0.5 leading-snug">{v.reference}</div>
+                )}
+              </div>
+            );
+          })}
+          {/* Structural entries -- single line each with species */}
+          {structEntries.map((v, i) => {
+            const org = v.rcsb_id && organismMap ? organismMap[v.rcsb_id]?.[0] ?? null : null;
+            return (
+              <div key={`str-${i}`} className="flex items-center gap-1.5 text-[9px] text-gray-500 py-0.5">
+                <span className="font-mono text-gray-600">{v.rcsb_id ?? '?'}:{v.entity_id ?? '?'}</span>
+                {org && <span className="text-gray-400 italic truncate">{org}</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
 // ── Anchored popup (3D-tracked with connector line) ──────────
 
 const ANCHOR_OFFSET = { x: 120, y: -80 };
-const POPUP_HEIGHT_ESTIMATE = 100; // rough height for collision stacking
+const POPUP_HEIGHT_ESTIMATE = 200; // rough height for collision stacking
 
 function AnchoredPopup({
   target,

@@ -60,6 +60,8 @@ export interface ChainVisibility {
   showVariants: boolean;
   showModifications: boolean;
   visibleLigandIds: string[];
+  /** Which modification types are toggled on for auxiliary track display */
+  visibleModificationTypes: string[];
 }
 
 export interface ChainAnnotationEntry {
@@ -87,6 +89,7 @@ const DEFAULT_VISIBILITY: ChainVisibility = {
   showVariants: false,
   showModifications: false,
   visibleLigandIds: [],
+  visibleModificationTypes: [],
 };
 
 // ============================================================
@@ -134,6 +137,7 @@ export const annotationsSlice = createSlice({
           showVariants: isPrimary,
           showModifications: false,
           visibleLigandIds: [],
+          visibleModificationTypes: [],
         },
         isLoading: false,
         error: null,
@@ -219,6 +223,17 @@ export const annotationsSlice = createSlice({
       }
     },
 
+    toggleModificationType: (state, action: PayloadAction<{ chainKey: string; modType: string }>) => {
+      const chain = state.chains[action.payload.chainKey];
+      if (!chain) return;
+      const idx = chain.visibility.visibleModificationTypes.indexOf(action.payload.modType);
+      if (idx >= 0) {
+        chain.visibility.visibleModificationTypes.splice(idx, 1);
+      } else {
+        chain.visibility.visibleModificationTypes.push(action.payload.modType);
+      }
+    },
+
     toggleAllLigandsByChemId: (state, action: PayloadAction<string>) => {
       const chemId = action.payload;
       let anyVisible = false;
@@ -263,6 +278,7 @@ export const {
   hideAllVisibility,
   clearChain,
   clearAllAnnotations,
+  toggleModificationType,
   toggleAllVariants,
   toggleAllLigandsByChemId,
 } = annotationsSlice.actions;

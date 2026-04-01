@@ -18,6 +18,8 @@ import { useNightingaleComponents } from '@/hooks/useNightingaleComponents';
 import { selectPositionMapping } from '@/store/slices/sequence_registry';
 import { setHoveredChain } from '@/store/slices/chainFocusSlice';
 import type { MsaSequence, PositionMapping } from '@/store/slices/sequence_registry';
+import { selectAnnotationsState } from '@/store/slices/annotationsSlice';
+import type { ChainAnnotationEntry } from '@/store/slices/annotationsSlice';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { formatFamilyShort } from '@/lib/formatters';
 import { makeChainKey, authAsymIdFromChainKey } from '@/lib/chain_key';
@@ -83,6 +85,106 @@ interface SequenceAlignmentPanelProps {
   onWindowMaskChange?: (masterStart: number, masterEnd: number) => void;
   onWindowMaskClear?: () => void;
   onResidueContextMenu?: (event: MSAContextMenuEvent) => void;
+  /** Emits the full display sequence list (including auxiliaries) for correct color rule row indexing */
+  onDisplaySequencesChange?: (seqs: MsaSequence[]) => void;
+}
+
+// ────────────────────────────────────────────
+// Auxiliary Track Helpers
+// ────────────────────────────────────────────
+
+/** Build auxiliary MsaSequence rows for a primary sequence based on its annotation data. */
+function buildAuxiliarySequences(
+  primary: MsaSequence,
+  annotationEntry: ChainAnnotationEntry | null,
+  maxLength: number,
+): MsaSequence[] {
+  if (!annotationEntry?.data) return [];
+
+  const gapSequence = ' '.repeat(maxLength);
+  const auxiliaries: MsaSequence[] = [];
+  const { data, visibility } = annotationEntry;
+
+  // Structural variants layer
+  const structuralVariants = data.variants.filter(v => v.source !== 'morisette');
+  if (structuralVariants.length > 0 && visibility.showVariants) {
+    auxiliaries.push({
+      id: `aux__${primary.id}__variants`,
+      name: `variants`,
+      sequence: gapSequence,
+      rowIndex: -1, // placeholder, assigned during interleave
+      originType: 'auxiliary',
+      family: primary.family,
+      parentSequenceId: primary.id,
+      layerType: 'variants',
+      layerLabel: `variants (${structuralVariants.length})`,
+    });
+  }
+
+  // One layer per visible ligand
+  for (const site of data.ligandSites) {
+    if (!visibility.visibleLigandIds.includes(site.id)) continue;
+    auxiliaries.push({
+      id: `aux__${primary.id}__ligand__${site.id}`,
+      name: site.ligandId,
+      sequence: gapSequence,
+      rowIndex: -1,
+      originType: 'auxiliary',
+      family: primary.family,
+      parentSequenceId: primary.id,
+      layerType: `ligand:${site.id}`,
+      layerLabel: `${site.ligandId} (${site.residueCount}r)`,
+    });
+  }
+
+  // One layer per visible modification type
+  for (const modType of visibility.visibleModificationTypes ?? []) {
+    const modsOfType = data.modifications.filter(m => m.modificationType === modType);
+    if (modsOfType.length === 0) continue;
+    auxiliaries.push({
+      id: `aux__${primary.id}__ptm__${modType}`,
+      name: modType,
+      sequence: gapSequence,
+      rowIndex: -1,
+      originType: 'auxiliary',
+      family: primary.family,
+      parentSequenceId: primary.id,
+      layerType: `ptm:${modType}`,
+      layerLabel: `${modType.charAt(0).toUpperCase() + modType.slice(1)} (${modsOfType.length})`,
+    });
+  }
+
+  return auxiliaries;
+}
+
+/** Interleave auxiliary sequences after their parent in the display list. */
+function interleaveAuxiliaries(
+  primaries: MsaSequence[],
+  expandedSet: Set<string>,
+  annotationChains: Record<string, ChainAnnotationEntry>,
+  maxLength: number,
+): MsaSequence[] {
+  const result: MsaSequence[] = [];
+
+  for (const seq of primaries) {
+    result.push(seq);
+
+    // Only PDB sequences can be expanded (masters don't have annotations)
+    if (seq.originType !== 'pdb' || !expandedSet.has(seq.id)) continue;
+
+    const chainKey = seq.chainRef
+      ? makeChainKey(seq.chainRef.pdbId, seq.chainRef.chainId)
+      : null;
+    if (!chainKey) continue;
+
+    const entry = annotationChains[chainKey] ?? null;
+    const auxiliaries = buildAuxiliarySequences(seq, entry, maxLength);
+    for (const aux of auxiliaries) {
+      result.push(aux);
+    }
+  }
+
+  return result;
 }
 
 // ────────────────────────────────────────────
@@ -133,6 +235,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       onWindowMaskChange,
       onWindowMaskClear,
       onResidueContextMenu,
+      onDisplaySequencesChange,
     } = props;
 
     const msaRef = useRef<ResizableMSAContainerHandle>(null);
@@ -230,13 +333,28 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
     const [showMasters, setShowMasters] = useState(true);
     const [inRangeOnly, setInRangeOnly] = useState(false);
     const currentRangeRef = useRef<[number, number] | null>(null);
+    const [expandedSequences, setExpandedSequences] = useState<Set<string>>(new Set());
 
-    const displaySequences = useMemo(
-      () => showMasters
-        ? [...masterSequences, ...pdbSequences]
-        : [...pdbSequences],
-      [masterSequences, pdbSequences, showMasters]
+    const handleToggleExpand = useCallback((seqId: string) => {
+      setExpandedSequences(prev => {
+        const next = new Set(prev);
+        if (next.has(seqId)) next.delete(seqId);
+        else next.add(seqId);
+        return next;
+      });
+    }, []);
+
+    // Annotation data (drives auxiliary track generation)
+    const annotationChains = useAppSelector(
+      state => state.annotations.chains
     );
+
+    const displaySequences = useMemo(() => {
+      const primaries = showMasters
+        ? [...masterSequences, ...pdbSequences]
+        : [...pdbSequences];
+      return interleaveAuxiliaries(primaries, expandedSequences, annotationChains, maxLength);
+    }, [masterSequences, pdbSequences, showMasters, expandedSequences, annotationChains, maxLength]);
 
     // Emit chain-to-row mapping for Molstar hover crosshair
     useEffect(() => {
@@ -249,6 +367,11 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
         }
       });
       onChainRowMapChange(map);
+    }, [displaySequences]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Emit full display sequences (includes auxiliaries) for correct color rule row indexing
+    useEffect(() => {
+      onDisplaySequencesChange?.(displaySequences);
     }, [displaySequences]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Visibility for aligned structures ──
@@ -358,9 +481,19 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       }
     }, [displaySequences]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Resolve auxiliary sequence IDs to their parent primary sequence
+    const resolveToParent = useCallback((seqId: string): string => {
+      const seq = displaySequences.find(s => s.id === seqId);
+      if (seq?.originType === 'auxiliary' && seq.parentSequenceId) {
+        return seq.parentSequenceId;
+      }
+      return seqId;
+    }, [displaySequences]);
+
     const handleResidueHover = useCallback(
       (seqId: string, position: number) => {
-        const seq = displaySequences.find(s => s.id === seqId);
+        const resolvedId = resolveToParent(seqId);
+        const seq = displaySequences.find(s => s.id === resolvedId);
         if (seq && seq.originType === 'pdb') {
           // Structural sequence: crosshair (dim column + bold cell)
           const rowIdx = displaySequences.indexOf(seq);
@@ -395,9 +528,9 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
         } else {
           lastHoveredResidueRef.current = null;
         }
-        onResidueHover?.(seqId, position);
+        onResidueHover?.(resolvedId, position);
       },
-      [onResidueHover, displaySequences, dispatch, sequenceKey, positionMapping, allPositionMappings]
+      [onResidueHover, displaySequences, dispatch, sequenceKey, positionMapping, allPositionMappings, resolveToParent]
     );
 
     const handleResidueLeave = useCallback(
@@ -416,7 +549,8 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
 
     const handleResidueClick = useCallback(
       (seqId: string, position: number) => {
-        const seq = displaySequences.find(s => s.id === seqId);
+        const resolvedId = resolveToParent(seqId);
+        const seq = displaySequences.find(s => s.id === resolvedId);
         if (!seq || seq.originType !== 'pdb' || !seq.chainRef) return;
 
         const ck = makeChainKey(seq.chainRef.pdbId, seq.chainRef.chainId);
@@ -488,7 +622,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
           }
         }
       },
-      [displaySequences, instance, positionMapping, sequenceKey, allPositionMappings, selectedResidue, alignedStructures]
+      [displaySequences, instance, positionMapping, sequenceKey, allPositionMappings, selectedResidue, alignedStructures, resolveToParent]
     );
 
     // Imperative select from Molstar click
@@ -628,6 +762,8 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
             visibleChainKeys={visibleChainKeys}
             onToggleChainVisibility={handleToggleChainVisibility}
             onSoloChain={handleSoloChain}
+            expandedSequences={expandedSequences}
+            onToggleExpand={handleToggleExpand}
           />
         </div>
       </div>

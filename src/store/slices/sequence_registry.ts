@@ -7,7 +7,7 @@ export interface ChainRef {
   chainId: string;
 }
 
-export type SequenceOriginType = 'master' | 'custom' | 'pdb';
+export type SequenceOriginType = 'master' | 'custom' | 'pdb' | 'auxiliary' | 'synthetic';
 
 export interface MsaSequence {
   id: string;
@@ -18,6 +18,12 @@ export interface MsaSequence {
   chainRef?: ChainRef;
   family?: string;
   organism?: string;
+  /** For auxiliary tracks: the id of the parent sequence this track belongs to */
+  parentSequenceId?: string;
+  /** Layer identifier, e.g. 'variants', 'ligand:GTP', 'ptm:acetylation' */
+  layerType?: string;
+  /** Display label for the label panel, e.g. "variants", "GTP contacts" */
+  layerLabel?: string;
 }
 
 export type PositionMapping = Record<number, number>;

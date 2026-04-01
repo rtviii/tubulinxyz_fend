@@ -2,6 +2,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { ChevronRight, ChevronDown } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/store/store';
 import {
   selectSelectedSequenceId,
@@ -23,6 +24,8 @@ interface MSALabelsProps {
   visibleChainKeys?: Set<string>;
   onToggleChainVisibility?: (chainKey: string) => void;
   onSoloChain?: (chainKey: string) => void;
+  expandedSequences?: Set<string>;
+  onToggleExpand?: (seqId: string) => void;
 }
 
 const FAMILY_GREEK: Record<string, string> = {
@@ -84,6 +87,8 @@ export function MSALabels({
   rowHeight,
   scrollTop,
   onWidthCalculated,
+  expandedSequences,
+  onToggleExpand,
 }: MSALabelsProps) {
   const dispatch = useAppDispatch();
   const selectedId = useAppSelector(selectSelectedSequenceId);
@@ -146,6 +151,7 @@ export function MSALabels({
       />
       <div style={{ transform: `translateY(${-scrollTop}px)` }}>
         {sequences.map((seq, idx) => {
+          const isAux = seq.originType === 'auxiliary';
           const ck = chainKeyForSequence(seq);
           const isPdb = seq.originType === 'pdb';
           const isMaster = seq.originType === 'master';
@@ -153,6 +159,39 @@ export function MSALabels({
           const isHovered = ck ? ck === hoveredChainKey : false;
           const isLastMaster = idx === lastMasterIndex && hasMasters;
           const isFirstPdb = isPdb && idx === lastMasterIndex + 1;
+
+          // Check if this PDB row has a following auxiliary (= is expanded)
+          const isExpanded = isPdb && expandedSequences?.has(seq.id);
+          // Check if next row is NOT an auxiliary of the same parent (= last aux in group)
+          const isLastAux = isAux && (
+            idx === sequences.length - 1 ||
+            sequences[idx + 1]?.parentSequenceId !== seq.parentSequenceId
+          );
+
+          // ── Auxiliary track label ──
+          if (isAux) {
+            return (
+              <div
+                key={seq.id}
+                className={`
+                  flex items-center gap-1 pl-5 pr-1.5 select-none whitespace-nowrap
+                  text-[9px] font-mono text-gray-400
+                  bg-gray-50/80
+                  ${isLastAux ? 'border-b border-gray-200' : ''}
+                `}
+                style={{
+                  height: rowHeight,
+                  lineHeight: `${rowHeight}px`,
+                  borderLeft: '2px solid #d1d5db',
+                }}
+                title={seq.layerLabel ?? seq.name}
+              >
+                <span className="text-gray-400">{seq.layerLabel ?? seq.name}</span>
+              </div>
+            );
+          }
+
+          // ── Primary sequence label (master, pdb, etc.) ──
           const parsed = parseLabel(seq);
 
           return (
@@ -183,6 +222,18 @@ export function MSALabels({
               }}
               title={seq.name}
             >
+              {/* Expand/collapse chevron for PDB sequences */}
+              {isPdb && onToggleExpand ? (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onToggleExpand(seq.id); }}
+                  className="flex-shrink-0 w-3 h-3 flex items-center justify-center text-gray-400 hover:text-gray-600"
+                >
+                  {isExpanded
+                    ? <ChevronDown size={10} />
+                    : <ChevronRight size={10} />
+                  }
+                </button>
+              ) : null}
               {parsed.family && (
                 <span className="text-gray-500 w-3 text-center flex-shrink-0">{parsed.family}</span>
               )}

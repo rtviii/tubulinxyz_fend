@@ -9,15 +9,20 @@ import {
   hideAllVisibility,
   toggleAllVariants,
   toggleAllLigandsByChemId,
+  toggleModificationType,
   selectAnyVariantsVisible,
   selectAllUniqueLigandIds,
   selectAllLigandSitesForExport,
+  selectPrimaryChainKey,
+  selectChainData,
+  selectChainVisibility,
 } from '@/store/slices/annotationsSlice';
 import { LIGAND_IGNORE_IDS } from '@/components/molstar/colors/palette';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { PolymerComponent, AlignedStructure } from '@/components/molstar/core/types';
 import type { MSAHandle } from '@/components/msa/types';
 import { AlignmentDialog } from './AlignmentDialog';
+import { ModificationsPanel } from '@/components/annotations/ModificationsPanel';
 
 export interface MonomerSidebarProps {
   activeChainId: string | null;
@@ -156,6 +161,17 @@ export function MonomerSidebar({
 
   const hasAnySites = filteredLigandIds.length > 0;
 
+  // Global modifications (family-level, shown once regardless of which chain)
+  const primaryKey = useAppSelector(selectPrimaryChainKey);
+  const primaryData = useAppSelector(state => primaryKey ? selectChainData(state, primaryKey) : null);
+  const primaryVisibility = useAppSelector(state => primaryKey ? selectChainVisibility(state, primaryKey) : null);
+  const globalModifications = primaryData?.modifications ?? [];
+  const globalVisibleModTypes = primaryVisibility?.visibleModificationTypes ?? [];
+
+  const handleToggleModType = useCallback((modType: string) => {
+    if (primaryKey) dispatch(toggleModificationType({ chainKey: primaryKey, modType }));
+  }, [dispatch, primaryKey]);
+
   return (
     <div className="h-full bg-white border-r border-gray-200 flex flex-col overflow-hidden text-xs">
       {/* ── Header ── */}
@@ -287,7 +303,7 @@ export function MonomerSidebar({
         </div>
       )}
 
-      {/* ── Chain list ── */}
+      {/* ── Chain list (per-chain annotations: structural variants + ligands) ── */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {chainSections.map(section => (
           <ChainRow
@@ -307,6 +323,25 @@ export function MonomerSidebar({
           <p className="text-gray-400 text-center py-6">
             Enter monomer view to see annotations
           </p>
+        )}
+
+        {/* ── Global annotations (family-level) ── */}
+        {globalModifications.length > 0 && (
+          <div className="border-t-2 border-gray-200 mt-1">
+            <div className="px-3 py-1.5 bg-gray-50/80">
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                Family Annotations
+              </span>
+            </div>
+            <div className="px-3 py-1.5">
+              <ModificationsPanel
+                modifications={globalModifications}
+                visibleModificationTypes={globalVisibleModTypes}
+                onToggleModificationType={handleToggleModType}
+              />
+            </div>
+            {/* TODO: Ligand-based navigation (canonical binding sites, cross-structure ligand search) */}
+          </div>
         )}
       </div>
 

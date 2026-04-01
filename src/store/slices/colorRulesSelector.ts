@@ -2,6 +2,8 @@ import { createSelector } from '@reduxjs/toolkit';
 import { RootState } from '../store';
 import { VariantType } from './annotationsSlice';
 import { authAsymIdFromChainKey } from '@/lib/chain_key';
+import type { MsaSequence } from './sequence_registry';
+import { MODIFICATION_COLORS } from '@/components/annotations/ModificationsPanel';
 
 
 export const VARIANT_COLORS: Record<VariantType, string> = {
@@ -58,6 +60,7 @@ export const makeSelectActiveColorRulesForSequenceIds = () =>
         if (visibility.showVariants) {
           for (const variant of entry.data.variants) {
             if (variant.authSeqId === null) continue;
+            if (variant.source === 'morisette') continue;
             rules.push({
               id: `variant_${chainKey}_${variant.masterIndex}`,
               chainKey,                 // <-- added
@@ -74,3 +77,61 @@ export const makeSelectActiveColorRulesForSequenceIds = () =>
       return rules;
     }
   );
+
+/**
+ * Compute cell colors for auxiliary (annotation layer) rows.
+ * Called from useViewerSync alongside the primary color rules.
+ */
+export function computeAuxiliaryCellColors(
+  displaySequences: Array<Pick<MsaSequence, 'id' | 'originType' | 'parentSequenceId' | 'layerType'>>,
+  annotationChains: RootState['annotations']['chains'],
+): Record<string, string> {
+  const cellColors: Record<string, string> = {};
+
+  // Build a map: parentSeqId -> chainKey (for looking up annotation data)
+  const parentToChainKey: Record<string, string> = {};
+  for (const seq of displaySequences) {
+    if (seq.originType === 'pdb') {
+      // The seq.id for pdb sequences IS the chain key (e.g., "9MLF_A")
+      parentToChainKey[seq.id] = seq.id;
+    }
+  }
+
+  for (let rowIdx = 0; rowIdx < displaySequences.length; rowIdx++) {
+    const seq = displaySequences[rowIdx];
+    if (seq.originType !== 'auxiliary' || !seq.parentSequenceId || !seq.layerType) continue;
+
+    const chainKey = parentToChainKey[seq.parentSequenceId];
+    if (!chainKey) continue;
+
+    const entry = annotationChains[chainKey];
+    if (!entry?.data) continue;
+
+    const { data } = entry;
+
+    if (seq.layerType === 'variants') {
+      // Paint structural variant positions
+      for (const v of data.variants) {
+        if (v.source === 'morisette') continue;
+        cellColors[`${rowIdx}-${v.masterIndex - 1}`] = VARIANT_COLORS[v.type];
+      }
+    } else if (seq.layerType.startsWith('ligand:')) {
+      const siteId = seq.layerType.slice('ligand:'.length);
+      const site = data.ligandSites.find(s => s.id === siteId);
+      if (site) {
+        for (const mi of site.masterIndices) {
+          cellColors[`${rowIdx}-${mi - 1}`] = site.color;
+        }
+      }
+    } else if (seq.layerType.startsWith('ptm:')) {
+      const modType = seq.layerType.slice('ptm:'.length);
+      const color = MODIFICATION_COLORS[modType] ?? '#9ca3af';
+      for (const mod of data.modifications) {
+        if (mod.modificationType !== modType) continue;
+        cellColors[`${rowIdx}-${mod.masterIndex - 1}`] = color;
+      }
+    }
+  }
+
+  return cellColors;
+}

@@ -1,8 +1,9 @@
 // src/hooks/useViewerSync.ts
 import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/store';
-import { makeSelectActiveColorRulesForSequenceIds } from '@/store/slices/colorRulesSelector';
+import { makeSelectActiveColorRulesForSequenceIds, computeAuxiliaryCellColors } from '@/store/slices/colorRulesSelector';
 import { selectPositionMapping } from '@/store/slices/sequence_registry';
+import type { MsaSequence } from '@/store/slices/sequence_registry';
 import { setHoveredChain } from '@/store/slices/chainFocusSlice';
 import { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import { Color } from 'molstar/lib/mol-util/color';
@@ -18,6 +19,8 @@ interface UseViewerSyncOptions {
     molstarInstance: MolstarInstance | null;
     msaRef: React.RefObject<MSAHandle>;
     visibleSequenceIds: string[];
+    /** The full display sequences array (including auxiliaries) for auxiliary color computation */
+    displaySequences?: Array<Pick<MsaSequence, 'id' | 'originType' | 'parentSequenceId' | 'layerType'>>;
     /** Maps auth_asym_id -> { chainKey, displayRow } for all structural chains in the MSA */
     chainRowMap?: Record<string, { chainKey: string; displayRow: number }>;
     /** Called when a Molstar click selects a residue (single click) */
@@ -26,10 +29,11 @@ interface UseViewerSyncOptions {
 
 const selectRulesForVisible = makeSelectActiveColorRulesForSequenceIds();
 
-export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequenceIds, chainRowMap, onMolstarResidueSelect }: UseViewerSyncOptions) {
+export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequenceIds, displaySequences, chainRowMap, onMolstarResidueSelect }: UseViewerSyncOptions) {
     const dispatch = useAppDispatch();
     const colorRules = useAppSelector(state => selectRulesForVisible(state, visibleSequenceIds));
     const positionMapping = useAppSelector(state => selectPositionMapping(state, chainKey));
+    const annotationChains = useAppSelector(state => state.annotations.chains);
 
     const activeChainId = useAppSelector(state => selectActiveMonomerChainId(state, 'structure'));
     const alignedStructures = useAppSelector(state => selectAlignedStructuresForActiveChain(state, 'structure'));
@@ -206,11 +210,20 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         // Apply MSA cell colors immediately -- this is cheap
         if (msaRef.current) {
             const cellColors: Record<string, string> = {};
+
+            // Primary row colors from color rules
             for (const rule of colorRules) {
                 for (const cell of rule.msaCells) {
                     cellColors[`${cell.row}-${cell.column}`] = rule.color;
                 }
             }
+
+            // Auxiliary row colors
+            if (displaySequences) {
+                const auxColors = computeAuxiliaryCellColors(displaySequences, annotationChains);
+                Object.assign(cellColors, auxColors);
+            }
+
             if (Object.keys(cellColors).length > 0) {
                 msaRef.current.applyCellColors(cellColors);
             } else {
@@ -227,7 +240,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
             if (colorSyncTimerRef.current) clearTimeout(colorSyncTimerRef.current);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [colorRules, molstarInstance, msaRef, chainKey, alignedIds]);
+    }, [colorRules, molstarInstance, msaRef, chainKey, alignedIds, displaySequences, annotationChains]);
 
     // ============================================================
     // Click handlers

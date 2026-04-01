@@ -5,6 +5,7 @@ import {
     setVariantsVisible,
     setModificationsVisible,
     toggleLigandSite,
+    toggleModificationType,
     showAllLigands,
     hideAllLigands,
     selectChainData,
@@ -36,6 +37,9 @@ export function useAnnotationVisibility(chainKey: string) {
 
         hideAll: () => dispatch(hideAllLigands(chainKey)),
 
+        toggleModType: (modType: string) =>
+            dispatch(toggleModificationType({ chainKey, modType })),
+
         clearAll: () => {
             dispatch(setVariantsVisible({ chainKey, visible: false }));
             dispatch(setModificationsVisible({ chainKey, visible: false }));
@@ -51,6 +55,7 @@ export function useAnnotationVisibility(chainKey: string) {
         showVariants: visibility?.showVariants ?? false,
         showModifications: visibility?.showModifications ?? false,
         visibleLigandIds,
+        visibleModificationTypes: visibility?.visibleModificationTypes ?? [],
         ...actions,
     };
 }
