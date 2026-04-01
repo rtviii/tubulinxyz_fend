@@ -16,6 +16,8 @@ export interface ResiduePopupTarget {
   authSeqId?: number;
   /** PDB chain auth_asym_id -- only for structural sequences */
   chainId?: string;
+  /** PDB ID of the structure this residue belongs to */
+  pdbId?: string;
   /** Tubulin family for annotation lookups */
   family?: string;
   anchor: PopupAnchor;

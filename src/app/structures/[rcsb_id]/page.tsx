@@ -192,6 +192,17 @@ export default function StructureProfilePage() {
 
   const clearPopups = useCallback(() => setPopups([]), []);
 
+  const handleFocusResidue = useCallback((target: ResiduePopupTarget) => {
+    // Focus in Molstar
+    if (instance && target.chainId && target.authSeqId !== undefined) {
+      instance.focusResidue(target.chainId, target.authSeqId);
+    }
+    // Center MSA around this column
+    const WINDOW = 15;
+    const col = target.masterIndex;
+    msaRef.current?.jumpToRange(Math.max(1, col - WINDOW), col + WINDOW);
+  }, [instance]);
+
   // Right-click popup: track mousedown position, only open popup on mouseup if no drag occurred.
   // We can't use onContextMenu because on macOS it fires on mousedown (before any drag).
   const rightMouseDownPos = useRef<{ x: number; y: number } | null>(null);
@@ -232,6 +243,7 @@ export default function StructureProfilePage() {
       masterIndex: masterIdx,
       authSeqId,
       chainId: hovChainId,
+      pdbId: seq?.chainRef?.pdbId ?? loadedStructure ?? undefined,
       family: activeFamily ?? undefined,
       anchor: { mode: 'anchored', position3d },
     });
@@ -246,7 +258,7 @@ export default function StructureProfilePage() {
   const handleMSAContextMenu = useCallback((event: MSAContextMenuEvent) => {
     if (event.structural && instance) {
       // Structural sequence: try to get 3D center for anchored popup
-      const { chainLabel, authSeqId, chainId: cId } = event.structural;
+      const { chainLabel, authSeqId, chainId: cId, pdbId: sPdbId } = event.structural;
       const position3d = instance.getResidueCenterPosition(cId, authSeqId);
       if (position3d) {
         addPopup({
@@ -256,6 +268,7 @@ export default function StructureProfilePage() {
           masterIndex: event.masterIndex,
           authSeqId,
           chainId: cId,
+          pdbId: sPdbId,
           family: activeFamily ?? undefined,
           anchor: { mode: 'anchored', position3d },
         });
@@ -275,6 +288,7 @@ export default function StructureProfilePage() {
       masterIndex: event.masterIndex,
       authSeqId: event.structural?.authSeqId,
       chainId: event.structural?.chainId,
+      pdbId: event.structural?.pdbId,
       family: activeFamily ?? undefined,
       anchor: { mode: 'static', screenX: event.screenX, screenY: event.screenY },
     });
@@ -581,7 +595,7 @@ export default function StructureProfilePage() {
           </div>
         </div>
       )}
-      <ResiduePopupLayer popups={popups} instance={instance} onClose={removePopup} onCloseAll={clearPopups} />
+      <ResiduePopupLayer popups={popups} instance={instance} onClose={removePopup} onCloseAll={clearPopups} onFocusResidue={handleFocusResidue} />
     </div>
   );
 }

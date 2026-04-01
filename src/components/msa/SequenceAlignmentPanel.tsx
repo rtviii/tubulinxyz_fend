@@ -62,6 +62,7 @@ export interface MSAContextMenuEvent {
     chainLabel: string;  // "PDB:chainId"
     authSeqId: number;
     chainId: string;     // auth_asym_id
+    pdbId: string;       // e.g. "9MLF"
   };
   /** Present only for non-structural (master/custom) sequences */
   sequenceName?: string;
@@ -512,6 +513,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
                   chainLabel: `${seq.chainRef.pdbId}:${seq.chainRef.chainId}`,
                   authSeqId: authSeq,
                   chainId: seq.chainRef.chainId,
+                  pdbId: seq.chainRef.pdbId,
                 },
               };
             }

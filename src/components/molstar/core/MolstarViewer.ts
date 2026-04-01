@@ -124,6 +124,12 @@ export class MolstarViewer {
     return this.ctx?.managers.structure.hierarchy.current.structures[0]?.cell.obj?.data;
   }
 
+  /** Returns the state ref string for the current structure (for creating sub-components) */
+  getCurrentStructureRef(): string | undefined {
+    const s = this.ctx?.managers.structure.hierarchy.current.structures[0];
+    return s?.cell?.transform.ref;
+  }
+
   getStructureFromRef(ref: string): Structure | undefined {
     if (!this.ctx) return undefined;
     const cell = this.ctx.state.data.select(StateSelection.Generators.byRef(ref))[0];

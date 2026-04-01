@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, GripHorizontal, ExternalLink } from 'lucide-react';
+import { X, GripHorizontal, ExternalLink, Crosshair } from 'lucide-react';
 import { useGetVariantsAtPositionQuery, useGetModificationsAtPositionQuery } from '@/store/tubxz_api';
 import type { VariantAnnotation, ModificationAnnotation } from '@/store/tubxz_api';
 import { MODIFICATION_COLORS } from '@/components/annotations/ModificationsPanel';
@@ -49,7 +49,13 @@ function useDrag(initialPos: { x: number; y: number }) {
 
 // ── Shared content (the inner card) ──────────────────────────
 
-function ResiduePopupContent({ target, onClose }: { target: ResiduePopupTarget; onClose: () => void }) {
+function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ballStickActive }: {
+  target: ResiduePopupTarget;
+  onClose: () => void;
+  onFocus?: () => void;
+  onToggleBallStick?: () => void;
+  ballStickActive?: boolean;
+}) {
   const hasFamily = !!target.family;
   const organismMap = useOrganismMap();
 
@@ -80,21 +86,40 @@ function ResiduePopupContent({ target, onClose }: { target: ResiduePopupTarget; 
 
   return (
     <>
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-100">
-        <div className="flex items-baseline gap-1.5">
-          <span className="font-mono font-bold text-gray-900 text-sm">
-            {target.residueLetter}
-            {target.authSeqId !== undefined ? target.authSeqId : ''}
-          </span>
-          <span className="text-[10px] text-gray-500">{target.label}</span>
-          <span className="text-[9px] text-gray-400">col {target.masterIndex}</span>
+      <div className="flex items-center gap-1.5 px-2 py-1 border-b border-gray-100">
+        <span className="font-mono font-bold text-gray-900 text-sm">
+          {target.residueLetter}
+          {target.authSeqId !== undefined ? target.authSeqId : ''}
+        </span>
+        <span className="text-[10px] text-gray-500">{target.label}</span>
+        <span className="text-[9px] text-gray-400">col {target.masterIndex}</span>
+        <div className="flex-1" />
+        <div className="flex items-center gap-0.5">
+          {onFocus && (
+            <button
+              onClick={onFocus}
+              className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-500 transition-colors"
+              title="Focus residue"
+            >
+              <Crosshair size={13} />
+            </button>
+          )}
+          {onToggleBallStick && target.authSeqId !== undefined && (
+            <button
+              onClick={onToggleBallStick}
+              className={`p-0.5 rounded transition-colors ${ballStickActive ? 'bg-amber-100 text-amber-600' : 'hover:bg-gray-100 text-gray-400 hover:text-amber-500'}`}
+              title={ballStickActive ? 'Hide ball-and-stick' : 'Show ball-and-stick'}
+            >
+              <img src="/landing/ligand_icon.svg" alt="ligand" className={`w-[13px] h-[13px] ${ballStickActive ? 'opacity-80' : 'opacity-40 hover:opacity-80'}`} />
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X size={13} />
+          </button>
         </div>
-        <button
-          onClick={onClose}
-          className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          <X size={14} />
-        </button>
       </div>
 
       <div className="px-3 py-1.5 max-h-[400px] overflow-y-auto" style={{ minWidth: 280 }}>
@@ -288,11 +313,17 @@ function AnchoredPopup({
   target,
   instance,
   onClose,
+  onFocusResidue,
+  onToggleBallStick,
+  ballStickActive,
   stackIndex = 0,
 }: {
   target: ResiduePopupTarget & { anchor: { mode: 'anchored'; position3d: [number, number, number] } };
   instance: MolstarInstance | null;
   onClose: () => void;
+  onFocusResidue?: (target: ResiduePopupTarget) => void;
+  onToggleBallStick?: () => void;
+  ballStickActive?: boolean;
   stackIndex?: number;
 }) {
   const [screenPos, setScreenPos] = useState<{ x: number; y: number } | null>(null);
@@ -347,12 +378,12 @@ function AnchoredPopup({
         style={{ top: popupPos.y, left: popupPos.x }}
       >
         <div
-          className="flex items-center gap-1 px-2 py-1 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 border-b border-gray-50"
+          className="flex items-center gap-1 px-2 py-0.5 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400"
           onMouseDown={onMouseDown}
         >
-          <GripHorizontal size={12} />
+          <GripHorizontal size={10} />
         </div>
-        <ResiduePopupContent target={target} onClose={onClose} />
+        <ResiduePopupContent target={target} onClose={onClose} onFocus={onFocusResidue ? () => onFocusResidue(target) : undefined} onToggleBallStick={onToggleBallStick} ballStickActive={ballStickActive} />
       </div>
     </>
   );
@@ -363,10 +394,16 @@ function AnchoredPopup({
 function StaticPopup({
   target,
   onClose,
+  onFocusResidue,
+  onToggleBallStick,
+  ballStickActive,
   stackIndex = 0,
 }: {
   target: ResiduePopupTarget & { anchor: { mode: 'static'; screenX: number; screenY: number } };
   onClose: () => void;
+  onFocusResidue?: (target: ResiduePopupTarget) => void;
+  onToggleBallStick?: () => void;
+  ballStickActive?: boolean;
   stackIndex?: number;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -382,12 +419,12 @@ function StaticPopup({
       style={{ top: pos.y, left: pos.x }}
     >
       <div
-        className="flex items-center gap-1 px-2 py-1 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 border-b border-gray-50"
+        className="flex items-center gap-1 px-2 py-0.5 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400"
         onMouseDown={onMouseDown}
       >
-        <GripHorizontal size={12} />
+        <GripHorizontal size={10} />
       </div>
-      <ResiduePopupContent target={target} onClose={onClose} />
+      <ResiduePopupContent target={target} onClose={onClose} onFocus={onFocusResidue ? () => onFocusResidue(target) : undefined} onToggleBallStick={onToggleBallStick} ballStickActive={ballStickActive} />
     </div>
   );
 }
@@ -398,14 +435,45 @@ interface ResiduePopupProps {
   target: ResiduePopupTarget;
   instance: MolstarInstance | null;
   onClose: () => void;
+  onFocusResidue?: (target: ResiduePopupTarget) => void;
   stackIndex?: number;
 }
 
-function ResiduePopupSingle({ target, instance, onClose, stackIndex = 0 }: ResiduePopupProps) {
+function ResiduePopupSingle({ target, instance, onClose, onFocusResidue, stackIndex = 0 }: ResiduePopupProps) {
+  const [ballStickActive, setBallStickActive] = useState(false);
+  const cleanupRef = useRef<(() => Promise<void>) | null>(null);
+
+  // Cleanup ball-and-stick on unmount (popup close)
+  useEffect(() => {
+    return () => { cleanupRef.current?.(); };
+  }, []);
+
+  const handleToggleBallStick = useCallback(async () => {
+    if (ballStickActive) {
+      await cleanupRef.current?.();
+      cleanupRef.current = null;
+      setBallStickActive(false);
+    } else if (instance && target.chainId && target.authSeqId !== undefined) {
+      const cleanup = await instance.addTemporaryResidueRepr(target.chainId, target.authSeqId, target.pdbId);
+      if (cleanup) {
+        cleanupRef.current = cleanup;
+        setBallStickActive(true);
+      }
+    }
+  }, [ballStickActive, instance, target.chainId, target.authSeqId]);
+
+  const popupProps = {
+    onClose,
+    onFocusResidue,
+    onToggleBallStick: (instance && target.chainId && target.authSeqId !== undefined) ? handleToggleBallStick : undefined,
+    ballStickActive,
+    stackIndex,
+  };
+
   if (target.anchor.mode === 'anchored') {
-    return <AnchoredPopup target={target as any} instance={instance} onClose={onClose} stackIndex={stackIndex} />;
+    return <AnchoredPopup target={target as any} instance={instance} {...popupProps} />;
   }
-  return <StaticPopup target={target as any} onClose={onClose} stackIndex={stackIndex} />;
+  return <StaticPopup target={target as any} {...popupProps} />;
 }
 
 // ── Multi-popup layer: renders all active popups via portal ──
@@ -415,9 +483,10 @@ interface ResiduePopupLayerProps {
   instance: MolstarInstance | null;
   onClose: (id: string) => void;
   onCloseAll: () => void;
+  onFocusResidue?: (target: ResiduePopupTarget) => void;
 }
 
-export function ResiduePopupLayer({ popups, instance, onClose, onCloseAll }: ResiduePopupLayerProps) {
+export function ResiduePopupLayer({ popups, instance, onClose, onCloseAll, onFocusResidue }: ResiduePopupLayerProps) {
   useEffect(() => {
     if (popups.length === 0) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -437,6 +506,7 @@ export function ResiduePopupLayer({ popups, instance, onClose, onCloseAll }: Res
           target={target}
           instance={instance}
           onClose={() => onClose(target.id)}
+          onFocusResidue={onFocusResidue}
           stackIndex={i}
         />
       ))}

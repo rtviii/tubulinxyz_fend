@@ -1531,6 +1531,92 @@ const color = getMolstarGhostColor(family);
   }
 
 
+  /**
+   * Create a temporary ball-and-stick representation for a single residue,
+   * colored by its chain's family color. Returns a cleanup function that
+   * removes the component+representation when called.
+   * Works for both the primary structure and aligned structures.
+   */
+  async addTemporaryResidueRepr(
+    chainId: string,
+    authSeqId: number,
+    pdbId?: string
+  ): Promise<(() => Promise<void>) | null> {
+    const plugin = this.viewer.ctx;
+    if (!plugin) return null;
+
+    // Determine if this is the primary structure or an aligned one
+    const isPrimary = !pdbId || pdbId === this.loadedStructure;
+    let structureRef: string | undefined;
+    // Use broad family keys (tubulin_alpha, tubulin_beta) for color lookup,
+    // NOT gene-level families (TUBA1A, TUBB) which don't map to TUBULIN_COLORS.
+    let colorFamily: string | undefined;
+    let needsChainFilter = true;
+
+    if (isPrimary) {
+      structureRef = this.viewer.getCurrentStructureRef();
+      colorFamily = this.getChainFamily(chainId);
+    } else {
+      // Find the aligned structure by pdbId + chainId.
+      // chainComponentRef has untransformed coords; we need the
+      // TransformStructureConformation child which holds the superposed coords.
+      const chainStates = this.instanceState.monomerChainStates;
+      for (const cs of Object.values(chainStates)) {
+        for (const aligned of Object.values(cs.alignedStructures)) {
+          if (aligned.sourcePdbId === pdbId && aligned.sourceChainId === chainId) {
+            const transformNode = plugin.state.data.selectQ(q =>
+              q.byRef(aligned.chainComponentRef)
+               .subtree()
+               .withTransformer(StateTransforms.Model.TransformStructureConformation)
+            )[0];
+            structureRef = transformNode?.transform.ref ?? aligned.chainComponentRef;
+            needsChainFilter = false;
+            colorFamily = aligned.family;
+            break;
+          }
+        }
+        if (structureRef) break;
+      }
+    }
+
+    if (!structureRef) return null;
+
+    const color = getMolstarColorForFamily(colorFamily);
+
+    // For aligned structures, chainComponentRef is already chain-filtered
+    const expression = needsChainFilter
+      ? MS.struct.generator.atomGroups({
+          'chain-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_asym_id(), chainId]),
+          'residue-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_seq_id(), authSeqId]),
+        })
+      : MS.struct.generator.atomGroups({
+          'residue-test': MS.core.rel.eq([MS.struct.atomProperty.macromolecular.auth_seq_id(), authSeqId]),
+        });
+
+    const component = await plugin.builders.structure.tryCreateComponentFromExpression(
+      structureRef,
+      expression,
+      `_tmp_residue_${pdbId ?? 'primary'}_${chainId}_${authSeqId}`,
+      { label: `Residue ${chainId}:${authSeqId}` }
+    );
+
+    if (!component) return null;
+
+    await plugin.builders.structure.representation.addRepresentation(component, {
+      type: 'ball-and-stick',
+      color: 'uniform',
+      colorParams: { value: color },
+      typeParams: { sizeFactor: 0.3 },
+    } as any);
+
+    const ref = component.ref;
+    return async () => {
+      try {
+        await plugin.build().delete(ref).commit();
+      } catch { /* component may already be gone */ }
+    };
+  }
+
 dispose(): void {
   this.labelManager?.dispose();
   this.labelManager = null;
