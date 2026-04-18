@@ -1,22 +1,26 @@
 import { useMemo, useState, useCallback } from 'react';
-import { ArrowLeft, Plus, EyeOff, Eye, Download } from 'lucide-react';
-import { ChainRow } from './ChainRow';
+import { ArrowLeft, Plus, EyeOff, Eye, Download, X, Focus } from 'lucide-react';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { formatFamilyShort } from '@/lib/formatters';
 import { makeChainKey } from '@/lib/chain_key';
 import { useAppDispatch, useAppSelector } from '@/store/store';
 import {
   hideAllVisibility,
-  toggleAllVariants,
   toggleAllLigandsByChemId,
   toggleModificationType,
-  selectAnyVariantsVisible,
   selectAllUniqueLigandIds,
   selectAllLigandSitesForExport,
   selectPrimaryChainKey,
   selectChainData,
   selectChainVisibility,
+  clearChain,
 } from '@/store/slices/annotationsSlice';
+import {
+  setHoveredChain,
+  toggleSelectedChain,
+  selectHoveredChainKey,
+  selectSelectedChainKey,
+} from '@/store/slices/chainFocusSlice';
 import { LIGAND_IGNORE_IDS } from '@/components/molstar/colors/palette';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { PolymerComponent, AlignedStructure } from '@/components/molstar/core/types';
@@ -47,6 +51,14 @@ function downloadJSON(data: any, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+const FAMILY_SHORT: Record<string, string> = {
+  tubulin_alpha: '\u03B1',
+  tubulin_beta: '\u03B2',
+  tubulin_gamma: '\u03B3',
+  tubulin_delta: '\u03B4',
+  tubulin_epsilon: '\u03B5',
+};
+
 export function MonomerSidebar({
   activeChainId,
   polymerComponents,
@@ -64,13 +76,15 @@ export function MonomerSidebar({
   const alignDialogOpen = externalOpen ?? internalOpen;
   const setAlignDialogOpen = onAlignDialogOpenChange ?? setInternalOpen;
 
+  const hoveredChainKey = useAppSelector(selectHoveredChainKey);
+  const selectedChainKey = useAppSelector(selectSelectedChainKey);
+
   const activeFamily = activeChainId
     ? getFamilyForChain(profile, activeChainId)
     : undefined;
   const formattedFamily = activeFamily ? formatFamilyShort(activeFamily) : null;
 
   // Global annotation state
-  const anyVariantsVisible = useAppSelector(selectAnyVariantsVisible);
   const allLigandIds = useAppSelector(selectAllUniqueLigandIds);
   const allSitesForExport = useAppSelector(selectAllLigandSitesForExport);
   const filteredLigandIds = useMemo(
@@ -78,44 +92,19 @@ export function MonomerSidebar({
     [allLigandIds]
   );
 
-  const chainSections = useMemo(() => {
-    const sections: Array<{
-      chainKey: string;
-      pdbId: string;
-      chainId: string;
-      isPrimary: boolean;
-      family?: string;
-      aligned?: { id: string; targetChainId: string; rmsd: number | null; visible: boolean };
-    }> = [];
-
-    if (pdbId && activeChainId) {
-      sections.push({
-        chainKey: makeChainKey(pdbId, activeChainId),
-        pdbId,
-        chainId: activeChainId,
-        isPrimary: true,
-        family: activeFamily,
-      });
-    }
-
-    for (const a of alignedStructures) {
-      sections.push({
-        chainKey: makeChainKey(a.sourcePdbId, a.sourceChainId),
-        pdbId: a.sourcePdbId,
-        chainId: a.sourceChainId,
-        isPrimary: false,
-        family: a.family,
-        aligned: {
-          id: a.id,
-          targetChainId: a.targetChainId,
-          rmsd: a.rmsd,
-          visible: a.visible,
-        },
-      });
-    }
-
-    return sections;
-  }, [pdbId, activeChainId, activeFamily, alignedStructures]);
+  // Aligned chain sections
+  const alignedSections = useMemo(() => {
+    return alignedStructures.map(a => ({
+      chainKey: makeChainKey(a.sourcePdbId, a.sourceChainId),
+      pdbId: a.sourcePdbId,
+      chainId: a.sourceChainId,
+      family: a.family,
+      id: a.id,
+      targetChainId: a.targetChainId,
+      rmsd: a.rmsd,
+      visible: a.visible,
+    }));
+  }, [alignedStructures]);
 
   const handleSolo = useCallback((soloChainKey: string) => {
     if (!instance || !activeChainId) return;
@@ -131,7 +120,6 @@ export function MonomerSidebar({
     const filtered = allSitesForExport.filter(s => !LIGAND_IGNORE_IDS.has(s.ligandId));
     if (filtered.length === 0) return;
 
-    // Group by ligand chemical ID
     const grouped: Record<string, typeof filtered> = {};
     for (const site of filtered) {
       if (!grouped[site.ligandId]) grouped[site.ligandId] = [];
@@ -167,7 +155,7 @@ export function MonomerSidebar({
 
   const hasAnySites = filteredLigandIds.length > 0;
 
-  // Global modifications (family-level, shown once regardless of which chain)
+  // Global modifications (family-level)
   const primaryKey = useAppSelector(selectPrimaryChainKey);
   const primaryData = useAppSelector(state => primaryKey ? selectChainData(state, primaryKey) : null);
   const primaryVisibility = useAppSelector(state => primaryKey ? selectChainVisibility(state, primaryKey) : null);
@@ -181,7 +169,7 @@ export function MonomerSidebar({
   return (
     <div className="h-full bg-white border-r border-gray-200 flex flex-col overflow-hidden text-xs">
       {/* ── Header ── */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 flex-shrink-0">
         <button
           onClick={() => instance?.exitMonomerView()}
           className="p-1 text-gray-400 hover:text-gray-700 flex-shrink-0"
@@ -219,59 +207,35 @@ export function MonomerSidebar({
         </div>
       </div>
 
-      {/* ── Toolbar ── */}
-      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-100 bg-gray-50/50">
-        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mr-auto">
-          Monomers
-        </span>
+      {/* ── Scrollable content ── */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
 
-        <button
-          onClick={() => setAlignDialogOpen(true)}
-          className="p-1 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50"
-          title="Add alignment"
-        >
-          <Plus size={13} />
-        </button>
-
-        <button
-          onClick={() => dispatch(hideAllVisibility())}
-          className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100"
-          title="Hide all annotations"
-        >
-          <EyeOff size={13} />
-        </button>
-
-        {hasAnySites && (
-          <button
-            onClick={handleExportAll}
-            className="p-1 text-gray-400 hover:text-green-600 rounded hover:bg-green-50"
-            title="Export all ligand binding sites (JSON)"
-          >
-            <Download size={13} />
-          </button>
-        )}
-      </div>
-
-      {/* ── Global annotation controls ── */}
-      {chainSections.length > 0 && (filteredLigandIds.length > 0 || chainSections.length > 0) && (
-        <div className="px-3 py-1.5 border-b border-gray-100 space-y-1.5">
-          {/* Global variants toggle */}
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => dispatch(toggleAllVariants())}
-              className={`flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-medium rounded border transition-colors ${
-                anyVariantsVisible
-                  ? 'bg-orange-50 border-orange-200 text-orange-600'
-                  : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300'
-              }`}
-            >
-              {anyVariantsVisible ? <Eye size={9} /> : <EyeOff size={9} />}
-              All variants
-            </button>
-          </div>
-
-          {/* Per-ligand global toggles with export */}
-          {filteredLigandIds.length > 0 && (
+        {/* ── Ligand toggles ── */}
+        {(filteredLigandIds.length > 0) && (
+          <div className="px-3 py-2 border-b border-gray-100">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                Ligands ({filteredLigandIds.length})
+              </span>
+              <div className="ml-auto flex items-center gap-0.5">
+                <button
+                  onClick={() => dispatch(hideAllVisibility())}
+                  className="p-0.5 text-gray-300 hover:text-gray-600"
+                  title="Hide all"
+                >
+                  <EyeOff size={11} />
+                </button>
+                {hasAnySites && (
+                  <button
+                    onClick={handleExportAll}
+                    className="p-0.5 text-gray-300 hover:text-green-600"
+                    title="Export all ligand binding sites (JSON)"
+                  >
+                    <Download size={11} />
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="flex flex-wrap gap-1">
               {filteredLigandIds.map(lig => (
                 <div key={lig.chemId} className="group/lig relative flex items-center">
@@ -305,48 +269,113 @@ export function MonomerSidebar({
                 </div>
               ))}
             </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Chain list (per-chain annotations: structural variants + ligands) ── */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        {chainSections.map(section => (
-          <ChainRow
-            key={section.chainKey}
-            chainKey={section.chainKey}
-            pdbId={section.pdbId}
-            chainId={section.chainId}
-            isPrimary={section.isPrimary}
-            family={section.family}
-            aligned={section.aligned}
-            instance={instance}
-            msaRef={msaRef}
-            onSolo={section.isPrimary ? undefined : handleSolo}
-          />
-        ))}
-        {chainSections.length === 0 && (
-          <p className="text-gray-400 text-center py-6">
-            Enter monomer view to see annotations
-          </p>
+          </div>
         )}
 
-        {/* ── Global annotations (family-level) ── */}
-        {globalModifications.length > 0 && (
-          <div className="border-t-2 border-gray-200 mt-1">
-            <div className="px-3 py-1.5 bg-gray-50/80">
+        {/* ── Aligned chains ── */}
+        {alignedSections.length > 0 && (
+          <div className="px-3 py-2 border-b border-gray-100">
+            <div className="flex items-center gap-1.5 mb-1.5">
               <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                Family Annotations
+                Aligned ({alignedSections.length})
+              </span>
+              <button
+                onClick={() => setAlignDialogOpen(true)}
+                className="ml-auto p-0.5 text-gray-300 hover:text-blue-600"
+                title="Add alignment"
+              >
+                <Plus size={11} />
+              </button>
+            </div>
+            <div className="space-y-0.5">
+              {alignedSections.map(a => {
+                const familyLabel = a.family ? (FAMILY_SHORT[a.family] ?? '') : '';
+                const isHovered = hoveredChainKey === a.chainKey;
+                const isSelected = selectedChainKey === a.chainKey;
+
+                return (
+                  <div
+                    key={a.chainKey}
+                    className={`flex items-center gap-1.5 px-1.5 py-1 rounded text-[10px] transition-colors
+                      ${isSelected ? 'bg-green-50 ring-1 ring-green-300' : isHovered ? 'bg-blue-50/50' : 'hover:bg-gray-50'}
+                    `}
+                    onMouseEnter={() => dispatch(setHoveredChain(a.chainKey))}
+                    onMouseLeave={() => dispatch(setHoveredChain(null))}
+                    onClick={() => dispatch(toggleSelectedChain(a.chainKey))}
+                  >
+                    {familyLabel && (
+                      <span className="text-gray-400 w-3 text-center flex-shrink-0">{familyLabel}</span>
+                    )}
+                    <span className="font-mono text-gray-700 flex-shrink-0">
+                      {a.pdbId}:{a.chainId}
+                    </span>
+                    {a.rmsd != null && (
+                      <span className="text-gray-400">{a.rmsd.toFixed(2)}A</span>
+                    )}
+
+                    <div className="ml-auto flex items-center gap-0.5 flex-shrink-0">
+                      <button
+                        onClick={e => { e.stopPropagation(); handleSolo(a.chainKey); }}
+                        className="p-0.5 text-gray-300 hover:text-blue-600"
+                        title="Solo"
+                      >
+                        <Focus size={10} />
+                      </button>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          instance?.setAlignedStructureVisible(a.targetChainId, a.id, !a.visible);
+                        }}
+                        className="p-0.5 text-gray-300 hover:text-gray-600"
+                        title={a.visible ? 'Hide' : 'Show'}
+                      >
+                        {a.visible ? <Eye size={10} /> : <EyeOff size={10} />}
+                      </button>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          instance?.removeAlignedStructureById(a.targetChainId, a.id);
+                          dispatch(clearChain(a.chainKey));
+                        }}
+                        className="p-0.5 text-gray-300 hover:text-red-500"
+                        title="Remove"
+                      >
+                        <X size={10} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Add alignment button when no aligned chains */}
+        {alignedSections.length === 0 && (
+          <div className="px-3 py-2 border-b border-gray-100">
+            <button
+              onClick={() => setAlignDialogOpen(true)}
+              className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-600"
+            >
+              <Plus size={11} />
+              Add alignment
+            </button>
+          </div>
+        )}
+
+        {/* ── Modifications (family-level) ── */}
+        {globalModifications.length > 0 && (
+          <div className="px-3 py-2">
+            <div className="mb-1.5">
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                Modifications
               </span>
             </div>
-            <div className="px-3 py-1.5">
-              <ModificationsPanel
-                modifications={globalModifications}
-                visibleModificationTypes={globalVisibleModTypes}
-                onToggleModificationType={handleToggleModType}
-              />
-            </div>
-            {/* TODO: Ligand-based navigation (canonical binding sites, cross-structure ligand search) */}
+            <ModificationsPanel
+              modifications={globalModifications}
+              visibleModificationTypes={globalVisibleModTypes}
+              onToggleModificationType={handleToggleModType}
+            />
           </div>
         )}
       </div>

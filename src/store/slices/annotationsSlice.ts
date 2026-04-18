@@ -129,16 +129,18 @@ export const annotationsSlice = createSlice({
     }>) => {
       const { chainKey, data } = action.payload;
       const existing = state.chains[chainKey];
-      const isPrimary = state.primaryChainKey === chainKey;
+      const hadData = existing?.data != null;
 
       state.chains[chainKey] = {
         data,
-        visibility: existing?.visibility ?? {
-          showVariants: isPrimary,
-          showModifications: false,
-          visibleLigandIds: [],
-          visibleModificationTypes: [],
-        },
+        visibility: hadData && existing?.visibility
+          ? existing.visibility
+          : {
+              showVariants: true,
+              showModifications: false,
+              visibleLigandIds: data.ligandSites.map(s => s.id),
+              visibleModificationTypes: existing?.visibility?.visibleModificationTypes ?? [],
+            },
         isLoading: false,
         error: null,
       };
@@ -192,10 +194,9 @@ export const annotationsSlice = createSlice({
       }
     },
 
-    /** Hide all annotation overlays across every chain. */
+    /** Hide all ligand overlays across every chain. Variants remain visible. */
     hideAllVisibility: (state) => {
       for (const chain of Object.values(state.chains)) {
-        chain.visibility.showVariants = false;
         chain.visibility.visibleLigandIds = [];
       }
     },

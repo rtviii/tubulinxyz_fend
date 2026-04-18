@@ -1,8 +1,8 @@
 // src/components/msa/MSALabels.tsx
 'use client';
 
-import { useRef, useEffect, useState, useCallback } from 'react';
-import { ChevronRight, ChevronDown, Plus } from 'lucide-react';
+import { useRef, useEffect, useCallback } from 'react';
+import { ChevronRight, ChevronDown, Plus, Eye, EyeOff } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/store/store';
 import {
   selectSelectedSequenceId,
@@ -14,6 +14,11 @@ import {
   selectHoveredChainKey,
   selectSelectedChainKey,
 } from '@/store/slices/chainFocusSlice';
+import {
+  setVariantsVisible,
+  toggleLigandSite,
+  toggleModificationType,
+} from '@/store/slices/annotationsSlice';
 import { makeChainKey } from '@/lib/chain_key';
 
 interface MSALabelsProps {
@@ -98,6 +103,7 @@ export function MSALabels({
   const selectedId = useAppSelector(selectSelectedSequenceId);
   const hoveredChainKey = useAppSelector(selectHoveredChainKey);
   const selectedChainKey = useAppSelector(selectSelectedChainKey);
+  const annotationChains = useAppSelector(state => state.annotations.chains);
   const containerRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
 
@@ -164,7 +170,7 @@ export function MSALabels({
           const isLastMaster = idx === lastMasterIndex && hasMasters;
           const isFirstPdb = isPdb && idx === lastMasterIndex + 1;
 
-          // Check if this PDB row has a following auxiliary (= is expanded)
+          // Check if this PDB row is expanded (has visible auxiliary sub-rows)
           const isExpanded = isPdb && expandedSequences?.has(seq.id);
           // Check if next row is NOT an auxiliary of the same parent (= last aux in group)
           const isLastAux = isAux && (
@@ -175,8 +181,38 @@ export function MSALabels({
           // ── Auxiliary track label ──
           if (isAux) {
             const isTopLevelMod = seq.layerType?.startsWith('ptm:');
+            const chainKey = seq.parentSequenceId ?? '';
+            const chainVis = annotationChains[chainKey]?.visibility;
+
+            // Determine if this layer is currently "active" in the annotation visibility
+            let layerActive = true;
+            if (seq.layerType === 'variants') {
+              layerActive = chainVis?.showVariants ?? true;
+            } else if (seq.layerType?.startsWith('ligand:')) {
+              const siteId = seq.layerType.slice('ligand:'.length);
+              layerActive = chainVis?.visibleLigandIds.includes(siteId) ?? true;
+            } else if (seq.layerType?.startsWith('ptm:')) {
+              const modType = seq.layerType.slice('ptm:'.length);
+              layerActive = chainVis?.visibleModificationTypes.includes(modType) ?? false;
+            }
+
+            const handleToggleLayer = (e: React.MouseEvent) => {
+              e.stopPropagation();
+              if (!chainKey || !seq.layerType) return;
+              if (seq.layerType === 'variants') {
+                dispatch(setVariantsVisible({ chainKey, visible: !layerActive }));
+              } else if (seq.layerType.startsWith('ligand:')) {
+                const siteId = seq.layerType.slice('ligand:'.length);
+                dispatch(toggleLigandSite({ chainKey, siteId }));
+              } else if (seq.layerType.startsWith('ptm:')) {
+                const modType = seq.layerType.slice('ptm:'.length);
+                dispatch(toggleModificationType({ chainKey, modType }));
+              }
+            };
+
+            const EyeIcon = layerActive ? Eye : EyeOff;
+
             if (isTopLevelMod) {
-              // Modification tracks render as top-level rows (no indentation)
               return (
                 <div
                   key={seq.id}
@@ -187,7 +223,13 @@ export function MSALabels({
                   }}
                   title={seq.layerLabel ?? seq.name}
                 >
-                  <span className="text-orange-500">{seq.layerLabel ?? seq.name}</span>
+                  <button
+                    onClick={handleToggleLayer}
+                    className={`flex-shrink-0 p-0 ${layerActive ? 'text-orange-400' : 'text-gray-300'} hover:text-orange-600`}
+                  >
+                    <EyeIcon size={9} />
+                  </button>
+                  <span className={layerActive ? 'text-orange-500' : 'text-gray-300'}>{seq.layerLabel ?? seq.name}</span>
                 </div>
               );
             }
@@ -195,8 +237,8 @@ export function MSALabels({
               <div
                 key={seq.id}
                 className={`
-                  flex items-center gap-1 pl-5 pr-1.5 select-none whitespace-nowrap
-                  text-[9px] font-mono text-gray-400
+                  flex items-center gap-1 pl-3 pr-1.5 select-none whitespace-nowrap
+                  text-[9px] font-mono
                   bg-gray-50/80
                   ${isLastAux ? 'border-b border-gray-200' : ''}
                 `}
@@ -207,7 +249,13 @@ export function MSALabels({
                 }}
                 title={seq.layerLabel ?? seq.name}
               >
-                <span className="text-gray-400">{seq.layerLabel ?? seq.name}</span>
+                <button
+                  onClick={handleToggleLayer}
+                  className={`flex-shrink-0 p-0 ${layerActive ? 'text-gray-400' : 'text-gray-300'} hover:text-gray-600`}
+                >
+                  <EyeIcon size={9} />
+                </button>
+                <span className={layerActive ? 'text-gray-400' : 'text-gray-300'}>{seq.layerLabel ?? seq.name}</span>
               </div>
             );
           }
@@ -243,7 +291,6 @@ export function MSALabels({
               }}
               title={seq.name}
             >
-              {/* Expand/collapse chevron for PDB sequences */}
               {isPdb && onToggleExpand ? (
                 <button
                   onClick={(e) => { e.stopPropagation(); onToggleExpand(seq.id); }}

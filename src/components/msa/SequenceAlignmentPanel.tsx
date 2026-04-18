@@ -199,7 +199,7 @@ function interleaveAuxiliaries(
     // Collect top-level modification tracks from all PDB chains
     modificationTracks.push(...buildModificationSequences(seq, entry, maxLength));
 
-    // Variant/ligand auxiliaries only show when expanded
+    // Variant + ligand aux tracks only shown when expanded
     if (!expandedSet.has(seq.id)) continue;
     const auxiliaries = buildAuxiliarySequences(seq, entry, maxLength);
     for (const aux of auxiliaries) {

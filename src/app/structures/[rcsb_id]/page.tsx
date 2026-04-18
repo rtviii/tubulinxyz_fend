@@ -127,7 +127,7 @@ export default function StructureProfilePage() {
   );
 
   const [displaySequenceIds, setDisplaySequenceIds] = useState<string[]>(fallbackVisibleIds);
-  const displaySequencesRef = useRef<import('@/store/slices/sequence_registry').MsaSequence[]>([]);
+  const [displaySequencesForSync, setDisplaySequencesForSync] = useState<import('@/store/slices/sequence_registry').MsaSequence[]>([]);
 
   // Keep fallback in sync when master/pdb data changes (before panel emits)
   useEffect(() => {
@@ -135,7 +135,7 @@ export default function StructureProfilePage() {
   }, [fallbackVisibleIds]);
 
   const handleDisplaySequencesChange = useCallback((seqs: import('@/store/slices/sequence_registry').MsaSequence[]) => {
-    displaySequencesRef.current = seqs;
+    setDisplaySequencesForSync(seqs);
     setDisplaySequenceIds(seqs.map(s => s.id));
   }, []);
 
@@ -172,7 +172,7 @@ export default function StructureProfilePage() {
     molstarInstance: instance,
     msaRef,
     visibleSequenceIds: displaySequenceIds,
-    displaySequences: displaySequencesRef.current,
+    displaySequences: displaySequencesForSync,
     chainRowMap: chainRowMapRef.current,
     onMolstarResidueSelect: handleMolstarResidueSelect,
   });
