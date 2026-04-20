@@ -12,6 +12,7 @@ import {
 
 import { createPortal } from "react-dom";
 import { StructureFiltersPanel, type UiFilters } from "./StructureFiltersPanel";
+import { NLQueryBox } from "./NLQueryBox";
 import { API_BASE_URL } from "@/config";
 import { LIGAND_IGNORE_IDS } from "@/components/molstar/colors/palette";
 
@@ -383,6 +384,16 @@ export default function StructureCataloguePage() {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
+  // Overwrite the keys present in `parsed`; leave other filters untouched.
+  // Also syncs the debounced search box if the translator set a search term.
+  const applyNLFilters = (parsed: Partial<UiFilters>, _summary: string) => {
+    setFilters((prev) => ({ ...prev, ...parsed }));
+    if (parsed.search !== undefined) {
+      setSearchText(parsed.search ?? "");
+    }
+    setCursor(null);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50/50">
       <div className="container mx-auto px-4 py-6 max-w-[1600px]">
@@ -428,6 +439,7 @@ export default function StructureCataloguePage() {
 
           {/* Main content */}
           <div className="lg:col-span-9">
+            <NLQueryBox currentFilters={filters} onApply={applyNLFilters} />
             {isError ? (
               <div className="flex flex-col items-center justify-center h-64 text-red-600 bg-red-50 rounded-lg border border-red-200">
                 <p className="font-medium">Error loading structures</p>
