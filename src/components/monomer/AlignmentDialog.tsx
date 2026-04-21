@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { AlignStructureForm } from './AlignStructureForm';
 import { PolymerBrowser } from './PolymerBrowser';
+import { RawFastaForm } from './RawFastaForm';
 import { useChainAlignment } from '@/hooks/useChainAlignment';
 import { useGetStructureProfileQuery } from '@/store/tubxz_api';
 import { useAppStore } from '@/store/store';
@@ -21,7 +22,7 @@ interface AlignmentDialogProps {
   onClose: () => void;
 }
 
-type Tab = 'browse' | 'direct';
+type Tab = 'browse' | 'direct' | 'fasta';
 
 export function AlignmentDialog({
   targetChainId,
@@ -160,11 +161,19 @@ export function AlignmentDialog({
           >
             Direct PDB + Chain
           </button>
+          <button
+            onClick={() => setTab('fasta')}
+            className={`px-3 py-2 text-[11px] font-medium border-b-2 transition-colors ${
+              tab === 'fasta' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            Raw FASTA
+          </button>
         </div>
 
         {/* Body */}
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          {tab === 'browse' ? (
+          {tab === 'browse' && (
             <div className="px-4 py-2 h-full flex flex-col min-h-0">
               {pendingAlign && (
                 <div className="mb-2 px-2 py-1 bg-blue-50 rounded text-[10px] text-blue-600 flex-shrink-0">
@@ -182,13 +191,22 @@ export function AlignmentDialog({
                 onSelectChain={handleBrowseSelect}
               />
             </div>
-          ) : (
+          )}
+          {tab === 'direct' && (
             <div className="p-4">
               <AlignStructureForm
                 targetChainId={targetChainId}
                 instance={instance}
                 targetFamily={targetFamily}
                 masterLength={masterLength}
+                onClose={onClose}
+              />
+            </div>
+          )}
+          {tab === 'fasta' && (
+            <div className="p-4">
+              <RawFastaForm
+                targetFamily={targetFamily}
                 onClose={onClose}
               />
             </div>

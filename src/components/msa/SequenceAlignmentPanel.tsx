@@ -359,7 +359,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
     const pdbSequences = useMemo(() => {
       if (!family) return [];
       return Object.values(allSequences)
-        .filter(s => s.family === family && s.originType === 'pdb')
+        .filter(s => s.family === family && (s.originType === 'pdb' || s.originType === 'custom'))
         .sort((a, b) => a.rowIndex - b.rowIndex);
     }, [allSequences, family]);
 
