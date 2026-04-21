@@ -2,7 +2,7 @@
 'use client';
 
 import { useRef, useEffect, useCallback } from 'react';
-import { ChevronRight, ChevronDown, Plus, Eye, EyeOff } from 'lucide-react';
+import { ChevronRight, ChevronDown, Plus, Eye, EyeOff, X } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/store/store';
 import {
   selectSelectedSequenceId,
@@ -52,6 +52,9 @@ interface MSALabelsProps {
   expandedSequences?: Set<string>;
   onToggleExpand?: (seqId: string) => void;
   onAddAlignment?: () => void;
+  primaryPdbId?: string | null;
+  primaryChainId?: string | null;
+  onRemoveAlignedChain?: (chainKey: string) => void;
 }
 
 const FAMILY_GREEK: Record<string, string> = {
@@ -120,6 +123,9 @@ export function MSALabels({
   expandedSequences,
   onToggleExpand,
   onAddAlignment,
+  primaryPdbId,
+  primaryChainId,
+  onRemoveAlignedChain,
 }: MSALabelsProps) {
   const dispatch = useAppDispatch();
   const selectedId = useAppSelector(selectSelectedSequenceId);
@@ -414,6 +420,21 @@ export function MSALabels({
                   <VisEyeIcon size={10} />
                 </button>
               ) : null}
+              {(() => {
+                if (!isPdb || !ck || !onRemoveAlignedChain) return null;
+                const isPrimary = !!(primaryPdbId && primaryChainId
+                  && ck === makeChainKey(primaryPdbId, primaryChainId));
+                if (isPrimary) return null;
+                return (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onRemoveAlignedChain(ck); }}
+                    className="flex-shrink-0 p-0 text-gray-300 hover:text-red-500"
+                    title="Remove alignment"
+                  >
+                    <X size={10} />
+                  </button>
+                );
+              })()}
               {parsed.family && (
                 <span className="text-gray-500 w-3 text-center flex-shrink-0">{parsed.family}</span>
               )}

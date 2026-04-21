@@ -157,6 +157,14 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [alignedIds, allPositionMappings]);
 
+    // Ref mirror so handleDisplayRangeChange can read the latest without re-
+    // creating its callback identity on every toggle. Without this, every color
+    // rule change propagates a new onDisplayRangeChange down through the MSA,
+    // re-binding listeners and (combined with the mask transparency thrash)
+    // hangs Firefox in "in-range only" mode.
+    const alignedMappingsRef = useRef(alignedMappings);
+    alignedMappingsRef.current = alignedMappings;
+
     // ============================================================
     // Color Sync Effect (debounced + serialized)
     // ============================================================
@@ -202,7 +210,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
             );
 
             if (primaryColorings.length > 0) {
-                await instance.applyColorscheme('annotations', primaryColorings);
+                await instance.applyColorscheme('annotations', primaryColorings, { skipReapplyMasks: true });
             } else {
                 await instance.restoreDefaultColors();
             }
@@ -244,6 +252,13 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
 
             // --- Ligand ball-and-stick recolor (applies overrides, falls back to defaults) ---
             await instance.applyLigandRepresentationColors(ligandOverridesRef.current);
+
+            // --- Tail: only the primary mask needs reapplying ---
+            // applyColorscheme was called with skipReapplyMasks:true and applyColorschemeToAligned
+            // no longer touches transparency when a mask is active, so aligned masks are intact.
+            // The primary mask, however, was clobbered by restoreDefaultColors + the per-residue
+            // transparency=0 passes in applyColorscheme -- reapply it once to restore in-range state.
+            await instance.reapplyPrimaryWindowMask();
         } catch (err) {
             console.error('[useViewerSync] Color sync error:', err);
         } finally {
@@ -257,68 +272,74 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         }
     }, []); // stable -- reads everything from refs
 
+    // --- MSA cell-color effect (cheap, fine to fire on visibility/expand changes) ---
     useEffect(() => {
-        if (colorSyncTimerRef.current) clearTimeout(colorSyncTimerRef.current);
+        if (!msaRef.current) return;
+        const cellColors: Record<string, string> = {};
 
-        // Apply MSA cell colors immediately -- this is cheap
-        if (msaRef.current) {
-            const cellColors: Record<string, string> = {};
-
-            // Primary row colors from color rules.
-            // When a chain's parent row is expanded in the MSA, skip painting its principal
-            // row -- the aux rows below carry the annotation colors, and the principal stays
-            // under the base mono colorscheme. Molstar 3D overpaint is unaffected (see below).
-            for (const rule of colorRules) {
-                if (expandedChainKeys?.has(rule.chainKey)) continue;
-                for (const cell of rule.msaCells) {
-                    cellColors[`${cell.row}-${cell.column}`] = rule.color;
-                }
-            }
-
-            // Auxiliary row colors
-            if (displaySequences) {
-                const auxColors = computeAuxiliaryCellColors(displaySequences, annotationChains, {
-                    ligand: ligandOverrides,
-                    variant: variantOverrides,
-                    modification: modificationOverrides,
-                });
-                Object.assign(cellColors, auxColors);
-            }
-
-            // Gray-out hidden chain rows: override every cell on that row with a very
-            // light gray. This runs last so it wins over annotation/aux colors. Pairs
-            // with the `opacity-40` class on the label (see MSALabels.tsx) and the
-            // 3D Molstar hide to produce the "row is turned off" UX.
-            if (hiddenChainKeys.size > 0 && displaySequences) {
-                const HIDDEN_CELL_COLOR = '#e5e7eb';
-                for (let rowIdx = 0; rowIdx < displaySequences.length; rowIdx++) {
-                    const seq = displaySequences[rowIdx];
-                    if (seq.originType !== 'pdb') continue;
-                    if (!hiddenChainKeys.has(seq.id)) continue;
-                    const len = seq.sequence?.length ?? 0;
-                    for (let c = 0; c < len; c++) {
-                        cellColors[`${rowIdx}-${c}`] = HIDDEN_CELL_COLOR;
-                    }
-                }
-            }
-
-            if (Object.keys(cellColors).length > 0) {
-                msaRef.current.applyCellColors(cellColors);
-            } else {
-                msaRef.current.clearPositionColors();
+        // Primary row colors from color rules.
+        // When a chain's parent row is expanded in the MSA, skip painting its principal
+        // row -- the aux rows below carry the annotation colors, and the principal stays
+        // under the base mono colorscheme. Molstar 3D overpaint is unaffected (see below).
+        for (const rule of colorRules) {
+            if (expandedChainKeys?.has(rule.chainKey)) continue;
+            for (const cell of rule.msaCells) {
+                cellColors[`${cell.row}-${cell.column}`] = rule.color;
             }
         }
 
-        // Debounce + serialize the expensive Molstar operations
+        // Auxiliary row colors
+        if (displaySequences) {
+            const auxColors = computeAuxiliaryCellColors(displaySequences, annotationChains, {
+                ligand: ligandOverrides,
+                variant: variantOverrides,
+                modification: modificationOverrides,
+            });
+            Object.assign(cellColors, auxColors);
+        }
+
+        // Gray-out hidden chain rows: override every cell on that row with a very
+        // light gray. This runs last so it wins over annotation/aux colors. Pairs
+        // with the `opacity-40` class on the label (see MSALabels.tsx) and the
+        // 3D Molstar hide to produce the "row is turned off" UX.
+        if (hiddenChainKeys.size > 0 && displaySequences) {
+            const HIDDEN_CELL_COLOR = '#e5e7eb';
+            for (let rowIdx = 0; rowIdx < displaySequences.length; rowIdx++) {
+                const seq = displaySequences[rowIdx];
+                if (seq.originType !== 'pdb') continue;
+                if (!hiddenChainKeys.has(seq.id)) continue;
+                const len = seq.sequence?.length ?? 0;
+                for (let c = 0; c < len; c++) {
+                    cellColors[`${rowIdx}-${c}`] = HIDDEN_CELL_COLOR;
+                }
+            }
+        }
+
+        if (Object.keys(cellColors).length > 0) {
+            msaRef.current.applyCellColors(cellColors);
+        } else {
+            msaRef.current.clearPositionColors();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [colorRules, msaRef, displaySequences, annotationChains, expandedChainKeysKey,
+        hiddenChainKeysKey, ligandOverrides, variantOverrides, modificationOverrides]);
+
+    // --- Molstar color-sync effect (expensive; DO NOT fire on visibility toggles) ---
+    // Visibility is enforced via setSubtreeVisibility, so hiding a chain doesn't need
+    // any overpaint recompute. Keeping hiddenChainKeysKey out of this dep list is
+    // what prevents "toggle primary off while in-range-only is on" from re-running
+    // applyColorscheme + reapplyWindowMasks on every click and hanging Firefox.
+    useEffect(() => {
+        if (colorSyncTimerRef.current) clearTimeout(colorSyncTimerRef.current);
         colorSyncTimerRef.current = setTimeout(() => {
             runColorSync();
         }, 80);
-
         return () => {
             if (colorSyncTimerRef.current) clearTimeout(colorSyncTimerRef.current);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [colorRules, molstarInstance, msaRef, chainKey, alignedIds, displaySequences, annotationChains, expandedChainKeysKey, hiddenChainKeysKey, ligandOverrides, variantOverrides, modificationOverrides]);
+    }, [colorRules, molstarInstance, chainKey, alignedIds,
+        ligandOverrides, variantOverrides, modificationOverrides]);
 
     // ============================================================
     // Click handlers
@@ -480,6 +501,9 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
 
         if (windowMaskTimerRef.current) clearTimeout(windowMaskTimerRef.current);
         windowMaskTimerRef.current = setTimeout(() => {
+            const currentRules = colorRulesRef.current;
+            const currentAlignedMappings = alignedMappingsRef.current;
+
             // --- Primary chain ---
             if (positionMapping) {
                 const authAsymId = authAsymIdFromChainKey(chainKey);
@@ -501,7 +525,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
 
                     const visibleAuthSeqIds = [...visibleFromMapping, ...unmappedAuthSeqIds];
                     const visibleSet = new Set(visibleAuthSeqIds);
-                    const pinnedAuthSeqIds = colorRules
+                    const pinnedAuthSeqIds = currentRules
                         .filter(r => r.chainKey === chainKey)
                         .flatMap(rule => rule.residues.filter(r => r.chainId === authAsymId).map(r => r.authSeqId))
                         .filter(id => visibleSet.has(id));
@@ -514,7 +538,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
             const currentAligned = alignedStructuresRef.current;
             for (const a of currentAligned) {
                 const aKey = makeChainKey(a.sourcePdbId, a.sourceChainId);
-                const aMapping = alignedMappings[aKey];
+                const aMapping = currentAlignedMappings[aKey];
                 if (!aMapping) {
                     molstarInstance.clearWindowMaskForAligned(a.targetChainId, a.id);
                     continue;
@@ -528,7 +552,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
                     .map(([, authSeqId]) => authSeqId);
 
                 const visibleSet = new Set(visibleFromMapping);
-                const pinnedAuthSeqIds = colorRules
+                const pinnedAuthSeqIds = currentRules
                     .filter(r => r.chainKey === aKey)
                     .flatMap(rule => rule.residues.map(r => r.authSeqId))
                     .filter(id => visibleSet.has(id));
@@ -540,7 +564,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
             }
         }, 40);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [molstarInstance, positionMapping, chainKey, colorRules, alignedIds, alignedMappings]);
+    }, [molstarInstance, positionMapping, chainKey]);
 
     const clearWindowMask = useCallback(() => {
         if (!molstarInstance) return;
@@ -551,7 +575,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         const authAsymId = authAsymIdFromChainKey(chainKey);
 
         molstarInstance.clearWindowMask(authAsymId).then(async () => {
-            const primaryColorings = colorRules
+            const primaryColorings = colorRulesRef.current
                 .filter(r => r.chainKey === chainKey)
                 .flatMap(rule => rule.residues.map(r => ({
                     chainId: r.chainId,
@@ -571,7 +595,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
             molstarInstance.clearWindowMaskForAligned(a.targetChainId, a.id);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [molstarInstance, chainKey, colorRules, alignedIds]);
+    }, [molstarInstance, chainKey]);
 
     // ============================================================
     // Navigation Actions

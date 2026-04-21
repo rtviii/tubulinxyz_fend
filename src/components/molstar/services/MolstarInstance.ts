@@ -384,6 +384,13 @@ private componentLabelText(key: string, component: Component): string {
     const components = this.findHierarchyComponentsForRef(aligned.chainComponentRef);
     if (components.length === 0) return;
 
+    // When a window mask is active for this aligned chain, transparency is owned
+    // entirely by the mask (applyWindowMaskToAligned). Touching transparency here
+    // would wipe the mask and force it to be reapplied, causing the "in-range only"
+    // mode to thrash Molstar on every toggle. We only update overpaint in that
+    // case; the mask is re-asserted separately when the range changes.
+    const hasActiveMask = this.activeAlignedWindowMasks.has(alignedStructureId);
+
     // Always clear existing overpaint first. Without this, sequential toggles can
     // leave stale paint from a prior set of residues that aren't in the current
     // colorings, and the MSA/3D go out of sync. This makes the call idempotent:
@@ -393,10 +400,12 @@ private componentLabelText(key: string, component: Component): string {
         plugin, components, -1 as any,
         async (structure) => Structure.toStructureElementLoci(structure)
       );
-      await setStructureTransparency(
-        plugin, components, 0.75,
-        async (structure) => Structure.toStructureElementLoci(structure)
-      );
+      if (!hasActiveMask) {
+        await setStructureTransparency(
+          plugin, components, 0.75,
+          async (structure) => Structure.toStructureElementLoci(structure)
+        );
+      }
     } catch (err) {
       console.error(`[${this.id}] Failed to clear aligned ${alignedStructureId} overpaint:`, err);
     }
@@ -422,7 +431,9 @@ private componentLabelText(key: string, component: Component): string {
 
       try {
         await setStructureOverpaint(plugin, components, Color(color), lociGetter);
-        await setStructureTransparency(plugin, components, 0, lociGetter);
+        if (!hasActiveMask) {
+          await setStructureTransparency(plugin, components, 0, lociGetter);
+        }
       } catch (err) {
         console.error(`[${this.id}] Failed to apply colorscheme to aligned ${alignedStructureId}:`, err);
       }
@@ -969,12 +980,14 @@ const color = getMolstarGhostColor(family);
       await this.removeAlignedStructureById(targetChainId, alignedId);
     }
 
+    let fullStructure: Awaited<ReturnType<typeof plugin.builders.structure.createStructure>> | null = null;
     try {
       const url = `https://models.rcsb.org/${sourcePdbId.toUpperCase()}.bcif`;
       const data = await plugin.builders.data.download({ url, isBinary: true, label: sourcePdbId });
       const trajectory = await plugin.builders.structure.parseTrajectory(data, 'mmcif');
       const model = await plugin.builders.structure.createModel(trajectory);
-      const fullStructure = await plugin.builders.structure.createStructure(model);
+      fullStructure = await plugin.builders.structure.createStructure(model);
+      console.debug(`[${this.id}][align ${alignedId}] fullStructure.ref=${fullStructure.ref}`);
 
       const structureCell = StateObjectRef.resolveAndCheck(plugin.state.data, fullStructure);
       if (!structureCell) throw new Error('Could not resolve structure cell');
@@ -988,7 +1001,21 @@ const color = getMolstarGhostColor(family);
         { label: `${sourcePdbId} Chain ${sourceChainId}` }
       );
 
+      const _cc = chainComponent as any;
+      console.debug(
+        `[${this.id}][align ${alignedId}] chainComponent.ref=${_cc?.ref}`,
+        `elementCount=${_cc?.data?.elementCount}`,
+        `sourceChainId=${sourceChainId}`
+      );
+
       if (!chainComponent) throw new Error(`Chain ${sourceChainId} not found in ${sourcePdbId}`);
+      const elementCount = (chainComponent as any).data?.elementCount ?? 0;
+      if (elementCount === 0) {
+        await plugin.build().delete(fullStructure.ref).commit();
+        throw new Error(
+          `Chain ${sourceChainId} produced empty selection in ${sourcePdbId} (auth_asym_id match failed)`
+        );
+      }
 
       const targetComponent = this.getComponent(targetChainId);
       if (!targetComponent || !isPolymerComponent(targetComponent)) {
@@ -1052,7 +1079,7 @@ const color = getMolstarGhostColor(family);
         sourcePdbId: sourcePdbId.toUpperCase(),
         sourceChainId,
         targetChainId,
-        parentRef: fullStructure.ref,
+        parentRef: fullStructure!.ref,
         chainComponentRef: chainComponent.ref,
         visible: true,
         rmsd,
@@ -1063,6 +1090,13 @@ const color = getMolstarGhostColor(family);
       return alignedId;
     } catch (error) {
       console.error(`[${this.id}] Failed to load aligned structure:`, error);
+      try {
+        if (fullStructure?.ref) {
+          await plugin.build().delete(fullStructure.ref).commit();
+        }
+      } catch (cleanupErr) {
+        console.error(`[${this.id}] Cleanup of orphan parent failed:`, cleanupErr);
+      }
       return null;
     }
   }
@@ -1274,7 +1308,12 @@ const color = getMolstarGhostColor(family);
   }
 
 
-  private async reapplyWindowMasks(): Promise<void> {
+  async reapplyWindowMasks(): Promise<void> {
+    await this.reapplyPrimaryWindowMask();
+    await this.reapplyAlignedWindowMasks();
+  }
+
+  async reapplyPrimaryWindowMask(): Promise<void> {
     if (this.activeWindowMask) {
       const { chainId, visibleAuthSeqIds, pinnedAuthSeqIds } = this.activeWindowMask;
       // Temporarily clear stored state to avoid infinite recursion,
@@ -1282,14 +1321,20 @@ const color = getMolstarGhostColor(family);
       this.activeWindowMask = null;
       await this.applyWindowMask(chainId, visibleAuthSeqIds, pinnedAuthSeqIds);
     }
+  }
 
+  async reapplyAlignedWindowMasks(): Promise<void> {
     for (const mask of this.activeAlignedWindowMasks.values()) {
       const { targetChainId, alignedStructureId, sourceChainId, visibleAuthSeqIds, pinnedAuthSeqIds } = mask;
       this.activeAlignedWindowMasks.delete(alignedStructureId);
       await this.applyWindowMaskToAligned(targetChainId, alignedStructureId, sourceChainId, visibleAuthSeqIds, pinnedAuthSeqIds);
     }
   }
-  async applyColorscheme(colorschemeId: string, colorings: ResidueColoring[]): Promise<void> {
+  async applyColorscheme(
+    colorschemeId: string,
+    colorings: ResidueColoring[],
+    opts: { skipReapplyMasks?: boolean } = {},
+  ): Promise<void> {
     const plugin = this.viewer.ctx;
     if (!plugin) return;
 
@@ -1334,8 +1379,14 @@ const color = getMolstarGhostColor(family);
 
     this.dispatch(setActiveColorscheme({ instanceId: this.id, colorschemeId }));
 
-    // Re-apply window mask if active -- colorscheme reset clobbered the per-residue transparency
-    await this.reapplyWindowMasks();
+    // Re-apply window mask if active -- colorscheme reset clobbered the per-residue transparency.
+    // runColorSync passes skipReapplyMasks=true and reapplies once at the end of its pipeline
+    // (otherwise every variant/ligand toggle in in-range-only mode would reapply aligned masks
+    // mid-sync, only to have applyColorschemeToAligned run right after — redundant work that
+    // hangs the browser on any moderately sized structure).
+    if (!opts.skipReapplyMasks) {
+      await this.reapplyWindowMasks();
+    }
   }
 
   /**
@@ -1575,8 +1626,12 @@ const color = getMolstarGhostColor(family);
     }
 
     if (visibleAuthSeqIds.length > 0) {
+      // 0.75 matches the aligned-chain ghost baseline (see loadAlignedStructure).
+      // Using the primary's 0.35 here would visually un-ghost the aligned chain
+      // in in-range mode — the user sees "solid beige" instead of a translucent
+      // ghost overlay.
       await setStructureTransparency(
-        plugin, components, 0.35,
+        plugin, components, 0.75,
         async (s) => executeQuery(buildMultiResidueQuery(sourceChainId, visibleAuthSeqIds), s)
           ?? StructureElement.Loci.none(s)
       );

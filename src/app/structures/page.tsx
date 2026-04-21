@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Eye, ArrowRight, Home, LayoutGrid, Mail } from "lucide-react";
-import { AppPill, PillDivider, PillSection, PillNavLink, PillAnchor } from "@/components/ui/AppPill";
+import {
+  AppPill,
+  PillDivider,
+  PillSection,
+  PillNavLink,
+  PillAnchor,
+  PillChatInput,
+} from "@/components/ui/AppPill";
 import {
   useGetStructureFacetsQuery,
   useGetTaxonomyTreeQuery,
@@ -13,9 +20,13 @@ import {
 
 import { createPortal } from "react-dom";
 import { StructureFiltersPanel, type UiFilters } from "./StructureFiltersPanel";
-import { NLQueryBox } from "./NLQueryBox";
 import { API_BASE_URL } from "@/config";
 import { LIGAND_IGNORE_IDS } from "@/components/molstar/colors/palette";
+import {
+  AssistantTargetProvider,
+  type AssistantTargetValue,
+} from "@/components/assistant/AssistantTargetContext";
+import { backendFiltersToUi, type NLQueryResponse } from "./nlFilterMapper";
 
 /** Nucleotides + ions to hide from the card ligand display (they're ubiquitous and uninteresting) */
 const CARD_LIGAND_HIDE = new Set([
@@ -387,7 +398,7 @@ export default function StructureCataloguePage() {
 
   // Overwrite the keys present in `parsed`; leave other filters untouched.
   // Also syncs the debounced search box if the translator set a search term.
-  const applyNLFilters = (parsed: Partial<UiFilters>, _summary: string) => {
+  const applyNLFilters = (parsed: Partial<UiFilters>) => {
     setFilters((prev) => ({ ...prev, ...parsed }));
     if (parsed.search !== undefined) {
       setSearchText(parsed.search ?? "");
@@ -395,7 +406,35 @@ export default function StructureCataloguePage() {
     setCursor(null);
   };
 
+  // ── Assistant target: wires the cross-page PillChatInput into /nl_query/filters ──
+  const assistantValue = useMemo<AssistantTargetValue>(() => ({
+    target: "filters",
+    placeholder: "Ask about structures, ligands, mutations...",
+    handle: async (text, signal) => {
+      const resp = await fetch(`${API_BASE_URL}/nl_query/filters`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text, target: "structures", current_filters: filters }),
+        signal,
+      });
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => "");
+        return { error: `HTTP ${resp.status}: ${body.slice(0, 200)}` };
+      }
+      const data = (await resp.json()) as NLQueryResponse;
+      if (data.clarification) return { clarification: data.clarification };
+      if (!data.filters) return { error: "No filters returned." };
+      const parsed = backendFiltersToUi(data.filters);
+      if (Object.keys(parsed).length === 0) {
+        return { summary: data.summary || "No filter changes inferred." };
+      }
+      applyNLFilters(parsed);
+      return { summary: data.summary || "Filters applied." };
+    },
+  }), [filters]);
+
   return (
+    <AssistantTargetProvider value={assistantValue}>
     <div className="min-h-screen bg-gray-50/50">
       <div className="container mx-auto px-4 py-6 max-w-[1600px]">
         {/* Header */}
@@ -418,19 +457,10 @@ export default function StructureCataloguePage() {
               <PillDivider />
 
               <PillSection stretch className="px-1">
-                <div className="flex-1 min-w-0 relative">
-                  <input
-                    disabled
-                    placeholder="Ask about structures, ligands, mutations..."
-                    className="w-full h-7 rounded-full border border-slate-200/60 bg-white/60
-                               px-3 pr-20 text-[11px]
-                               text-slate-400 placeholder:text-slate-400"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-slate-300
-                                   tracking-wider font-medium uppercase">
-                    coming soon
-                  </span>
-                </div>
+                <PillChatInput
+                  placeholder="Ask about structures, ligands, mutations..."
+                  widthClass="flex-1 min-w-0"
+                />
               </PillSection>
 
               <PillDivider />
@@ -475,7 +505,6 @@ export default function StructureCataloguePage() {
 
           {/* Main content */}
           <div className="lg:col-span-9">
-            <NLQueryBox currentFilters={filters} onApply={applyNLFilters} />
             {isError ? (
               <div className="flex flex-col items-center justify-center h-64 text-red-600 bg-red-50 rounded-lg border border-red-200">
                 <p className="font-medium">Error loading structures</p>
@@ -523,5 +552,6 @@ export default function StructureCataloguePage() {
         </div>
       </div>
     </div>
+    </AssistantTargetProvider>
   );
 }

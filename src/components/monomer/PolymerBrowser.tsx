@@ -151,7 +151,9 @@ export function PolymerBrowser({ defaultFamily, alignedChainKeys, onSelectChain 
   const chainRows = useMemo((): ChainRowData[] => {
     const rows: ChainRowData[] = [];
     for (const entity of results) {
-      const chains = entity.pdbx_strand_ids?.length ? entity.pdbx_strand_ids : ['A'];
+      const rawChains = entity.pdbx_strand_ids?.length ? entity.pdbx_strand_ids : ['A'];
+      const chains = rawChains.flatMap(s => s.split(',').map(x => x.trim()).filter(Boolean));
+      console.debug('[PolymerBrowser] strand ids', entity.parent_rcsb_id, entity.pdbx_strand_ids, '=>', chains);
       for (const chainId of chains) {
         const key = makeChainKey(entity.parent_rcsb_id, chainId);
         if (alignedChainKeys.has(key)) continue;

@@ -18,7 +18,7 @@ import { useNightingaleComponents } from '@/hooks/useNightingaleComponents';
 import { selectPositionMapping } from '@/store/slices/sequence_registry';
 import { setHoveredChain } from '@/store/slices/chainFocusSlice';
 import type { MsaSequence, PositionMapping } from '@/store/slices/sequence_registry';
-import { selectAnnotationsState } from '@/store/slices/annotationsSlice';
+import { selectAnnotationsState, clearChain } from '@/store/slices/annotationsSlice';
 import type { ChainAnnotationEntry } from '@/store/slices/annotationsSlice';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { formatFamilyShort } from '@/lib/formatters';
@@ -462,6 +462,17 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       }
     }, [instance, alignedStructures, pdbId, chainId, primaryVisible]);
 
+    const handleRemoveAlignedChain = useCallback((chainKey: string) => {
+      if (!instance) return;
+      for (const a of alignedStructures) {
+        if (makeChainKey(a.sourcePdbId, a.sourceChainId) === chainKey) {
+          instance.removeAlignedStructureById(a.targetChainId, a.id);
+          dispatch(clearChain(chainKey));
+          return;
+        }
+      }
+    }, [instance, alignedStructures, dispatch]);
+
     const handleSoloChain = useCallback((soloChainKey: string) => {
       if (!instance) return;
       for (const a of alignedStructures) {
@@ -834,6 +845,9 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
             expandedSequences={expandedSequences}
             onToggleExpand={handleToggleExpand}
             onAddAlignment={onAddAlignment}
+            primaryPdbId={pdbId}
+            primaryChainId={chainId}
+            onRemoveAlignedChain={handleRemoveAlignedChain}
           />
         </div>
       </div>

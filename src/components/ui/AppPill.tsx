@@ -1,8 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { useAssistantTarget } from '@/components/assistant/AssistantTargetContext';
 
 /**
  * Shared floating-pill shell used across landing, catalogue, and structure pages.
@@ -153,31 +155,160 @@ export function PillCrumb({
 }
 
 /**
- * Short disabled chat input styled to live inside AppPill.
- * Used on landing, catalogue, and structure pages as an AI-assistant placeholder.
+ * Cross-page chat input styled to live inside AppPill.
+ *
+ * When wrapped in an `AssistantTargetProvider` (see
+ * `@/components/assistant/AssistantTargetContext`) the input is live: typing
+ * and pressing Enter calls the provider's `handle(text)`. Without a
+ * provider, it renders a disabled "soon" placeholder — same look as before.
+ *
+ * Feedback (summary / clarification / error) appears in a small popover
+ * below the input.
  */
 export function PillChatInput({
-  placeholder = 'Ask...',
+  placeholder,
   widthClass = 'w-40',
 }: {
   placeholder?: string;
   widthClass?: string;
 }) {
+  const target = useAssistantTarget();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const [text, setText] = useState('');
+  const [status, setStatus] = useState<
+    | { kind: 'idle' }
+    | { kind: 'loading' }
+    | { kind: 'done'; summary: string }
+    | { kind: 'clarify'; message: string }
+    | { kind: 'error'; message: string }
+  >({ kind: 'idle' });
+
+  const abortRef = useRef<AbortController | null>(null);
+
+  const dismiss = useCallback(() => {
+    setStatus({ kind: 'idle' });
+  }, []);
+
+  // Dismiss feedback popover on outside click.
+  useEffect(() => {
+    if (status.kind === 'idle' || status.kind === 'loading') return;
+    const onDown = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) dismiss();
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [status.kind, dismiss]);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  // Disabled fallback when no provider is attached on the current page.
+  if (!target) {
+    return (
+      <div className={`relative ${widthClass} min-w-0`}>
+        <input
+          disabled
+          placeholder={placeholder ?? 'Ask...'}
+          className="w-full h-7 rounded-full border border-slate-200/60 bg-white/60
+                     px-3 pr-14 text-[11px]
+                     text-slate-400 placeholder:text-slate-400"
+        />
+        <span
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-slate-300
+                     tracking-wider font-medium uppercase pointer-events-none"
+        >
+          soon
+        </span>
+      </div>
+    );
+  }
+
+  const submit = async () => {
+    const trimmed = text.trim();
+    if (!trimmed || status.kind === 'loading') return;
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setStatus({ kind: 'loading' });
+    try {
+      const r = await target.handle(trimmed, controller.signal);
+      if (controller.signal.aborted) return;
+      if (r.error) setStatus({ kind: 'error', message: r.error });
+      else if (r.clarification) setStatus({ kind: 'clarify', message: r.clarification });
+      else setStatus({ kind: 'done', summary: r.summary ?? '' });
+      setText('');
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      setStatus({
+        kind: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+
+  const loading = status.kind === 'loading';
+  const showPopover = status.kind === 'done' || status.kind === 'clarify' || status.kind === 'error';
+
   return (
-    <div className={`relative ${widthClass} min-w-0`}>
+    <div ref={wrapperRef} className={`relative ${widthClass} min-w-0`}>
       <input
-        disabled
-        placeholder={placeholder}
-        className="w-full h-7 rounded-full border border-slate-200/60 bg-white/60
-                   px-3 pr-14 text-[11px]
-                   text-slate-400 placeholder:text-slate-400"
+        value={text}
+        onChange={e => setText(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            submit();
+          }
+        }}
+        placeholder={placeholder ?? target.placeholder ?? 'Ask...'}
+        disabled={loading}
+        className="w-full h-7 rounded-full border border-slate-200/60 bg-white/90
+                   px-3 pr-8 text-[11px]
+                   text-slate-700 placeholder:text-slate-400
+                   outline-none focus:border-indigo-400 focus:bg-white
+                   disabled:opacity-60"
       />
-      <span
-        className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-slate-300
-                   tracking-wider font-medium uppercase pointer-events-none"
-      >
-        soon
-      </span>
+      {loading && (
+        <Loader2
+          size={12}
+          className="absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-indigo-500 pointer-events-none"
+        />
+      )}
+      {showPopover && (
+        <div
+          className="absolute left-0 top-[calc(100%+4px)] z-50 min-w-full max-w-[320px]
+                     rounded-md border shadow-md px-2.5 py-1.5 text-[11px]
+                     bg-white"
+          style={{
+            borderColor:
+              status.kind === 'error'
+                ? 'rgb(254 202 202)'
+                : status.kind === 'clarify'
+                  ? 'rgb(253 230 138)'
+                  : 'rgb(199 210 254)',
+            color:
+              status.kind === 'error'
+                ? 'rgb(185 28 28)'
+                : status.kind === 'clarify'
+                  ? 'rgb(146 64 14)'
+                  : 'rgb(55 65 81)',
+            backgroundColor:
+              status.kind === 'error'
+                ? 'rgb(254 242 242)'
+                : status.kind === 'clarify'
+                  ? 'rgb(255 251 235)'
+                  : 'rgb(238 242 255 / 0.6)',
+          }}
+        >
+          {status.kind === 'error' && <span>Error: {status.message}</span>}
+          {status.kind === 'clarify' && <span>{status.message}</span>}
+          {status.kind === 'done' && (
+            <span>{status.summary || 'Done.'}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

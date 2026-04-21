@@ -36,6 +36,12 @@ import { makeChainKey } from '@/lib/chain_key';
 // ResidueInfoOverlay available but not currently used
 import { useChainFocusSync } from '@/hooks/useChainFocusSync';
 import { clearFocus } from '@/store/slices/chainFocusSlice';
+import {
+  AssistantTargetProvider,
+  type AssistantTargetValue,
+} from '@/components/assistant/AssistantTargetContext';
+import { dispatchViewerActions } from '@/components/assistant/viewerCommandDispatcher';
+import type { ViewerResponse } from '@/components/assistant/types';
 
 // ============================================================
 // Loading overlay
@@ -513,7 +519,59 @@ export default function StructureProfilePage() {
 
   const [sidebarTab, setSidebarTab] = useState<'chains' | 'ligands'>('chains');
 
+  // ── Assistant target: enables the cross-page PillChatInput to drive this viewer ──
+  const assistantValue = useMemo<AssistantTargetValue | null>(() => {
+    if (!instance || !loadedStructure) return null;
+    return {
+      target: 'viewer',
+      placeholder: 'Ask about this structure...',
+      handle: async (text, signal) => {
+        const body = {
+          text,
+          view_context: {
+            rcsb_id: loadedStructure,
+            chain_ids: polymerComponents.map(p => p.chainId),
+            ligand_keys: ligandComponents.map(l => l.uniqueKey),
+            view_mode: viewMode,
+            active_monomer_chain: activeChainId,
+          },
+        };
+        const resp = await fetch(`${API_BASE_URL}/nl_query/viewer`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+          signal,
+        });
+        if (!resp.ok) {
+          const txt = await resp.text().catch(() => '');
+          return { error: `HTTP ${resp.status}: ${txt.slice(0, 200)}` };
+        }
+        const data = (await resp.json()) as ViewerResponse;
+        if (data.kind === 'clarify') {
+          return { clarification: data.clarification };
+        }
+        const reports = await dispatchViewerActions(instance, data.actions);
+        const failed = reports.filter(r => !r.ok);
+        if (failed.length > 0) {
+          const detail = failed
+            .map(r => `${r.action.type}: ${r.error ?? 'unknown'}`)
+            .join('; ');
+          return { error: `${failed.length}/${reports.length} failed — ${detail}` };
+        }
+        return { summary: data.summary || `${reports.length} action(s) applied` };
+      },
+    };
+  }, [
+    instance,
+    loadedStructure,
+    polymerComponents,
+    ligandComponents,
+    viewMode,
+    activeChainId,
+  ]);
+
   return (
+    <AssistantTargetProvider value={assistantValue}>
     <div className="h-screen w-screen overflow-hidden bg-gray-200">
       {chainsToFetch.map(chain => (
         <ChainAnnotationFetcher key={chain.chainKey} {...chain} />
@@ -666,5 +724,6 @@ export default function StructureProfilePage() {
       )}
       <ResiduePopupLayer popups={popups} instance={instance} onClose={removePopup} onCloseAll={clearPopups} onFocusResidue={handleFocusResidue} onAlignChain={isMonomerView ? handleDirectAlign : undefined} />
     </div>
+    </AssistantTargetProvider>
   );
 }
