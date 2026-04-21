@@ -5,11 +5,15 @@ import { RootState } from '../store';
 interface ChainFocusState {
   hoveredChainKey: string | null;
   selectedChainKey: string | null;
+  // Set while the user hovers an "expert-mode" action icon in the sidebar so
+  // the pill's Expert Mode button can highlight in sympathy.
+  expertHintActive: boolean;
 }
 
 const initialState: ChainFocusState = {
   hoveredChainKey: null,
   selectedChainKey: null,
+  expertHintActive: false,
 };
 
 export const chainFocusSlice = createSlice({
@@ -26,6 +30,9 @@ export const chainFocusSlice = createSlice({
       state.selectedChainKey =
         state.selectedChainKey === action.payload ? null : action.payload;
     },
+    setExpertHintActive: (state, action: PayloadAction<boolean>) => {
+      state.expertHintActive = action.payload;
+    },
     clearFocus: () => initialState,
   },
 });
@@ -34,6 +41,7 @@ export const {
   setHoveredChain,
   setSelectedChain,
   toggleSelectedChain,
+  setExpertHintActive,
   clearFocus,
 } = chainFocusSlice.actions;
 
@@ -42,5 +50,8 @@ export const selectHoveredChainKey = (state: RootState) =>
 
 export const selectSelectedChainKey = (state: RootState) =>
   state.chainFocus.selectedChainKey;
+
+export const selectExpertHintActive = (state: RootState) =>
+  state.chainFocus.expertHintActive;
 
 export default chainFocusSlice.reducer;

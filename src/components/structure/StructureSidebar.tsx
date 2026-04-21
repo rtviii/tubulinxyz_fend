@@ -1,6 +1,6 @@
 // src/components/structure/StructureSidebar.tsx
 
-import { useAppSelector } from '@/store/store';
+import { useAppSelector, useAppDispatch } from '@/store/store';
 import { useRouter } from 'next/navigation';
 import { memo, useMemo, useState } from 'react';
 import { selectComponentState } from '@/components/molstar/state/selectors';
@@ -9,11 +9,11 @@ import { getHexForFamily, TUBULIN_GHOST_COLORS } from '@/components/molstar/colo
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { PolymerComponent, LigandComponent } from '@/components/molstar/core/types';
 import type { PolypeptideEntity, NonpolymerEntity } from '@/store/tubxz_api';
+import { setExpertHintActive } from '@/store/slices/chainFocusSlice';
 import {
   Eye,
   EyeOff,
   Focus,
-  Microscope,
   AlignLeft,
   ChevronDown,
   ChevronRight,
@@ -417,6 +417,15 @@ const ChainRow = memo(function ChainRow({
   const componentState = useAppSelector(state =>
     selectComponentState(state, 'structure', chain.chainId)
   );
+  const dispatch = useAppDispatch();
+
+  // Hovering either action icon signals the pill's "Expert Mode" button to
+  // highlight — makes clear that these row icons are the per-chain expert-mode
+  // entry points.
+  const expertHint = {
+    onMouseEnter: () => dispatch(setExpertHintActive(true)),
+    onMouseLeave: () => dispatch(setExpertHintActive(false)),
+  };
 
   return (
     <div
@@ -442,6 +451,7 @@ const ChainRow = memo(function ChainRow({
             e.stopPropagation();
             onShowSequence?.(isSequenceActive ? null : chain.chainId);
           }}
+          {...expertHint}
           className={`p-1 transition-colors ${isSequenceActive ? 'text-blue-500' : 'text-gray-400 hover:text-blue-600'}`}
           title={isSequenceActive ? 'Hide sequence' : 'Show sequence'}
         >
@@ -452,30 +462,11 @@ const ChainRow = memo(function ChainRow({
             e.stopPropagation();
             instance?.enterMonomerView(chain.chainId);
           }}
+          {...expertHint}
           className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-          title="Open monomer view"
-        >
-          <Microscope size={13} />
-        </button>
-        <button
-          onClick={e => {
-            e.stopPropagation();
-            instance?.focusChain(chain.chainId);
-          }}
-          className="p-1 text-gray-400 hover:text-gray-700 transition-colors"
-          title="Focus camera"
+          title="Open expert mode for this chain"
         >
           <Focus size={13} />
-        </button>
-        <button
-          onClick={e => {
-            e.stopPropagation();
-            instance?.setChainVisibility(chain.chainId, !componentState.visible);
-          }}
-          className="p-1 text-gray-400 hover:text-gray-700 transition-colors"
-          title={componentState.visible ? 'Hide' : 'Show'}
-        >
-          {componentState.visible ? <Eye size={13} /> : <EyeOff size={13} />}
         </button>
       </div>
     </div>
@@ -558,16 +549,6 @@ function LigandRow({
             title="Focus camera"
           >
             <Focus size={14} />
-          </button>
-          <button
-            onClick={e => {
-              e.stopPropagation();
-              instance?.setLigandVisibility(ligand.uniqueKey, !componentState.visible);
-            }}
-            className="p-1 text-gray-400 hover:text-gray-700 transition-colors"
-            title={componentState.visible ? 'Hide' : 'Show'}
-          >
-            {componentState.visible ? <Eye size={14} /> : <EyeOff size={14} />}
           </button>
         </div>
       </div>
