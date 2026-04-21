@@ -27,6 +27,40 @@ const aLetterOffset = "A".charCodeAt(0);
 const lettersInAlphabet = 26;
 
 /**
+ * Pick a readable text color (black or white) for a given cell background.
+ * Uses perceived luminance (Rec. 601 coefficients) against a 50% threshold.
+ * Accepts "#rrggbb" / "#rgb" / CSS named basics; falls back to the
+ * configured default text color for anything it can't parse.
+ */
+function pickTextColor(bg: string, fallback: string): string {
+  if (!bg) return fallback;
+  let r = 0, g = 0, b = 0;
+  const s = bg.trim().toLowerCase();
+  if (s.startsWith("#")) {
+    const hex = s.slice(1);
+    if (hex.length === 3) {
+      r = parseInt(hex[0] + hex[0], 16);
+      g = parseInt(hex[1] + hex[1], 16);
+      b = parseInt(hex[2] + hex[2], 16);
+    } else if (hex.length === 6) {
+      r = parseInt(hex.slice(0, 2), 16);
+      g = parseInt(hex.slice(2, 4), 16);
+      b = parseInt(hex.slice(4, 6), 16);
+    } else {
+      return fallback;
+    }
+  } else if (s === "black") {
+    return "#ffffff";
+  } else if (s === "white") {
+    return "#000000";
+  } else {
+    return fallback;
+  }
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance < 0.5 ? "#ffffff" : "#000000";
+}
+
+/**
  * Allows rendering in tiles of grids.
  *
  * |---|---|---|
@@ -147,8 +181,8 @@ class CanvasTilingGridComponent {
     const m = 1.0 / (fullOpacityW - minW);
     const b = -m * minW;
     canvas.globalAlpha = Math.min(1, m * this.props.tileWidth + b);
-    // 1.0;
-    canvas.fillStyle = this.props.textColor;
+    // Contrast-aware text color: white glyphs on dark cells, dark on light.
+    canvas.fillStyle = pickTextColor(colorSchemeName, this.props.textColor);
     canvas.font = this.props.textFont;
     canvas.textBaseline = "middle";
     canvas.textAlign = "center";

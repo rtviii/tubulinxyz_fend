@@ -2,7 +2,8 @@
 
 import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { useAppSelector, useAppDispatch } from '@/store/store';
+import { useAppSelector, useAppDispatch, useAppStore } from '@/store/store';
+import { selectIsChainAligned } from '@/store/slices/sequence_registry';
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
 
 import { useStructureHoverSync } from '@/hooks/useStructureHoverSync';
@@ -183,6 +184,7 @@ export default function StructureProfilePage() {
 
   // ── Direct alignment from popup "+" buttons ──
   const { alignChainFromProfile } = useChainAlignment();
+  const store = useAppStore();
   const handleDirectAlign = useCallback(async (pdbId: string, entityOrChainId: string) => {
     if (!instance || !activeChainId) return;
     const masterLen = masterData?.alignment_length ?? 0;
@@ -205,6 +207,12 @@ export default function StructureProfilePage() {
         authAsymId = polyInstance.auth_asym_id;
       }
 
+      // Block duplicates: is this chain already aligned into the viewer?
+      if (selectIsChainAligned(store.getState(), pdbId, authAsymId)) {
+        alert(`${pdbId}:${authAsymId} is already loaded in the view.`);
+        return;
+      }
+
       const ok = await instance.loadAlignedStructure(activeChainId, pdbId, authAsymId, family);
       if (!ok) return;
 
@@ -215,7 +223,7 @@ export default function StructureProfilePage() {
       }
     } catch { /* profile fetch failed */ }
     finally { result.unsubscribe(); }
-  }, [instance, activeChainId, activeFamily, masterData, dispatch, alignChainFromProfile]);
+  }, [instance, activeChainId, activeFamily, masterData, dispatch, alignChainFromProfile, store]);
 
   // ── Residue popups (multi-popup, unified for MSA + Molstar) ──
   const [popups, setPopups] = useState<ResiduePopupTarget[]>([]);

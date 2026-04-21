@@ -5,8 +5,8 @@ import { AlignStructureForm } from './AlignStructureForm';
 import { PolymerBrowser } from './PolymerBrowser';
 import { useChainAlignment } from '@/hooks/useChainAlignment';
 import { useGetStructureProfileQuery } from '@/store/tubxz_api';
-import { useAppSelector } from '@/store/store';
-import { selectLoadedChainKeys } from '@/store/slices/annotationsSlice';
+import { useAppStore } from '@/store/store';
+import { selectIsChainAligned } from '@/store/slices/sequence_registry';
 import { makeChainKey } from '@/lib/chain_key';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { AlignedStructure } from '@/components/molstar/core/types';
@@ -53,6 +53,7 @@ export function AlignmentDialog({
   const [alignError, setAlignError] = useState<string | null>(null);
 
   const { alignChainFromProfile } = useChainAlignment();
+  const store = useAppStore();
 
   const {
     data: sourceProfile,
@@ -75,6 +76,13 @@ export function AlignmentDialog({
 
     const doAlign = async () => {
       if (!instance) return;
+
+      // Block duplicates: is this chain already aligned into the viewer?
+      if (selectIsChainAligned(store.getState(), pendingAlign.pdbId, pendingAlign.chainId)) {
+        alert(`${pendingAlign.pdbId}:${pendingAlign.chainId} is already loaded in the view.`);
+        setPendingAlign(null);
+        return;
+      }
 
       const ok = await instance.loadAlignedStructure(
         targetChainId, pendingAlign.pdbId, pendingAlign.chainId, pendingAlign.family
@@ -102,7 +110,7 @@ export function AlignmentDialog({
     };
 
     doAlign();
-  }, [sourceProfile, profileError, pendingAlign, instance, targetChainId, masterLength, alignChainFromProfile]);
+  }, [sourceProfile, profileError, pendingAlign, instance, targetChainId, masterLength, alignChainFromProfile, store]);
 
   const handleBrowseSelect = useCallback((pdbId: string, chainId: string, family?: string) => {
     setAlignError(null);

@@ -27,7 +27,7 @@ import Zappo from "./zappo";
 // TODO: reenable dynamis colors!
 import pid from "./pid_colors";
 import customPosition from "./custom_position";
-import substitutionSalience from "./substitution_salience";
+import { substitutionSalience, salienceMono } from "./substitution";
 
 export const staticSchemes: Record<string, Record<string, string>> = {
   aliphatic: Aliphatic,
@@ -62,6 +62,7 @@ export const dynSchemes: Record<string, ColorStructure> = {
   conservation: pid,
   "custom-position": customPosition,
   "substitution": substitutionSalience,
+  "salience-mono": salienceMono,
 };
 
 export const defaultSchemes = [

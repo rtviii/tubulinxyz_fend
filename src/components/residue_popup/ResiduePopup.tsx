@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, GripHorizontal, ExternalLink, Crosshair, Plus } from 'lucide-react';
+import { X, ExternalLink, Crosshair, Plus } from 'lucide-react';
 import { useGetVariantsAtPositionQuery, useGetModificationsAtPositionQuery } from '@/store/tubxz_api';
 import type { VariantAnnotation, ModificationAnnotation } from '@/store/tubxz_api';
 import { MODIFICATION_COLORS, VARIANT_COLORS } from '@/lib/colors/annotationPalette';
@@ -48,13 +48,14 @@ function useDrag(initialPos: { x: number; y: number }) {
 
 // ── Shared content (the inner card) ──────────────────────────
 
-function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ballStickActive, onAlignChain }: {
+function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ballStickActive, onAlignChain, onMouseDownHeader }: {
   target: ResiduePopupTarget;
   onClose: () => void;
   onFocus?: () => void;
   onToggleBallStick?: () => void;
   ballStickActive?: boolean;
   onAlignChain?: (pdbId: string, chainId: string) => void;
+  onMouseDownHeader?: (e: React.MouseEvent) => void;
 }) {
   const hasFamily = !!target.family;
   const organismMap = useOrganismMap();
@@ -84,9 +85,21 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
     modsByType[m.modification_type].push(m);
   }
 
+  // Section-level collapsible state — default: all expanded
+  const [subsOpen, setSubsOpen] = useState(true);
+  const [delInsOpen, setDelInsOpen] = useState(true);
+  const [modsOpen, setModsOpen] = useState(true);
+
+  // Stop drag from being initiated when interacting with header buttons
+  const stopDrag = (e: React.MouseEvent) => e.stopPropagation();
+
   return (
     <>
-      <div className="flex items-center gap-1.5 px-2 py-1 border-b border-gray-100">
+      {/* Title bar: the whole header is the drag handle (OS-window style) */}
+      <div
+        className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-200 bg-gray-50/80 rounded-t-lg cursor-grab active:cursor-grabbing select-none"
+        onMouseDown={onMouseDownHeader}
+      >
         <span className="font-mono font-bold text-gray-900 text-sm">
           {target.residueLetter}
           {target.authSeqId !== undefined ? target.authSeqId : ''}
@@ -94,11 +107,12 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
         <span className="text-[10px] text-gray-500">{target.label}</span>
         <span className="text-[9px] text-gray-400">col {target.masterIndex}</span>
         <div className="flex-1" />
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5" onMouseDown={stopDrag}>
           {onFocus && (
             <button
               onClick={onFocus}
-              className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-500 transition-colors"
+              onMouseDown={stopDrag}
+              className="p-0.5 rounded hover:bg-gray-200 text-gray-400 hover:text-blue-500 transition-colors"
               title="Focus residue"
             >
               <Crosshair size={13} />
@@ -107,7 +121,8 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
           {onToggleBallStick && target.authSeqId !== undefined && (
             <button
               onClick={onToggleBallStick}
-              className={`p-0.5 rounded transition-colors ${ballStickActive ? 'bg-amber-100 text-amber-600' : 'hover:bg-gray-100 text-gray-400 hover:text-amber-500'}`}
+              onMouseDown={stopDrag}
+              className={`p-0.5 rounded transition-colors ${ballStickActive ? 'bg-amber-100 text-amber-600' : 'hover:bg-gray-200 text-gray-400 hover:text-amber-500'}`}
               title={ballStickActive ? 'Hide ball-and-stick' : 'Show ball-and-stick'}
             >
               <img src="/landing/ligand_icon.svg" alt="ligand" className={`w-[13px] h-[13px] ${ballStickActive ? 'opacity-80' : 'opacity-40 hover:opacity-80'}`} />
@@ -115,14 +130,15 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
           )}
           <button
             onClick={onClose}
-            className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            onMouseDown={stopDrag}
+            className="p-0.5 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
           >
             <X size={13} />
           </button>
         </div>
       </div>
 
-      <div className="px-3 py-1.5 max-h-[400px] overflow-y-auto" style={{ minWidth: 280 }}>
+      <div className="px-2 py-1 max-h-[400px] overflow-y-auto" style={{ minWidth: 280 }}>
         {!hasFamily && (
           <div className="text-[10px] text-gray-400 italic">No family data available</div>
         )}
@@ -138,69 +154,71 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
           <>
             {/* Unified substitutions -- all sources merged by path */}
             {subPathGroups.length > 0 && (
-              <div className="mb-2">
-                <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                  Substitutions ({allSubs.length})
-                </div>
-                <div className="space-y-0.5">
-                  {subPathGroups.map(({ path, variants: pvs }) => (
-                    <SubstitutionPathRow key={path} path={path} variants={pvs} total={allSubs.length} organismMap={organismMap} onAlignChain={onAlignChain} />
-                  ))}
-                </div>
+              <div className="mb-1">
+                <SectionHeader
+                  label="Substitutions"
+                  count={allSubs.length}
+                  open={subsOpen}
+                  onToggle={() => setSubsOpen(o => !o)}
+                />
+                {subsOpen && (
+                  <div>
+                    {subPathGroups.map(({ path, variants: pvs }) => (
+                      <SubstitutionPathRow key={path} path={path} variants={pvs} total={allSubs.length} organismMap={organismMap} onAlignChain={onAlignChain} />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {/* Non-substitution variants (del/ins) */}
             {nonSubs.length > 0 && (
-              <div className="mb-2">
-                <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                  Del/Ins ({nonSubs.length})
-                </div>
-                <div className="border border-gray-100 rounded bg-gray-50/50">
-                  {nonSubs.map((v, i) => {
-                    const color = VARIANT_COLORS[v.type as keyof typeof VARIANT_COLORS] ?? '#9ca3af';
-                    const org = v.source === 'structural' && v.rcsb_id && organismMap
-                      ? organismMap[v.rcsb_id]?.[0] : v.species;
-                    return (
-                      <div key={i} className="flex items-center gap-1.5 px-1.5 py-0.5 text-[10px] border-b border-gray-50 last:border-b-0">
-                        <span className="text-[8px] px-1 py-px rounded font-semibold text-white" style={{ backgroundColor: color }}>
-                          {v.type.slice(0, 3).toUpperCase()}
-                        </span>
-                        {v.rcsb_id && <span className="font-mono text-gray-600">{v.rcsb_id}:{v.entity_id ?? '?'}</span>}
-                        {org && <span className="text-gray-400 truncate">{org}</span>}
-                      </div>
-                    );
-                  })}
-                </div>
+              <div className="mb-1">
+                <SectionHeader
+                  label="Del/Ins"
+                  count={nonSubs.length}
+                  open={delInsOpen}
+                  onToggle={() => setDelInsOpen(o => !o)}
+                />
+                {delInsOpen && (
+                  <div className="border border-gray-100 rounded bg-gray-50/50">
+                    {nonSubs.map((v, i) => {
+                      const color = VARIANT_COLORS[v.type as keyof typeof VARIANT_COLORS] ?? '#9ca3af';
+                      const org = v.source === 'structural' && v.rcsb_id && organismMap
+                        ? organismMap[v.rcsb_id]?.[0] : v.species;
+                      return (
+                        <div key={i} className="flex items-center gap-1.5 px-1.5 py-0.5 text-[10px] border-b border-gray-50 last:border-b-0">
+                          <span className="text-[8px] px-1 py-px rounded font-semibold text-white" style={{ backgroundColor: color }}>
+                            {v.type.slice(0, 3).toUpperCase()}
+                          </span>
+                          {v.rcsb_id && <span className="font-mono text-gray-600">{v.rcsb_id}:{v.entity_id ?? '?'}</span>}
+                          {org && <span className="text-gray-400">{org}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
             {/* Modifications grouped by type */}
             {Object.keys(modsByType).length > 0 && (
-              <div className="mb-2">
-                <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                  Modifications ({modifications.length})
-                </div>
-                <div className="space-y-0.5">
-                  {Object.entries(modsByType).map(([type, mods]) => {
-                    const color = MODIFICATION_COLORS[type] ?? '#9ca3af';
-                    const species = [...new Set(mods.map(m => m.species).filter(Boolean))];
-                    return (
-                      <div key={type} className="flex items-center gap-1.5 text-[10px]">
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                        <span className="text-gray-600">
-                          {type.charAt(0).toUpperCase() + type.slice(1)}
-                        </span>
-                        <span className="text-[9px] text-gray-400">x{mods.length}</span>
-                        {species.length > 0 && (
-                          <span className="text-[9px] text-gray-400 truncate flex-1" title={species.join(', ')}>
-                            {species.slice(0, 2).join(', ')}{species.length > 2 ? '...' : ''}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+              <div className="mb-1">
+                <SectionHeader
+                  label="Modifications"
+                  count={modifications.length}
+                  open={modsOpen}
+                  onToggle={() => setModsOpen(o => !o)}
+                />
+                {modsOpen && (
+                  <div>
+                    {Object.entries(modsByType)
+                      .sort((a, b) => b[1].length - a[1].length)
+                      .map(([type, mods]) => (
+                        <ModificationTypeRow key={type} type={type} mods={mods} total={modifications.length} />
+                      ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -212,6 +230,29 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
         )}
       </div>
     </>
+  );
+}
+
+// ── Collapsible section header (used for Substitutions / Del-Ins / Modifications) ──
+
+function SectionHeader({
+  label, count, open, onToggle,
+}: {
+  label: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      className="flex items-center gap-1 px-0.5 py-0.5 mb-0.5 cursor-pointer rounded hover:bg-gray-100 select-none"
+      onClick={onToggle}
+    >
+      <span className="text-[9px] text-gray-500 w-2 text-center leading-none">{open ? '▾' : '▸'}</span>
+      <span className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider">
+        {label} <span className="text-gray-400">({count})</span>
+      </span>
+    </div>
   );
 }
 
@@ -247,7 +288,9 @@ function SubstitutionPathRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const fraction = total > 0 ? variants.length / total : 0;
-  const color = VARIANT_COLORS.substitution;
+  // Neutral slate fill in the popup so the bars don't compete with the 3D/MSA
+  // substitution color (which is orange globally).
+  const barColor = '#94a3b8'; // slate-400
 
   const litEntries = variants.filter(v => v.source !== 'structural');
   const structEntries = variants.filter(v => v.source === 'structural');
@@ -255,17 +298,18 @@ function SubstitutionPathRow({
   return (
     <div>
       <div
-        className="flex items-center gap-1.5 text-[10px] cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5"
+        className="flex items-center gap-1 text-[10px] cursor-pointer hover:bg-gray-50 rounded px-0.5 py-0.5"
         onClick={() => setExpanded(e => !e)}
       >
-        <span className="font-mono font-bold text-gray-800 w-10 flex-shrink-0">{path}</span>
-        <div className="flex-1 h-2.5 bg-gray-100 rounded-sm overflow-hidden" title={`${variants.length} / ${total}`}>
-          <div className="h-full rounded-sm" style={{ width: `${Math.max(fraction * 100, 4)}%`, backgroundColor: color }} />
+        <span className="text-gray-400 w-2 text-center flex-shrink-0">{expanded ? '▾' : '▸'}</span>
+        <span className="font-mono font-semibold text-gray-700 w-9 flex-shrink-0">{path}</span>
+        <div className="flex-1 h-2 bg-gray-100 rounded-sm overflow-hidden" title={`${variants.length} / ${total}`}>
+          <div className="h-full rounded-sm" style={{ width: `${Math.max(fraction * 100, 4)}%`, backgroundColor: barColor }} />
         </div>
-        <span className="text-[9px] text-gray-500 tabular-nums w-6 text-right">{variants.length}</span>
+        <span className="text-[9px] text-gray-500 tabular-nums w-5 text-right">{variants.length}</span>
       </div>
       {expanded && (
-        <div className="ml-3 pl-2 border-l border-gray-200 mt-0.5 mb-1.5 max-h-52 overflow-y-auto">
+        <div className="ml-3 pl-2 border-l border-gray-200 mt-0.5 mb-1 max-h-52 overflow-y-auto">
           {/* Literature entries -- amber left border, breathing room */}
           {litEntries.map((v, i) => {
             const detail = [v.species, v.tubulin_type].filter(Boolean).join(' / ');
@@ -275,8 +319,8 @@ function SubstitutionPathRow({
                   <span className="text-amber-800 font-medium">{detail || 'Literature'}</span>
                   {v.reference_link && (
                     <a href={v.reference_link} target="_blank" rel="noopener noreferrer"
-                      className="text-amber-400 hover:text-blue-500 flex-shrink-0 ml-auto" onClick={e => e.stopPropagation()}>
-                      <ExternalLink size={8} />
+                      className="text-blue-600 hover:text-blue-800 underline break-all ml-auto" onClick={e => e.stopPropagation()}>
+                      {v.reference_link}
                     </a>
                   )}
                 </div>
@@ -289,21 +333,133 @@ function SubstitutionPathRow({
               </div>
             );
           })}
-          {/* Structural entries -- single line each with species */}
+          {/* Structural entries -- single line each with species and always-visible Align button */}
           {structEntries.map((v, i) => {
             const org = v.rcsb_id && organismMap ? organismMap[v.rcsb_id]?.[0] ?? null : null;
             return (
-              <div key={`str-${i}`} className="group/entry flex items-center gap-1.5 text-[9px] text-gray-500 py-0.5">
+              <div key={`str-${i}`} className="flex items-center gap-1.5 text-[9px] text-gray-500 py-0.5">
                 <span className="font-mono text-gray-600">{v.rcsb_id ?? '?'}:{v.entity_id ?? '?'}</span>
-                {org && <span className="text-gray-400 italic truncate flex-1">{org}</span>}
+                {org && <span className="text-gray-400 italic flex-1">{org}</span>}
                 {onAlignChain && v.rcsb_id && v.entity_id && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onAlignChain(v.rcsb_id!, v.entity_id!); }}
-                    className="ml-auto p-0.5 text-gray-300 hover:text-blue-500 opacity-0 group-hover/entry:opacity-100 transition-opacity"
-                    title={`Align ${v.rcsb_id}:${v.entity_id}`}
+                    className="ml-auto inline-flex items-center gap-0.5 px-2 py-0 rounded border border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 hover:border-blue-400 transition-colors text-[9px] font-medium leading-[1.35]"
+                    title={`Align ${v.rcsb_id}:${v.entity_id} as a new polymer`}
                   >
-                    <Plus size={9} />
+                    <Plus size={9} strokeWidth={2.5} />
+                    <span>Align</span>
                   </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Modification type row: collapsed → per-species rollup → per-record table ──
+
+function ModificationTypeRow({
+  type, mods, total,
+}: {
+  type: string;
+  mods: ModificationAnnotation[];
+  total: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [openSpecies, setOpenSpecies] = useState<Record<string, boolean>>({});
+
+  const color = MODIFICATION_COLORS[type] ?? '#9ca3af';
+  const fraction = total > 0 ? mods.length / total : 0;
+
+  // Group records by species (unknown species collapsed under "—")
+  const speciesGroups: Record<string, ModificationAnnotation[]> = {};
+  for (const m of mods) {
+    const key = m.species ?? '—';
+    if (!speciesGroups[key]) speciesGroups[key] = [];
+    speciesGroups[key].push(m);
+  }
+  const orderedSpecies = Object.entries(speciesGroups).sort((a, b) => b[1].length - a[1].length);
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-1 text-[10px] cursor-pointer hover:bg-gray-50 rounded px-0.5 py-0.5"
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span className="text-gray-400 w-2 text-center flex-shrink-0">{expanded ? '▾' : '▸'}</span>
+        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+        <span className="text-gray-700 font-medium">
+          {type.charAt(0).toUpperCase() + type.slice(1)}
+        </span>
+        <div className="flex-1 h-2 bg-gray-100 rounded-sm overflow-hidden" title={`${mods.length} / ${total}`}>
+          <div className="h-full rounded-sm" style={{ width: `${Math.max(fraction * 100, 4)}%`, backgroundColor: color }} />
+        </div>
+        <span className="text-[9px] text-gray-500 tabular-nums w-5 text-right">{mods.length}</span>
+      </div>
+
+      {expanded && (
+        <div className="ml-3 pl-2 border-l border-gray-200 mt-0.5 mb-1">
+          {orderedSpecies.map(([species, records]) => {
+            const isOpen = !!openSpecies[species];
+            return (
+              <div key={species}>
+                <div
+                  className="flex items-center gap-1 text-[10px] cursor-pointer hover:bg-gray-50 rounded px-0.5 py-0.5"
+                  onClick={() => setOpenSpecies(prev => ({ ...prev, [species]: !prev[species] }))}
+                >
+                  <span className="text-gray-400 w-2 text-center">{isOpen ? '▾' : '▸'}</span>
+                  <span className="italic text-gray-700">{species}</span>
+                  <span className="text-[9px] text-gray-400 tabular-nums">×{records.length}</span>
+                </div>
+
+                {isOpen && (
+                  <div className="mt-0.5 mb-1 overflow-x-auto">
+                    <table className="text-[9px] border-collapse">
+                      <thead>
+                        <tr className="text-gray-400">
+                          <th className="text-left font-medium px-1 py-0.5 border-b border-gray-100 whitespace-nowrap">Isotype</th>
+                          <th className="text-left font-medium px-1 py-0.5 border-b border-gray-100 whitespace-nowrap">Phenotype</th>
+                          <th className="text-left font-medium px-1 py-0.5 border-b border-gray-100 whitespace-nowrap">UniProt</th>
+                          <th className="text-left font-medium px-1 py-0.5 border-b border-gray-100 whitespace-nowrap">Source</th>
+                          <th className="text-left font-medium px-1 py-0.5 border-b border-gray-100 whitespace-nowrap">Keywords</th>
+                          <th className="text-left font-medium px-1 py-0.5 border-b border-gray-100 whitespace-nowrap">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {records.map((r, i) => {
+                          const sourceLabel = r.database_source || r.database_link;
+                          return (
+                            <tr key={i} className="text-gray-600 hover:bg-gray-50 align-top">
+                              <td className="px-1 py-0.5 border-b border-gray-50 font-mono whitespace-nowrap">{r.tubulin_type || <span className="text-gray-300">—</span>}</td>
+                              <td className="px-1 py-0.5 border-b border-gray-50 whitespace-nowrap">{r.phenotype || <span className="text-gray-300">—</span>}</td>
+                              <td className="px-1 py-0.5 border-b border-gray-50 font-mono whitespace-nowrap">{r.uniprot_id || <span className="text-gray-300">—</span>}</td>
+                              <td className="px-1 py-0.5 border-b border-gray-50 whitespace-nowrap">
+                                {r.database_link ? (
+                                  <a
+                                    href={r.database_link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={e => e.stopPropagation()}
+                                    className="text-blue-600 hover:text-blue-800 underline inline-flex items-center gap-0.5"
+                                  >
+                                    <span>{sourceLabel}</span>
+                                    <ExternalLink size={8} className="flex-shrink-0" />
+                                  </a>
+                                ) : (
+                                  sourceLabel || <span className="text-gray-300">—</span>
+                                )}
+                              </td>
+                              <td className="px-1 py-0.5 border-b border-gray-50 whitespace-nowrap">{r.keywords || <span className="text-gray-300">—</span>}</td>
+                              <td className="px-1 py-0.5 border-b border-gray-50 whitespace-nowrap">{r.notes || <span className="text-gray-300">—</span>}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             );
@@ -389,13 +545,15 @@ function AnchoredPopup({
         className="fixed z-[9999] bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg shadow-lg min-w-[220px] text-sm"
         style={{ top: popupPos.y, left: popupPos.x }}
       >
-        <div
-          className="flex items-center gap-1 px-2 py-0.5 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400"
-          onMouseDown={onMouseDown}
-        >
-          <GripHorizontal size={10} />
-        </div>
-        <ResiduePopupContent target={target} onClose={onClose} onFocus={onFocusResidue ? () => onFocusResidue(target) : undefined} onToggleBallStick={onToggleBallStick} ballStickActive={ballStickActive} onAlignChain={onAlignChain} />
+        <ResiduePopupContent
+          target={target}
+          onClose={onClose}
+          onFocus={onFocusResidue ? () => onFocusResidue(target) : undefined}
+          onToggleBallStick={onToggleBallStick}
+          ballStickActive={ballStickActive}
+          onAlignChain={onAlignChain}
+          onMouseDownHeader={onMouseDown}
+        />
       </div>
     </>
   );
@@ -432,13 +590,15 @@ function StaticPopup({
       className="fixed z-[9999] bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg shadow-lg min-w-[220px] text-sm"
       style={{ top: pos.y, left: pos.x }}
     >
-      <div
-        className="flex items-center gap-1 px-2 py-0.5 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400"
-        onMouseDown={onMouseDown}
-      >
-        <GripHorizontal size={10} />
-      </div>
-      <ResiduePopupContent target={target} onClose={onClose} onFocus={onFocusResidue ? () => onFocusResidue(target) : undefined} onToggleBallStick={onToggleBallStick} ballStickActive={ballStickActive} onAlignChain={onAlignChain} />
+      <ResiduePopupContent
+        target={target}
+        onClose={onClose}
+        onFocus={onFocusResidue ? () => onFocusResidue(target) : undefined}
+        onToggleBallStick={onToggleBallStick}
+        ballStickActive={ballStickActive}
+        onAlignChain={onAlignChain}
+        onMouseDownHeader={onMouseDown}
+      />
     </div>
   );
 }
