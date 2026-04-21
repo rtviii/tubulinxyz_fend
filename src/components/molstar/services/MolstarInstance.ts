@@ -86,6 +86,15 @@ export class MolstarInstance {
     pinnedAuthSeqIds: number[];
   }> = new Map();
 
+  // In-flight `loadAlignedStructure` calls keyed by alignedId. Concurrent callers
+  // for the same id join the same promise instead of racing. The Redux-based
+  // `selectIsChainAligned` guards at call sites don't help here: the second call
+  // can fire before the first call's `addAlignedStructure` dispatch lands,
+  // producing two parallel Molstar subtrees and an orphan cartoon that
+  // `setAlignedStructureVisible` can't reach (it only holds the ref of the most
+  // recent Redux-registered subtree).
+  private inFlightAlignedLoads: Map<string, Promise<string | null>> = new Map();
+
   constructor(
     public readonly id: MolstarInstanceId,
     public readonly viewer: MolstarViewer,
@@ -925,6 +934,41 @@ const color = getMolstarGhostColor(family);
 
     const alignedId = `${sourcePdbId}_${sourceChainId}_on_${targetChainId}`;
 
+    // Join any in-flight load for this id. Covers the race window where a
+    // caller fires while a prior call for the same id is mid-flight (before
+    // Redux has received addAlignedStructure). Without this, parallel pipelines
+    // both slip past the Redux-based selectIsChainAligned guard at call sites,
+    // and the first pipeline's Molstar subtree becomes an orphan — an extra
+    // cartoon that can never be hidden because Redux only holds the refs of
+    // the second (winning) subtree.
+    const inFlight = this.inFlightAlignedLoads.get(alignedId);
+    if (inFlight) return inFlight;
+    const loadPromise = this.doLoadAlignedStructure(targetChainId, sourcePdbId, sourceChainId, family, alignedId);
+    this.inFlightAlignedLoads.set(alignedId, loadPromise);
+    try {
+      return await loadPromise;
+    } finally {
+      this.inFlightAlignedLoads.delete(alignedId);
+    }
+  }
+
+  private async doLoadAlignedStructure(
+    targetChainId: string,
+    sourcePdbId: string,
+    sourceChainId: string,
+    family: string | undefined,
+    alignedId: string,
+  ): Promise<string | null> {
+    const plugin = this.viewer.ctx;
+    if (!plugin) return null;
+
+    // If an entry for this id already exists in Redux (e.g. a sequential second
+    // add after the first completed), tear it down before rebuilding. Concurrent
+    // second calls are handled by the in-flight dedup in loadAlignedStructure.
+    if (this.getMonomerChainState(targetChainId)?.alignedStructures[alignedId]) {
+      await this.removeAlignedStructureById(targetChainId, alignedId);
+    }
+
     try {
       const url = `https://models.rcsb.org/${sourcePdbId.toUpperCase()}.bcif`;
       const data = await plugin.builders.data.download({ url, isBinary: true, label: sourcePdbId });
@@ -1581,13 +1625,10 @@ const color = getMolstarGhostColor(family);
     const shouldReallyShow =
       visible && this.viewMode === 'monomer' && this.activeMonomerChainId === targetChainId;
 
-    // Toggle BOTH the parent structure subtree and the chain-component subtree.
-    // Setting one alone has proven fragile when Molstar's state tree re-normalizes
-    // during overpaint/transparency rebuilds: a stale parentRef silently no-ops
-    // (and the structure stays visible), or a rebuild clears isHidden on the
-    // component while the parent's flag is intact. Toggling both refs makes the
-    // hide/show idempotent regardless of which part of the subtree a later Molstar
-    // rebuild touches. Shown visibility = AND of all gates, hidden = any gate off.
+    // Toggle both the parent structure subtree and the chain-component subtree.
+    // Redundant in normal conditions (the parentRef subtree contains the
+    // chain-component subtree), but cheap; leaving both guarded against past
+    // fragility where a rebuild could clear isHidden on one while the other stayed set.
     this.viewer.setSubtreeVisibility(aligned.parentRef, shouldReallyShow);
     this.viewer.setSubtreeVisibility(aligned.chainComponentRef, shouldReallyShow);
 
