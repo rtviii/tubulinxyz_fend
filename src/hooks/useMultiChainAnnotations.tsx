@@ -18,7 +18,6 @@ import {
 } from '@/store/tubxz_api';
 import { selectPositionMapping } from '@/store/slices/sequence_registry';
 import { makeChainKey } from '@/lib/chain_key';
-import { getHexForLigand } from '@/components/molstar/colors/palette';
 
 export interface ChainToFetch {
     rcsbId: string;
@@ -98,7 +97,6 @@ export function ChainAnnotationFetcher({ rcsbId, authAsymId, chainKey }: ChainTo
             ligandId: n.ligand_id,
             ligandName: n.ligand_name ?? n.ligand_id,
             ligandChain: n.ligand_auth_asym_id,
-            color: getHexForLigand(n.ligand_id),   // single source of truth
             drugbankId: n.drugbank_id ?? null,
             residueCount: n.residue_count,
             masterIndices: n.residues

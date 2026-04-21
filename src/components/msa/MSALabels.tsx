@@ -20,6 +20,8 @@ import {
   toggleModificationType,
 } from '@/store/slices/annotationsSlice';
 import { makeChainKey } from '@/lib/chain_key';
+import { parseLayerType } from './auxiliary/layerKind';
+import { isAuxLayerActive } from './auxiliary/colorProviders';
 
 interface MSALabelsProps {
   sequences: MsaSequence[];
@@ -180,33 +182,32 @@ export function MSALabels({
 
           // ── Auxiliary track label ──
           if (isAux) {
-            const isTopLevelMod = seq.layerType?.startsWith('ptm:');
+            const desc = seq.layerType ? parseLayerType(seq.layerType) : null;
+            const isTopLevelMod = desc?.kind === 'ptm';
             const chainKey = seq.parentSequenceId ?? '';
             const chainVis = annotationChains[chainKey]?.visibility;
 
-            // Determine if this layer is currently "active" in the annotation visibility
-            let layerActive = true;
-            if (seq.layerType === 'variants') {
-              layerActive = chainVis?.showVariants ?? true;
-            } else if (seq.layerType?.startsWith('ligand:')) {
-              const siteId = seq.layerType.slice('ligand:'.length);
-              layerActive = chainVis?.visibleLigandIds.includes(siteId) ?? true;
-            } else if (seq.layerType?.startsWith('ptm:')) {
-              const modType = seq.layerType.slice('ptm:'.length);
-              layerActive = chainVis?.visibleModificationTypes.includes(modType) ?? false;
-            }
+            // Layer "active" state drives the eye icon.
+            // 'variants' defaults true when no chain visibility is loaded; ptm defaults false.
+            const layerActive = desc
+              ? (chainVis
+                  ? isAuxLayerActive(desc, chainVis)
+                  : desc.kind !== 'ptm')
+              : true;
 
             const handleToggleLayer = (e: React.MouseEvent) => {
               e.stopPropagation();
-              if (!chainKey || !seq.layerType) return;
-              if (seq.layerType === 'variants') {
-                dispatch(setVariantsVisible({ chainKey, visible: !layerActive }));
-              } else if (seq.layerType.startsWith('ligand:')) {
-                const siteId = seq.layerType.slice('ligand:'.length);
-                dispatch(toggleLigandSite({ chainKey, siteId }));
-              } else if (seq.layerType.startsWith('ptm:')) {
-                const modType = seq.layerType.slice('ptm:'.length);
-                dispatch(toggleModificationType({ chainKey, modType }));
+              if (!chainKey || !desc) return;
+              switch (desc.kind) {
+                case 'variants':
+                  dispatch(setVariantsVisible({ chainKey, visible: !layerActive }));
+                  break;
+                case 'ligand':
+                  if (desc.id) dispatch(toggleLigandSite({ chainKey, siteId: desc.id }));
+                  break;
+                case 'ptm':
+                  if (desc.id) dispatch(toggleModificationType({ chainKey, modType: desc.id }));
+                  break;
               }
             };
 

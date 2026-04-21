@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ChevronRight, Eye, EyeOff, Focus, Download, ExternalLink } from 'lucide-react';
 import { LigandSite } from '@/store/slices/annotationsSlice';
 import { LIGAND_IGNORE_IDS } from '@/components/molstar/colors/palette';
+import { getHexForLigand } from '@/lib/colors/annotationPalette';
 
 interface LigandsPanelProps {
   ligandSites: LigandSite[];
@@ -97,7 +98,7 @@ function LigandRow({
       {/* Color indicator */}
       <div
         className="w-1.5 h-4 rounded-sm flex-shrink-0"
-        style={{ backgroundColor: isVisible ? site.color : '#e0e0e0' }}
+        style={{ backgroundColor: isVisible ? getHexForLigand(site.ligandId) : '#e0e0e0' }}
       />
 
       {/* Ligand ID */}

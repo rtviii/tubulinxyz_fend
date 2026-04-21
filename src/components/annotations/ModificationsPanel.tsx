@@ -3,23 +3,7 @@
 import { useMemo, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { Modification } from '@/store/slices/annotationsSlice';
-
-export const MODIFICATION_COLORS: Record<string, string> = {
-  acetylation: '#6366f1',     // indigo
-  phosphorylation: '#0ea5e9', // sky
-  palmitoylation: '#f59e0b',  // amber
-  ubiquitination: '#ef4444',  // red
-  methylation: '#8b5cf6',     // violet
-  nitrosylation: '#14b8a6',   // teal
-  sumoylation: '#f97316',     // orange
-  glutamylation: '#22c55e',   // green
-  glycylation: '#06b6d4',     // cyan
-  tyrosination: '#ec4899',    // pink
-};
-
-function getModColor(type: string): string {
-  return MODIFICATION_COLORS[type] ?? '#9ca3af';
-}
+import { getModificationColor } from '@/lib/colors/annotationPalette';
 
 interface ModificationsPanelProps {
   modifications: Modification[];
@@ -66,7 +50,7 @@ export function ModificationsPanel({
       {expanded && (
         <div className="border border-gray-100 rounded bg-white">
           {typeGroups.map(([modType, count]) => {
-            const color = getModColor(modType);
+            const color = getModificationColor(modType);
             const isVisible = visibleSet.has(modType);
             return (
               <label

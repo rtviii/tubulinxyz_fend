@@ -26,6 +26,7 @@ import { makeChainKey, authAsymIdFromChainKey } from '@/lib/chain_key';
 import { ResizableMSAContainer, type ResizableMSAContainerHandle } from './ResizableMSAContainer';
 import { MSAToolbar } from './MSAToolbar';
 import type { MSAHandle } from './types';
+import { toLayerType } from './auxiliary/layerKind';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { PolymerComponent, AlignedStructure } from '@/components/molstar/core/types';
 import type { TubulinStructure, PolypeptideEntity, TubulinFamily } from '@/store/tubxz_api';
@@ -119,7 +120,7 @@ function buildAuxiliarySequences(
       originType: 'auxiliary',
       family: primary.family,
       parentSequenceId: primary.id,
-      layerType: 'variants',
+      layerType: toLayerType({ kind: 'variants' }),
       layerLabel: `variants (${structuralVariants.length})`,
     });
   }
@@ -135,7 +136,7 @@ function buildAuxiliarySequences(
       originType: 'auxiliary',
       family: primary.family,
       parentSequenceId: primary.id,
-      layerType: `ligand:${site.id}`,
+      layerType: toLayerType({ kind: 'ligand', id: site.id }),
       layerLabel: `${site.ligandId} (${site.residueCount}r)`,
     });
   }
@@ -166,7 +167,7 @@ function buildModificationSequences(
       originType: 'auxiliary',
       family: primary.family,
       parentSequenceId: primary.id,
-      layerType: `ptm:${modType}`,
+      layerType: toLayerType({ kind: 'ptm', id: modType }),
       layerLabel: `${modType.charAt(0).toUpperCase() + modType.slice(1)} (${modsOfType.length})`,
     });
   }

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ChevronRight, Eye, EyeOff, Focus, ExternalLink } from 'lucide-react';
 import { Variant, VariantType } from '@/store/slices/annotationsSlice';
-import { VARIANT_COLORS } from '@/store/slices/colorRulesSelector';
+import { VARIANT_COLORS } from '@/lib/colors/annotationPalette';
 
 const SOURCE_BADGE: Record<string, { label: string; className: string }> = {
   structural: { label: 'PDB', className: 'bg-gray-100 text-gray-500' },

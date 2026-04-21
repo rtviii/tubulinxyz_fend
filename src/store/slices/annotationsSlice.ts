@@ -1,5 +1,6 @@
 import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
 import { RootState } from '../store';
+import { getHexForLigand } from '@/lib/colors/annotationPalette';
 
 // ============================================================
 // Types
@@ -13,7 +14,6 @@ export interface LigandSite {
   ligandName: string;
   ligandChain: string;
   ligandAuthSeqId: number;
-  color: string;
   drugbankId: string | null;
   residueCount: number;
   masterIndices: number[];
@@ -334,7 +334,7 @@ export interface GlobalLigandInfo {
 export const selectAllUniqueLigandIds = createSelector(
   [selectAnnotationsState],
   (annotations): GlobalLigandInfo[] => {
-    const map = new Map<string, { color: string; count: number; anyVisible: boolean }>();
+    const map = new Map<string, { count: number; anyVisible: boolean }>();
     for (const entry of Object.values(annotations.chains)) {
       if (!entry.data) continue;
       for (const site of entry.data.ligandSites) {
@@ -344,12 +344,12 @@ export const selectAllUniqueLigandIds = createSelector(
           existing.count++;
           if (isVisible) existing.anyVisible = true;
         } else {
-          map.set(site.ligandId, { color: site.color, count: 1, anyVisible: isVisible });
+          map.set(site.ligandId, { count: 1, anyVisible: isVisible });
         }
       }
     }
     return Array.from(map.entries())
-      .map(([chemId, info]) => ({ chemId, ...info }))
+      .map(([chemId, info]) => ({ chemId, color: getHexForLigand(chemId), ...info }))
       .sort((a, b) => b.count - a.count);
   }
 );
