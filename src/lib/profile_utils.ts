@@ -13,3 +13,20 @@ export function getFamilyForChain(
   if (!entity || !('family' in entity)) return undefined;
   return entity.family ?? undefined;
 }
+
+export function getIsotypeForChain(
+  profile: TubulinStructure | null,
+  chainId: string
+): string | null {
+  if (!profile) return null;
+  for (const entity of Object.values(profile.entities)) {
+    if (
+      'pdbx_strand_ids' in entity &&
+      (entity as any).pdbx_strand_ids?.includes(chainId) &&
+      'isotype' in entity
+    ) {
+      return (entity as any).isotype ?? null;
+    }
+  }
+  return null;
+}

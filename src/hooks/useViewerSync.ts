@@ -20,23 +20,63 @@ interface UseViewerSyncOptions {
     msaRef: React.RefObject<MSAHandle>;
     visibleSequenceIds: string[];
     /** The full display sequences array (including auxiliaries) for auxiliary color computation */
-    displaySequences?: Array<Pick<MsaSequence, 'id' | 'originType' | 'parentSequenceId' | 'layerType'>>;
+    displaySequences?: Array<Pick<MsaSequence, 'id' | 'originType' | 'parentSequenceId' | 'layerType' | 'sequence'>>;
     /** Maps auth_asym_id -> { chainKey, displayRow } for all structural chains in the MSA */
     chainRowMap?: Record<string, { chainKey: string; displayRow: number }>;
+    /** Chain keys whose parent PDB row is expanded in the MSA. When expanded, the
+     *  annotation overpaint is dropped from the principal row in the MSA so that the
+     *  mono base colorscheme shows through; the aux rows below carry the colors.
+     *  Molstar 3D overpaint is unaffected. */
+    expandedChainKeys?: Set<string>;
     /** Called when a Molstar click selects a residue (single click) */
     onMolstarResidueSelect?: (chainKey: string, masterIdx: number, authSeqId: number) => void;
 }
 
 const selectRulesForVisible = makeSelectActiveColorRulesForSequenceIds();
 
-export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequenceIds, displaySequences, chainRowMap, onMolstarResidueSelect }: UseViewerSyncOptions) {
+export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequenceIds, displaySequences, chainRowMap, expandedChainKeys, onMolstarResidueSelect }: UseViewerSyncOptions) {
+    // Derive a content-stable key from the expanded set for effect deps (same reasoning
+    // as hiddenChainKeysKey below: comparing Sets by reference would trigger every render).
+    const expandedChainKeysKey = useMemo(
+        () => expandedChainKeys ? [...expandedChainKeys].sort().join('|') : '',
+        [expandedChainKeys],
+    );
     const dispatch = useAppDispatch();
     const colorRules = useAppSelector(state => selectRulesForVisible(state, visibleSequenceIds));
     const positionMapping = useAppSelector(state => selectPositionMapping(state, chainKey));
     const annotationChains = useAppSelector(state => state.annotations.chains);
+    const ligandOverrides = useAppSelector(state => state.colorOverrides.ligand);
+    const variantOverrides = useAppSelector(state => state.colorOverrides.variant);
+    const modificationOverrides = useAppSelector(state => state.colorOverrides.modification);
 
     const activeChainId = useAppSelector(state => selectActiveMonomerChainId(state, 'structure'));
     const alignedStructures = useAppSelector(state => selectAlignedStructuresForActiveChain(state, 'structure'));
+
+    // Primary chain visibility (for MSA "gray out when hidden" effect). Aligned chain
+    // visibility comes from `alignedStructures[i].visible`. Together these form the set
+    // of chain keys whose primary MSA row should be painted near-white.
+    const primaryAuthAsymId = useMemo(() => authAsymIdFromChainKey(chainKey), [chainKey]);
+    const primaryVisible = useAppSelector(state =>
+        state.molstarInstances.instances.structure.componentStates[primaryAuthAsymId]?.visible ?? true
+    );
+    // Stable content-keyed string so this doesn't churn on every Redux instance
+    // update. Using a Set directly as a hook dependency would compare by reference
+    // and re-fire the color-sync effect every render — which, combined with
+    // applyColorscheme() dispatching setActiveColorscheme inside the effect, would
+    // keep re-invalidating the instance selector and produce an infinite paint loop
+    // that hangs the browser when multiple aligned chains are in view.
+    const hiddenChainKeysKey = useMemo(() => {
+        const keys: string[] = [];
+        if (chainKey && !primaryVisible) keys.push(chainKey);
+        for (const a of alignedStructures) {
+            if (!a.visible) keys.push(makeChainKey(a.sourcePdbId, a.sourceChainId));
+        }
+        return keys.sort().join('|');
+    }, [chainKey, primaryVisible, alignedStructures]);
+    const hiddenChainKeys = useMemo(
+        () => new Set<string>(hiddenChainKeysKey ? hiddenChainKeysKey.split('|') : []),
+        [hiddenChainKeysKey],
+    );
 
     // Stable ref for aligned structures -- avoids infinite loop in effects
     const alignedStructuresRef = useRef(alignedStructures);
@@ -132,6 +172,8 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
     chainKeyRef.current = chainKey;
     const molstarRef = useRef(molstarInstance);
     molstarRef.current = molstarInstance;
+    const ligandOverridesRef = useRef(ligandOverrides);
+    ligandOverridesRef.current = ligandOverrides;
 
     const runColorSync = useCallback(async () => {
         if (colorSyncInFlightRef.current) {
@@ -175,22 +217,33 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
                 alignedRulesByKey.set(rule.chainKey, existing);
             }
 
+            // Always route through applyColorschemeToAligned, which clears first and
+            // then re-applies. Passing an empty colorings array is equivalent to a
+            // full clear. This keeps the MSA and 3D paints in sync even when toggles
+            // happen in quick succession (no stale residues left over from a prior
+            // rule set, no missing-paint scenarios from a dropped sync branch).
+            //
+            // Skip chains whose aligned entry is hidden: touching their overpaint /
+            // transparency walks that subtree and can side-effect the isHidden flag
+            // (the hide leaks back to "visible"), which showed up as "the last aligned
+            // chain never actually hides in 3D". When a hidden chain becomes visible
+            // again, this same effect runs on the next sync and paints it correctly.
             for (const a of currentAligned) {
+                if (!a.visible) continue;
                 const aKey = makeChainKey(a.sourcePdbId, a.sourceChainId);
-                const aRules = alignedRulesByKey.get(aKey);
-                if (!aRules) {
-                    await instance.clearAlignedOverpaint(a.targetChainId, a.id);
-                } else {
-                    const colorings = aRules.flatMap(rule =>
-                        rule.residues.map(r => ({
-                            chainId: r.chainId,
-                            authSeqId: r.authSeqId,
-                            color: Color(parseInt(rule.color.replace('#', ''), 16)),
-                        }))
-                    );
-                    await instance.applyColorschemeToAligned(a.targetChainId, a.id, colorings);
-                }
+                const aRules = alignedRulesByKey.get(aKey) ?? [];
+                const colorings = aRules.flatMap(rule =>
+                    rule.residues.map(r => ({
+                        chainId: r.chainId,
+                        authSeqId: r.authSeqId,
+                        color: Color(parseInt(rule.color.replace('#', ''), 16)),
+                    }))
+                );
+                await instance.applyColorschemeToAligned(a.targetChainId, a.id, colorings);
             }
+
+            // --- Ligand ball-and-stick recolor (applies overrides, falls back to defaults) ---
+            await instance.applyLigandRepresentationColors(ligandOverridesRef.current);
         } catch (err) {
             console.error('[useViewerSync] Color sync error:', err);
         } finally {
@@ -211,8 +264,12 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         if (msaRef.current) {
             const cellColors: Record<string, string> = {};
 
-            // Primary row colors from color rules
+            // Primary row colors from color rules.
+            // When a chain's parent row is expanded in the MSA, skip painting its principal
+            // row -- the aux rows below carry the annotation colors, and the principal stays
+            // under the base mono colorscheme. Molstar 3D overpaint is unaffected (see below).
             for (const rule of colorRules) {
+                if (expandedChainKeys?.has(rule.chainKey)) continue;
                 for (const cell of rule.msaCells) {
                     cellColors[`${cell.row}-${cell.column}`] = rule.color;
                 }
@@ -220,8 +277,29 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
 
             // Auxiliary row colors
             if (displaySequences) {
-                const auxColors = computeAuxiliaryCellColors(displaySequences, annotationChains);
+                const auxColors = computeAuxiliaryCellColors(displaySequences, annotationChains, {
+                    ligand: ligandOverrides,
+                    variant: variantOverrides,
+                    modification: modificationOverrides,
+                });
                 Object.assign(cellColors, auxColors);
+            }
+
+            // Gray-out hidden chain rows: override every cell on that row with a very
+            // light gray. This runs last so it wins over annotation/aux colors. Pairs
+            // with the `opacity-40` class on the label (see MSALabels.tsx) and the
+            // 3D Molstar hide to produce the "row is turned off" UX.
+            if (hiddenChainKeys.size > 0 && displaySequences) {
+                const HIDDEN_CELL_COLOR = '#e5e7eb';
+                for (let rowIdx = 0; rowIdx < displaySequences.length; rowIdx++) {
+                    const seq = displaySequences[rowIdx];
+                    if (seq.originType !== 'pdb') continue;
+                    if (!hiddenChainKeys.has(seq.id)) continue;
+                    const len = seq.sequence?.length ?? 0;
+                    for (let c = 0; c < len; c++) {
+                        cellColors[`${rowIdx}-${c}`] = HIDDEN_CELL_COLOR;
+                    }
+                }
             }
 
             if (Object.keys(cellColors).length > 0) {
@@ -240,7 +318,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
             if (colorSyncTimerRef.current) clearTimeout(colorSyncTimerRef.current);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [colorRules, molstarInstance, msaRef, chainKey, alignedIds, displaySequences, annotationChains]);
+    }, [colorRules, molstarInstance, msaRef, chainKey, alignedIds, displaySequences, annotationChains, expandedChainKeysKey, hiddenChainKeysKey, ligandOverrides, variantOverrides, modificationOverrides]);
 
     // ============================================================
     // Click handlers
@@ -472,7 +550,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         }
         const authAsymId = authAsymIdFromChainKey(chainKey);
 
-        molstarInstance.clearWindowMask(authAsymId).then(() => {
+        molstarInstance.clearWindowMask(authAsymId).then(async () => {
             const primaryColorings = colorRules
                 .filter(r => r.chainKey === chainKey)
                 .flatMap(rule => rule.residues.map(r => ({
@@ -481,8 +559,10 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
                     color: Color(parseInt(rule.color.replace('#', ''), 16)),
                 })));
             if (primaryColorings.length > 0) {
-                molstarInstance.applyColorscheme('annotations', primaryColorings);
+                await molstarInstance.applyColorscheme('annotations', primaryColorings);
             }
+            // Re-apply ligand overpaint since applyColorscheme/restoreDefaultColors clears all overpaint
+            await molstarInstance.applyLigandRepresentationColors(ligandOverridesRef.current);
         });
 
         // Clear aligned masks too

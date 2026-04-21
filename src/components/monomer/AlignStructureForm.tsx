@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useChainAlignment } from '@/hooks/useChainAlignment';
 import { useGetStructureProfileQuery } from '@/store/tubxz_api';
+import { useAppStore } from '@/store/store';
+import { selectIsChainAligned } from '@/store/slices/sequence_registry';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 
 interface AlignStructureFormProps {
@@ -29,6 +31,7 @@ export function AlignStructureForm({
   const [committedPdbId, setCommittedPdbId] = useState<string | null>(null);
 
   const { alignChainFromProfile } = useChainAlignment();
+  const store = useAppStore();
 
   const {
     data: sourceProfile,
@@ -89,6 +92,12 @@ export function AlignStructureForm({
     const pdbId = sourcePdbId.trim().toUpperCase();
     const chainId = sourceChainId.trim().toUpperCase();
     if (!instance || !pdbId || !chainId) return;
+
+    // Block duplicates: is this chain already aligned into the viewer?
+    if (selectIsChainAligned(store.getState(), pdbId, chainId)) {
+      alert(`${pdbId}:${chainId} is already loaded in the view.`);
+      return;
+    }
 
     setLoading(true);
     setError(null);

@@ -86,6 +86,15 @@ export class MolstarInstance {
     pinnedAuthSeqIds: number[];
   }> = new Map();
 
+  // In-flight `loadAlignedStructure` calls keyed by alignedId. Concurrent callers
+  // for the same id join the same promise instead of racing. The Redux-based
+  // `selectIsChainAligned` guards at call sites don't help here: the second call
+  // can fire before the first call's `addAlignedStructure` dispatch lands,
+  // producing two parallel Molstar subtrees and an orphan cartoon that
+  // `setAlignedStructureVisible` can't reach (it only holds the ref of the most
+  // recent Redux-registered subtree).
+  private inFlightAlignedLoads: Map<string, Promise<string | null>> = new Map();
+
   constructor(
     public readonly id: MolstarInstanceId,
     public readonly viewer: MolstarViewer,
@@ -374,6 +383,25 @@ private componentLabelText(key: string, component: Component): string {
 
     const components = this.findHierarchyComponentsForRef(aligned.chainComponentRef);
     if (components.length === 0) return;
+
+    // Always clear existing overpaint first. Without this, sequential toggles can
+    // leave stale paint from a prior set of residues that aren't in the current
+    // colorings, and the MSA/3D go out of sync. This makes the call idempotent:
+    // empty colorings == fully cleared (ghost) aligned chain.
+    try {
+      await setStructureOverpaint(
+        plugin, components, -1 as any,
+        async (structure) => Structure.toStructureElementLoci(structure)
+      );
+      await setStructureTransparency(
+        plugin, components, 0.75,
+        async (structure) => Structure.toStructureElementLoci(structure)
+      );
+    } catch (err) {
+      console.error(`[${this.id}] Failed to clear aligned ${alignedStructureId} overpaint:`, err);
+    }
+
+    if (colorings.length === 0) return;
 
     // Group by color for batch application
     const colorGroups = new Map<number, number[]>();
@@ -906,6 +934,41 @@ const color = getMolstarGhostColor(family);
 
     const alignedId = `${sourcePdbId}_${sourceChainId}_on_${targetChainId}`;
 
+    // Join any in-flight load for this id. Covers the race window where a
+    // caller fires while a prior call for the same id is mid-flight (before
+    // Redux has received addAlignedStructure). Without this, parallel pipelines
+    // both slip past the Redux-based selectIsChainAligned guard at call sites,
+    // and the first pipeline's Molstar subtree becomes an orphan — an extra
+    // cartoon that can never be hidden because Redux only holds the refs of
+    // the second (winning) subtree.
+    const inFlight = this.inFlightAlignedLoads.get(alignedId);
+    if (inFlight) return inFlight;
+    const loadPromise = this.doLoadAlignedStructure(targetChainId, sourcePdbId, sourceChainId, family, alignedId);
+    this.inFlightAlignedLoads.set(alignedId, loadPromise);
+    try {
+      return await loadPromise;
+    } finally {
+      this.inFlightAlignedLoads.delete(alignedId);
+    }
+  }
+
+  private async doLoadAlignedStructure(
+    targetChainId: string,
+    sourcePdbId: string,
+    sourceChainId: string,
+    family: string | undefined,
+    alignedId: string,
+  ): Promise<string | null> {
+    const plugin = this.viewer.ctx;
+    if (!plugin) return null;
+
+    // If an entry for this id already exists in Redux (e.g. a sequential second
+    // add after the first completed), tear it down before rebuilding. Concurrent
+    // second calls are handled by the in-flight dedup in loadAlignedStructure.
+    if (this.getMonomerChainState(targetChainId)?.alignedStructures[alignedId]) {
+      await this.removeAlignedStructureById(targetChainId, alignedId);
+    }
+
     try {
       const url = `https://models.rcsb.org/${sourcePdbId.toUpperCase()}.bcif`;
       const data = await plugin.builders.data.download({ url, isBinary: true, label: sourcePdbId });
@@ -958,10 +1021,15 @@ const color = getMolstarGhostColor(family);
           .commit();
       }
 
-      // Ghost style: family-colored, semi-transparent
+      // Ghost style: family-colored, semi-transparent.
+      // typeParams.ignoreLight matches the primary representation (see preset_structure.tsx)
+      // so the aligned chain renders with the same flat/matte look — without it the aligned
+      // cartoon picks up Molstar's default lit material and shows specular highlights the
+      // primary doesn't have.
       const ghostColor = getMolstarGhostColor(family);
       await plugin.builders.structure.representation.addRepresentation(chainComponent, {
         type: 'cartoon',
+        typeParams: { ignoreLight: true },
         color: 'uniform',
         colorParams: { value: ghostColor },
       });
@@ -1270,6 +1338,42 @@ const color = getMolstarGhostColor(family);
     await this.reapplyWindowMasks();
   }
 
+  /**
+   * Re-color every ligand ball-and-stick representation according to an override map,
+   * falling back to the default palette color per ligand compId when no override is present.
+   * Always applies — this keeps the visual in sync whether an override was just set OR cleared.
+   */
+  async applyLigandRepresentationColors(
+    ligandOverrides: Record<string, string>,
+  ): Promise<void> {
+    const plugin = this.viewer.ctx;
+    if (!plugin) return;
+
+    const hierarchy = plugin.managers.structure.hierarchy.current;
+    if (hierarchy.structures.length === 0) return;
+    const structureRef = hierarchy.structures[0];
+
+    for (const component of Object.values(this.instanceState.components)) {
+      if (!isLigandComponent(component)) continue;
+
+      const overrideHex = ligandOverrides[component.compId];
+      const effectiveColor = overrideHex
+        ? Color(parseInt(overrideHex.replace('#', ''), 16))
+        : getMolstarLigandColor(component.compId);
+
+      const lociGetter = async (structure: Structure) => {
+        const loci = executeQuery(buildLigandQuery(component), structure);
+        return loci ?? StructureElement.Loci.none(structure);
+      };
+
+      try {
+        await setStructureOverpaint(plugin, structureRef.components, effectiveColor, lociGetter);
+      } catch (err) {
+        console.error(`[${this.id}] Failed to apply ligand overpaint for ${component.compId}:`, err);
+      }
+    }
+  }
+
   async restoreDefaultColors(): Promise<void> {
     const plugin = this.viewer.ctx;
     if (!plugin) return;
@@ -1521,9 +1625,12 @@ const color = getMolstarGhostColor(family);
     const shouldReallyShow =
       visible && this.viewMode === 'monomer' && this.activeMonomerChainId === targetChainId;
 
-    // Hide the entire structure subtree (parent), not just the chain component.
-    // This prevents ghost contours from the parent structure node leaking through.
+    // Toggle both the parent structure subtree and the chain-component subtree.
+    // Redundant in normal conditions (the parentRef subtree contains the
+    // chain-component subtree), but cheap; leaving both guarded against past
+    // fragility where a rebuild could clear isHidden on one while the other stayed set.
     this.viewer.setSubtreeVisibility(aligned.parentRef, shouldReallyShow);
+    this.viewer.setSubtreeVisibility(aligned.chainComponentRef, shouldReallyShow);
 
     this.dispatch(
       setAlignedStructureVisibility({ instanceId: this.id, targetChainId, alignedStructureId, visible })

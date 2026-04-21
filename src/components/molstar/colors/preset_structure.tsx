@@ -75,6 +75,7 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
             if (component) {
                 await plugin.builders.structure.representation.addRepresentation(component, {
                     type: 'cartoon',
+                    typeParams: { ignoreLight: true },
                     color: 'uniform',
                     colorParams: { value: chainColor },
                 });

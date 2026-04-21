@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Eye, ArrowRight } from "lucide-react";
+import { Eye, ArrowRight, Home, LayoutGrid, Mail } from "lucide-react";
+import { AppPill, PillDivider, PillSection, PillNavLink, PillAnchor } from "@/components/ui/AppPill";
 import {
   useGetStructureFacetsQuery,
   useGetTaxonomyTreeQuery,
@@ -398,8 +399,8 @@ export default function StructureCataloguePage() {
     <div className="min-h-screen bg-gray-50/50">
       <div className="container mx-auto px-4 py-6 max-w-[1600px]">
         {/* Header */}
-        <div className="flex justify-between items-end mb-5">
-          <div>
+        <div className="flex justify-between items-end mb-5 gap-4">
+          <div className="flex-shrink-0">
             <h1 className="text-xl font-bold text-gray-900 tracking-tight">
               Tubulin Structures
             </h1>
@@ -407,15 +408,50 @@ export default function StructureCataloguePage() {
               Browse tubulin-related PDB structures
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            {isFetching && (
-              <span className="text-[10px] text-gray-400 uppercase tracking-wide">
-                Updating...
-              </span>
-            )}
-            <span className="text-xs text-gray-500 font-medium bg-white px-2.5 py-1 rounded border border-gray-200">
-              {items.length} of {totalCount.toLocaleString()}
-            </span>
+
+          {/* Unified pill: nav | AI search placeholder | counter + feedback */}
+          <div className="flex-1 min-w-0 max-w-[720px]">
+            <AppPill>
+              <PillNavLink href="/" icon={Home} title="Home" />
+              <PillNavLink href="/structures" icon={LayoutGrid} label="Structures" title="Structures" active />
+
+              <PillDivider />
+
+              <PillSection stretch className="px-1">
+                <div className="flex-1 min-w-0 relative">
+                  <input
+                    disabled
+                    placeholder="Ask about structures, ligands, mutations..."
+                    className="w-full h-7 rounded-full border border-slate-200/60 bg-white/60
+                               px-3 pr-20 text-[11px]
+                               text-slate-400 placeholder:text-slate-400"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-slate-300
+                                   tracking-wider font-medium uppercase">
+                    coming soon
+                  </span>
+                </div>
+              </PillSection>
+
+              <PillDivider />
+
+              <div className="flex items-center gap-1.5 px-2 py-1">
+                {isFetching && (
+                  <span className="text-[9px] text-slate-400 uppercase tracking-wide">Updating</span>
+                )}
+                <span className="text-[11px] font-mono text-slate-500">
+                  {items.length}
+                  <span className="text-slate-300 mx-0.5">/</span>
+                  {totalCount.toLocaleString()}
+                </span>
+              </div>
+
+              <PillAnchor
+                href="mailto:feedback@tube.xyz?subject=tube.xyz%20feedback"
+                icon={Mail}
+                title="Send feedback"
+              />
+            </AppPill>
           </div>
         </div>
 

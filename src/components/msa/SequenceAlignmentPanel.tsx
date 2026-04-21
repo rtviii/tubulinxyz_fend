@@ -26,6 +26,7 @@ import { makeChainKey, authAsymIdFromChainKey } from '@/lib/chain_key';
 import { ResizableMSAContainer, type ResizableMSAContainerHandle } from './ResizableMSAContainer';
 import { MSAToolbar } from './MSAToolbar';
 import type { MSAHandle } from './types';
+import { toLayerType } from './auxiliary/layerKind';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { PolymerComponent, AlignedStructure } from '@/components/molstar/core/types';
 import type { TubulinStructure, PolypeptideEntity, TubulinFamily } from '@/store/tubxz_api';
@@ -89,6 +90,8 @@ interface SequenceAlignmentPanelProps {
   onResidueContextMenu?: (event: MSAContextMenuEvent) => void;
   /** Emits the full display sequence list (including auxiliaries) for correct color rule row indexing */
   onDisplaySequencesChange?: (seqs: MsaSequence[]) => void;
+  /** Emits the set of chain keys whose parent PDB row is currently expanded (aux rows showing). */
+  onExpandedChainKeysChange?: (keys: Set<string>) => void;
   onAddAlignment?: () => void;
 }
 
@@ -96,7 +99,9 @@ interface SequenceAlignmentPanelProps {
 // Auxiliary Track Helpers
 // ────────────────────────────────────────────
 
-/** Build auxiliary MsaSequence rows (variants + ligands only -- modifications are top-level). */
+/** Build auxiliary MsaSequence rows (variants + ligands only -- modifications are top-level).
+ *  Rows are materialized based on data availability, independent of visibility flags.
+ *  Visibility flags now only gate *coloring* of these rows, not their presence. */
 function buildAuxiliarySequences(
   primary: MsaSequence,
   annotationEntry: ChainAnnotationEntry | null,
@@ -106,11 +111,11 @@ function buildAuxiliarySequences(
 
   const gapSequence = ' '.repeat(maxLength);
   const auxiliaries: MsaSequence[] = [];
-  const { data, visibility } = annotationEntry;
+  const { data } = annotationEntry;
 
   // Structural variants layer
   const structuralVariants = data.variants.filter(v => v.source !== 'morisette');
-  if (structuralVariants.length > 0 && visibility.showVariants) {
+  if (structuralVariants.length > 0) {
     auxiliaries.push({
       id: `aux__${primary.id}__variants`,
       name: `variants`,
@@ -119,14 +124,13 @@ function buildAuxiliarySequences(
       originType: 'auxiliary',
       family: primary.family,
       parentSequenceId: primary.id,
-      layerType: 'variants',
+      layerType: toLayerType({ kind: 'variants' }),
       layerLabel: `variants (${structuralVariants.length})`,
     });
   }
 
-  // One layer per visible ligand
+  // One row per ligand site that exists in the data
   for (const site of data.ligandSites) {
-    if (!visibility.visibleLigandIds.includes(site.id)) continue;
     auxiliaries.push({
       id: `aux__${primary.id}__ligand__${site.id}`,
       name: site.ligandId,
@@ -135,7 +139,7 @@ function buildAuxiliarySequences(
       originType: 'auxiliary',
       family: primary.family,
       parentSequenceId: primary.id,
-      layerType: `ligand:${site.id}`,
+      layerType: toLayerType({ kind: 'ligand', id: site.id }),
       layerLabel: `${site.ligandId} (${site.residueCount}r)`,
     });
   }
@@ -143,7 +147,10 @@ function buildAuxiliarySequences(
   return auxiliaries;
 }
 
-/** Build top-level modification tracks from the primary chain's annotation data. */
+/** Build top-level modification tracks from the primary chain's annotation data.
+ *  PTM rows are opt-in via the top-right "Modifications" control panel: only types
+ *  present in visibility.visibleModificationTypes become rows. This differs from
+ *  variants/ligands, which materialize on parent expand. */
 function buildModificationSequences(
   primary: MsaSequence,
   annotationEntry: ChainAnnotationEntry | null,
@@ -166,7 +173,7 @@ function buildModificationSequences(
       originType: 'auxiliary',
       family: primary.family,
       parentSequenceId: primary.id,
-      layerType: `ptm:${modType}`,
+      layerType: toLayerType({ kind: 'ptm', id: modType }),
       layerLabel: `${modType.charAt(0).toUpperCase() + modType.slice(1)} (${modsOfType.length})`,
     });
   }
@@ -269,6 +276,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       onWindowMaskClear,
       onResidueContextMenu,
       onDisplaySequencesChange,
+      onExpandedChainKeysChange,
       onAddAlignment,
     } = props;
 
@@ -358,12 +366,12 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
     const pdbSequences = useMemo(() => {
       if (!family) return [];
       return Object.values(allSequences)
-        .filter(s => s.family === family && s.originType === 'pdb')
+        .filter(s => s.family === family && (s.originType === 'pdb' || s.originType === 'custom'))
         .sort((a, b) => a.rowIndex - b.rowIndex);
     }, [allSequences, family]);
 
     // ── Local UI state ──
-    const [colorScheme, setColorScheme] = useState('substitution');
+    const [colorScheme, setColorScheme] = useState('salience-mono');
     const [showMasters, setShowMasters] = useState(true);
     const [inRangeOnly, setInRangeOnly] = useState(false);
     const currentRangeRef = useRef<[number, number] | null>(null);
@@ -408,25 +416,51 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       onDisplaySequencesChange?.(displaySequences);
     }, [displaySequences]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // ── Visibility for aligned structures ──
+    // Emit the set of chain keys whose parent PDB row is expanded.
+    // For pdb sequences the seq.id IS the chain key, so the expanded set maps 1:1 to chain keys
+    // for any entry that is present in pdbSequences.
+    useEffect(() => {
+      if (!onExpandedChainKeysChange) return;
+      const pdbIds = new Set(pdbSequences.map(s => s.id));
+      const expandedChainKeys = new Set<string>();
+      for (const id of expandedSequences) {
+        if (pdbIds.has(id)) expandedChainKeys.add(id);
+      }
+      onExpandedChainKeysChange(expandedChainKeys);
+    }, [expandedSequences, pdbSequences]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ── Primary chain visibility (driven by Molstar component state in Redux) ──
+    const primaryVisible = useAppSelector(state => {
+      if (!chainId) return true;
+      return state.molstarInstances.instances.structure.componentStates[chainId]?.visible ?? true;
+    });
+
+    // ── Visibility for primary + aligned chains ──
     const visibleChainKeys = useMemo(() => {
       const set = new Set<string>();
-      if (pdbId && chainId) set.add(makeChainKey(pdbId, chainId));
+      if (pdbId && chainId && primaryVisible) set.add(makeChainKey(pdbId, chainId));
       for (const a of alignedStructures) {
         if (a.visible) set.add(makeChainKey(a.sourcePdbId, a.sourceChainId));
       }
       return set;
-    }, [pdbId, chainId, alignedStructures]);
+    }, [pdbId, chainId, primaryVisible, alignedStructures]);
 
     const handleToggleChainVisibility = useCallback((chainKey: string) => {
       if (!instance) return;
+      // Aligned chains toggle via the aligned-structure visibility API.
       for (const a of alignedStructures) {
         if (makeChainKey(a.sourcePdbId, a.sourceChainId) === chainKey) {
           instance.setAlignedStructureVisible(a.targetChainId, a.id, !a.visible);
           return;
         }
       }
-    }, [instance, alignedStructures]);
+      // Primary chain toggles via the component visibility API. Redux state is updated
+      // synchronously by setChainVisibility, so `primaryVisible` (and `visibleChainKeys`)
+      // re-derive on next render.
+      if (pdbId && chainId && makeChainKey(pdbId, chainId) === chainKey) {
+        instance.setChainVisibility(chainId, !primaryVisible);
+      }
+    }, [instance, alignedStructures, pdbId, chainId, primaryVisible]);
 
     const handleSoloChain = useCallback((soloChainKey: string) => {
       if (!instance) return;
@@ -475,8 +509,8 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
 
     const handleReset = useCallback(() => {
       onClearColors?.();
-      setColorScheme('substitution');
-      msaRef.current?.setColorScheme('substitution');
+      setColorScheme('salience-mono');
+      msaRef.current?.setColorScheme('salience-mono');
     }, [onClearColors]);
 
     // ── MSA interaction callbacks ──

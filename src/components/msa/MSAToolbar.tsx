@@ -5,26 +5,63 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { RotateCcw, HelpCircle } from 'lucide-react';
 
+// These are duplicated from @nightingale-elements/nightingale-msa
+// (src/colorschemes/substitution/palettes.ts). A static top-level import from that
+// package pulls in the NightingaleMSA web component, whose class extends HTMLElement
+// at module scope — which blows up during Next.js SSR (ReferenceError: HTMLElement
+// is not defined). These values are pure data; keeping them local means the toolbar
+// can render on the server without loading the custom-element module.
+// The nightingale-msa web component itself is still loaded lazily on the client via
+// useNightingaleComponents → await import(...).
+type Category = 'gap' | 'consensus' | 'ambiguous' | 'common' | 'conservative' | 'radical';
+type Palette = Record<Category, string>;
+
+const PALETTE_SALIENCE: Palette = {
+  gap:          '#ffffff',
+  consensus:    '#f0f0f0',
+  ambiguous:    '#cdc4b4',
+  common:       '#e8c87a',
+  conservative: '#e09850',
+  radical:      '#c8553a',
+};
+
+const PALETTE_BW: Palette = {
+  gap:          '#ffffff',
+  consensus:    '#000000',
+  common:       '#9ca3af',
+  conservative: '#9ca3af',
+  radical:      '#ffffff',
+  ambiguous:    '#ffffff',
+};
+
+const LEGEND_ORDER: Array<{ category: Category; label: string; desc: string }> = [
+  { category: 'consensus',    label: 'Consensus',    desc: 'Matches the most frequent residue in the column' },
+  { category: 'ambiguous',    label: 'Ambiguous',    desc: 'No residue exceeds 40% frequency -- column is too diverse' },
+  { category: 'common',       label: 'Common sub.',  desc: 'Differs from consensus but itself is frequent (>30%)' },
+  { category: 'conservative', label: 'Conservative', desc: 'Rare substitution, same biochemical group (similar chemistry)' },
+  { category: 'radical',      label: 'Radical',      desc: 'Rare substitution across biochemical groups (different chemistry)' },
+];
+
 const BUILTIN_SCHEMES = [
-  { id: 'substitution', name: 'Substitution Salience' },
-  { id: 'conservation', name: 'Conservation' },
-  { id: 'clustal2', name: 'Clustal' },
-  { id: 'zappo', name: 'Zappo' },
-  { id: 'taylor', name: 'Taylor' },
-  { id: 'hydro', name: 'Hydrophobicity' },
-  { id: 'buried', name: 'Buried' },
-  { id: 'cinema', name: 'Cinema' },
-  { id: 'helix', name: 'Helix Propensity' },
-  { id: 'strand', name: 'Strand Propensity' },
+  { id: 'substitution',   name: 'Substitution Salience' },
+  { id: 'salience-mono',  name: 'Salience (mono)' },
+  { id: 'conservation',   name: 'Conservation' },
+  { id: 'clustal2',       name: 'Clustal' },
+  { id: 'zappo',          name: 'Zappo' },
+  { id: 'taylor',         name: 'Taylor' },
+  { id: 'hydro',          name: 'Hydrophobicity' },
+  { id: 'buried',         name: 'Buried' },
+  { id: 'cinema',         name: 'Cinema' },
+  { id: 'helix',          name: 'Helix Propensity' },
+  { id: 'strand',         name: 'Strand Propensity' },
 ] as const;
 
-const SUBSTITUTION_LEGEND = [
-  { color: '#f0f0f0', label: 'Consensus', desc: 'Matches the most frequent residue in the column' },
-  { color: '#cdc4b4', label: 'Ambiguous', desc: 'No residue exceeds 40% frequency -- column is too diverse' },
-  { color: '#e8c87a', label: 'Common sub.', desc: 'Differs from consensus but itself is frequent (>30%)' },
-  { color: '#e09850', label: 'Conservative', desc: 'Rare substitution, same biochemical group (similar chemistry)' },
-  { color: '#c8553a', label: 'Radical', desc: 'Rare substitution across biochemical groups (different chemistry)' },
-];
+const SALIENCE_SCHEMES = new Set(['substitution', 'salience-mono']);
+
+const SCHEME_LABELS: Record<string, string> = {
+  'substitution':  'Substitution Salience',
+  'salience-mono': 'Salience (mono)',
+};
 
 interface MSAToolbarProps {
   currentScheme  : string;
@@ -68,7 +105,9 @@ export function MSAToolbar({
     }
   }, [showLegend]);
 
-  const isSubstitution = currentScheme === 'substitution';
+  const isSubstitution = SALIENCE_SCHEMES.has(currentScheme);
+  const activePalette = currentScheme === 'salience-mono' ? PALETTE_BW : PALETTE_SALIENCE;
+  const legendTitle = SCHEME_LABELS[currentScheme] ?? 'Substitution Salience';
 
   return (
     <div className={`flex items-center gap-3 ${compact ? 'text-xs' : 'text-sm'}`}>
@@ -103,13 +142,13 @@ export function MSAToolbar({
             onMouseEnter={() => setShowLegend(true)}
             onMouseLeave={() => setShowLegend(false)}
           >
-            <div className="font-medium text-gray-700 mb-2">Substitution Salience</div>
+            <div className="font-medium text-gray-700 mb-2">{legendTitle}</div>
             <div className="space-y-1.5">
-              {SUBSTITUTION_LEGEND.map(item => (
+              {LEGEND_ORDER.map(item => (
                 <div key={item.label} className="flex items-start gap-2">
                   <div
                     className="w-4 h-4 rounded border border-gray-300 flex-shrink-0 mt-0.5"
-                    style={{ backgroundColor: item.color }}
+                    style={{ backgroundColor: activePalette[item.category] }}
                   />
                   <div>
                     <span className="font-medium text-gray-700">{item.label}</span>

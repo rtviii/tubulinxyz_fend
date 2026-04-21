@@ -3,23 +3,14 @@
 import { useMemo, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { Modification } from '@/store/slices/annotationsSlice';
-
-export const MODIFICATION_COLORS: Record<string, string> = {
-  acetylation: '#6366f1',     // indigo
-  phosphorylation: '#0ea5e9', // sky
-  palmitoylation: '#f59e0b',  // amber
-  ubiquitination: '#ef4444',  // red
-  methylation: '#8b5cf6',     // violet
-  nitrosylation: '#14b8a6',   // teal
-  sumoylation: '#f97316',     // orange
-  glutamylation: '#22c55e',   // green
-  glycylation: '#06b6d4',     // cyan
-  tyrosination: '#ec4899',    // pink
-};
-
-function getModColor(type: string): string {
-  return MODIFICATION_COLORS[type] ?? '#9ca3af';
-}
+import { resolveModificationColor } from '@/lib/colors/annotationPaletteResolve';
+import { useAppDispatch, useAppSelector } from '@/store/store';
+import {
+  setModificationColorOverride,
+  clearModificationColorOverride,
+  selectModificationOverrides,
+} from '@/store/slices/colorOverridesSlice';
+import { ColorSwatchPicker } from '@/components/ui/ColorSwatchPicker';
 
 interface ModificationsPanelProps {
   modifications: Modification[];
@@ -33,6 +24,8 @@ export function ModificationsPanel({
   onToggleModificationType,
 }: ModificationsPanelProps) {
   const [expanded, setExpanded] = useState(true);
+  const dispatch = useAppDispatch();
+  const modificationOverrides = useAppSelector(selectModificationOverrides);
 
   // Group by modification type with counts
   const typeGroups = useMemo(() => {
@@ -66,8 +59,9 @@ export function ModificationsPanel({
       {expanded && (
         <div className="border border-gray-100 rounded bg-white">
           {typeGroups.map(([modType, count]) => {
-            const color = getModColor(modType);
+            const color = resolveModificationColor(modificationOverrides, modType);
             const isVisible = visibleSet.has(modType);
+            const isOverridden = Boolean(modificationOverrides[modType]);
             return (
               <label
                 key={modType}
@@ -80,10 +74,18 @@ export function ModificationsPanel({
                   className="w-3 h-3 rounded accent-current"
                   style={{ accentColor: color }}
                 />
-                <span
-                  className="w-2 h-2 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: color }}
-                />
+                <ColorSwatchPicker
+                  color={color}
+                  isOverridden={isOverridden}
+                  onChange={(hex) => dispatch(setModificationColorOverride({ key: modType, color: hex }))}
+                  onReset={() => dispatch(clearModificationColorOverride(modType))}
+                  title={`Color for ${modType}`}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: color }}
+                  />
+                </ColorSwatchPicker>
                 <span className="text-[10px] text-gray-600 flex-1">
                   {modType.charAt(0).toUpperCase() + modType.slice(1)}
                 </span>

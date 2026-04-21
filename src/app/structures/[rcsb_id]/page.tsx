@@ -2,7 +2,8 @@
 
 import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { useAppSelector, useAppDispatch } from '@/store/store';
+import { useAppSelector, useAppDispatch, useAppStore } from '@/store/store';
+import { selectIsChainAligned } from '@/store/slices/sequence_registry';
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
 
 import { useStructureHoverSync } from '@/hooks/useStructureHoverSync';
@@ -24,6 +25,7 @@ import { createClassificationFromProfile } from '@/services/profile_service';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { StructureSidebar } from '@/components/structure/StructureSidebar';
 import { ViewerToolbar } from '@/components/structure/ViewerToolbar';
+import { MonomerToolbar } from '@/components/structure/MonomerToolbar';
 import { MonomerSidebar } from '@/components/monomer/MonomerSidebar';
 import { SequenceAlignmentPanel, type MSAContextMenuEvent } from '@/components/msa/SequenceAlignmentPanel';
 import { ResiduePopupLayer } from '@/components/residue_popup/ResiduePopup';
@@ -128,6 +130,7 @@ export default function StructureProfilePage() {
 
   const [displaySequenceIds, setDisplaySequenceIds] = useState<string[]>(fallbackVisibleIds);
   const [displaySequencesForSync, setDisplaySequencesForSync] = useState<import('@/store/slices/sequence_registry').MsaSequence[]>([]);
+  const [expandedChainKeys, setExpandedChainKeys] = useState<Set<string>>(() => new Set());
 
   // Keep fallback in sync when master/pdb data changes (before panel emits)
   useEffect(() => {
@@ -174,6 +177,7 @@ export default function StructureProfilePage() {
     visibleSequenceIds: displaySequenceIds,
     displaySequences: displaySequencesForSync,
     chainRowMap: chainRowMapRef.current,
+    expandedChainKeys,
     onMolstarResidueSelect: handleMolstarResidueSelect,
   });
 
@@ -183,6 +187,7 @@ export default function StructureProfilePage() {
 
   // ── Direct alignment from popup "+" buttons ──
   const { alignChainFromProfile } = useChainAlignment();
+  const store = useAppStore();
   const handleDirectAlign = useCallback(async (pdbId: string, entityOrChainId: string) => {
     if (!instance || !activeChainId) return;
     const masterLen = masterData?.alignment_length ?? 0;
@@ -205,6 +210,12 @@ export default function StructureProfilePage() {
         authAsymId = polyInstance.auth_asym_id;
       }
 
+      // Block duplicates: is this chain already aligned into the viewer?
+      if (selectIsChainAligned(store.getState(), pdbId, authAsymId)) {
+        alert(`${pdbId}:${authAsymId} is already loaded in the view.`);
+        return;
+      }
+
       const ok = await instance.loadAlignedStructure(activeChainId, pdbId, authAsymId, family);
       if (!ok) return;
 
@@ -215,7 +226,7 @@ export default function StructureProfilePage() {
       }
     } catch { /* profile fetch failed */ }
     finally { result.unsubscribe(); }
-  }, [instance, activeChainId, activeFamily, masterData, dispatch, alignChainFromProfile]);
+  }, [instance, activeChainId, activeFamily, masterData, dispatch, alignChainFromProfile, store]);
 
   // ── Residue popups (multi-popup, unified for MSA + Molstar) ──
   const [popups, setPopups] = useState<ResiduePopupTarget[]>([]);
@@ -567,17 +578,30 @@ export default function StructureProfilePage() {
       </div>
 
       {/* ── Floating toolbar (centered in viewer area) ── */}
-      {!isLoading && isInitialized && !isMonomerView && (
+      {!isLoading && isInitialized && (
         <div
           className="absolute top-3 z-20 pointer-events-auto flex justify-center"
           style={{ left: sidebarWidth + 12, right: 0 }}
         >
-          <ViewerToolbar
-            instanceId="structure"
-            instance={instance}
-            loadedStructure={loadedStructure}
-            profile={profile}
-          />
+          {isMonomerView ? (
+            <MonomerToolbar
+              instanceId="structure"
+              instance={instance}
+              loadedStructure={loadedStructure}
+              profile={profile}
+              activeChainId={activeChainId}
+            />
+          ) : (
+            <ViewerToolbar
+              instanceId="structure"
+              instance={instance}
+              loadedStructure={loadedStructure}
+              profile={profile}
+              defaultMonomerChainId={
+                structureSequenceChainId ?? polymerComponents[0]?.chainId ?? null
+              }
+            />
+          )}
         </div>
       )}
 
@@ -631,6 +655,7 @@ export default function StructureProfilePage() {
                   onWindowMaskClear={clearWindowMask}
                   onResidueContextMenu={handleMSAContextMenu}
                   onDisplaySequencesChange={handleDisplaySequencesChange}
+                  onExpandedChainKeysChange={setExpandedChainKeys}
                   onAddAlignment={isMonomerView ? handleOpenAlignDialog : undefined}
                 />
               )}
