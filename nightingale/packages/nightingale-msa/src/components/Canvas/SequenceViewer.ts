@@ -191,7 +191,6 @@ class SequenceViewerComponent extends DraggingComponent {
       this.fullHeight = this.tileHeight * (this.sequences?.length || 0);
     }
     if (changedProperties.has("colorScheme")) {
-      console.log('[SequenceViewer] colorScheme changed to:', this.colorScheme, 'conservation in props:', !!this.props.conservation);
       this.colorSchemeManager = new ColorScheme(this.colorScheme);
       if (this.props.conservation) {
         this.colorSchemeManager.updateConservation(this.props.conservation);

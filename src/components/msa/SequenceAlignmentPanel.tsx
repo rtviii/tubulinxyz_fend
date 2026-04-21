@@ -148,8 +148,9 @@ function buildAuxiliarySequences(
 }
 
 /** Build top-level modification tracks from the primary chain's annotation data.
- *  One row per modification type present in the data, independent of visibility flags
- *  (visibility only gates coloring, not row presence). */
+ *  PTM rows are opt-in via the top-right "Modifications" control panel: only types
+ *  present in visibility.visibleModificationTypes become rows. This differs from
+ *  variants/ligands, which materialize on parent expand. */
 function buildModificationSequences(
   primary: MsaSequence,
   annotationEntry: ChainAnnotationEntry | null,
@@ -159,23 +160,11 @@ function buildModificationSequences(
 
   const gapSequence = ' '.repeat(maxLength);
   const tracks: MsaSequence[] = [];
-  const { data } = annotationEntry;
+  const { data, visibility } = annotationEntry;
 
-  // Unique modification types found in the data (preserve first-seen order)
-  const seen = new Set<string>();
-  const orderedTypes: string[] = [];
-  for (const m of data.modifications) {
-    if (!seen.has(m.modificationType)) {
-      seen.add(m.modificationType);
-      orderedTypes.push(m.modificationType);
-    }
-  }
-
-  for (const modType of orderedTypes) {
-    const count = data.modifications.reduce(
-      (n, m) => (m.modificationType === modType ? n + 1 : n),
-      0,
-    );
+  for (const modType of visibility.visibleModificationTypes ?? []) {
+    const modsOfType = data.modifications.filter(m => m.modificationType === modType);
+    if (modsOfType.length === 0) continue;
     tracks.push({
       id: `aux__${primary.id}__ptm__${modType}`,
       name: modType,
@@ -185,7 +174,7 @@ function buildModificationSequences(
       family: primary.family,
       parentSequenceId: primary.id,
       layerType: toLayerType({ kind: 'ptm', id: modType }),
-      layerLabel: `${modType.charAt(0).toUpperCase() + modType.slice(1)} (${count})`,
+      layerLabel: `${modType.charAt(0).toUpperCase() + modType.slice(1)} (${modsOfType.length})`,
     });
   }
 
@@ -440,25 +429,38 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       onExpandedChainKeysChange(expandedChainKeys);
     }, [expandedSequences, pdbSequences]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // ── Visibility for aligned structures ──
+    // ── Primary chain visibility (driven by Molstar component state in Redux) ──
+    const primaryVisible = useAppSelector(state => {
+      if (!chainId) return true;
+      return state.molstarInstances.instances.structure.componentStates[chainId]?.visible ?? true;
+    });
+
+    // ── Visibility for primary + aligned chains ──
     const visibleChainKeys = useMemo(() => {
       const set = new Set<string>();
-      if (pdbId && chainId) set.add(makeChainKey(pdbId, chainId));
+      if (pdbId && chainId && primaryVisible) set.add(makeChainKey(pdbId, chainId));
       for (const a of alignedStructures) {
         if (a.visible) set.add(makeChainKey(a.sourcePdbId, a.sourceChainId));
       }
       return set;
-    }, [pdbId, chainId, alignedStructures]);
+    }, [pdbId, chainId, primaryVisible, alignedStructures]);
 
     const handleToggleChainVisibility = useCallback((chainKey: string) => {
       if (!instance) return;
+      // Aligned chains toggle via the aligned-structure visibility API.
       for (const a of alignedStructures) {
         if (makeChainKey(a.sourcePdbId, a.sourceChainId) === chainKey) {
           instance.setAlignedStructureVisible(a.targetChainId, a.id, !a.visible);
           return;
         }
       }
-    }, [instance, alignedStructures]);
+      // Primary chain toggles via the component visibility API. Redux state is updated
+      // synchronously by setChainVisibility, so `primaryVisible` (and `visibleChainKeys`)
+      // re-derive on next render.
+      if (pdbId && chainId && makeChainKey(pdbId, chainId) === chainKey) {
+        instance.setChainVisibility(chainId, !primaryVisible);
+      }
+    }, [instance, alignedStructures, pdbId, chainId, primaryVisible]);
 
     const handleSoloChain = useCallback((soloChainKey: string) => {
       if (!instance) return;

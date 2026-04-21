@@ -97,6 +97,8 @@ export function MSALabels({
   rowHeight,
   scrollTop,
   onWidthCalculated,
+  visibleChainKeys,
+  onToggleChainVisibility,
   expandedSequences,
   onToggleExpand,
   onAddAlignment,
@@ -263,6 +265,10 @@ export function MSALabels({
 
           // ── Primary sequence label (master, pdb, etc.) ──
           const parsed = parseLabel(seq);
+          const isChainVisible = isPdb && ck
+            ? (visibleChainKeys ? visibleChainKeys.has(ck) : true)
+            : true;
+          const VisEyeIcon = isChainVisible ? Eye : EyeOff;
 
           return (
             <div
@@ -283,7 +289,9 @@ export function MSALabels({
                 }
                 ${isPdb && !isSelected && !isHovered ? 'hover:bg-gray-100' : ''}
                 ${isLastMaster ? 'border-b-[3px] border-gray-400' : ''}
+                ${isPdb && !isFirstPdb ? 'border-t border-gray-300' : ''}
                 ${isFirstPdb ? 'font-semibold' : ''}
+                ${isPdb && !isChainVisible ? 'opacity-40' : ''}
               `}
               style={{
                 height: rowHeight,
@@ -301,6 +309,15 @@ export function MSALabels({
                     ? <ChevronDown size={10} />
                     : <ChevronRight size={10} />
                   }
+                </button>
+              ) : null}
+              {isPdb && ck && onToggleChainVisibility ? (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onToggleChainVisibility(ck); }}
+                  className={`flex-shrink-0 p-0 ${isChainVisible ? 'text-gray-400 hover:text-gray-700' : 'text-gray-300 hover:text-gray-500'}`}
+                  title={isChainVisible ? 'Hide chain in 3D view' : 'Show chain in 3D view'}
+                >
+                  <VisEyeIcon size={10} />
                 </button>
               ) : null}
               {parsed.family && (

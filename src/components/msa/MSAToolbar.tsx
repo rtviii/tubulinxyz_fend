@@ -4,11 +4,43 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { RotateCcw, HelpCircle } from 'lucide-react';
-import {
-  PALETTE_SALIENCE,
-  PALETTE_BW,
-  LEGEND_ORDER,
-} from '@nightingale-elements/nightingale-msa';
+
+// These are duplicated from @nightingale-elements/nightingale-msa
+// (src/colorschemes/substitution/palettes.ts). A static top-level import from that
+// package pulls in the NightingaleMSA web component, whose class extends HTMLElement
+// at module scope — which blows up during Next.js SSR (ReferenceError: HTMLElement
+// is not defined). These values are pure data; keeping them local means the toolbar
+// can render on the server without loading the custom-element module.
+// The nightingale-msa web component itself is still loaded lazily on the client via
+// useNightingaleComponents → await import(...).
+type Category = 'gap' | 'consensus' | 'ambiguous' | 'common' | 'conservative' | 'radical';
+type Palette = Record<Category, string>;
+
+const PALETTE_SALIENCE: Palette = {
+  gap:          '#ffffff',
+  consensus:    '#f0f0f0',
+  ambiguous:    '#cdc4b4',
+  common:       '#e8c87a',
+  conservative: '#e09850',
+  radical:      '#c8553a',
+};
+
+const PALETTE_BW: Palette = {
+  gap:          '#ffffff',
+  consensus:    '#000000',
+  common:       '#9ca3af',
+  conservative: '#9ca3af',
+  radical:      '#ffffff',
+  ambiguous:    '#ffffff',
+};
+
+const LEGEND_ORDER: Array<{ category: Category; label: string; desc: string }> = [
+  { category: 'consensus',    label: 'Consensus',    desc: 'Matches the most frequent residue in the column' },
+  { category: 'ambiguous',    label: 'Ambiguous',    desc: 'No residue exceeds 40% frequency -- column is too diverse' },
+  { category: 'common',       label: 'Common sub.',  desc: 'Differs from consensus but itself is frequent (>30%)' },
+  { category: 'conservative', label: 'Conservative', desc: 'Rare substitution, same biochemical group (similar chemistry)' },
+  { category: 'radical',      label: 'Radical',      desc: 'Rare substitution across biochemical groups (different chemistry)' },
+];
 
 const BUILTIN_SCHEMES = [
   { id: 'substitution',   name: 'Substitution Salience' },

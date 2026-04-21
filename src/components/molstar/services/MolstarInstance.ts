@@ -375,6 +375,25 @@ private componentLabelText(key: string, component: Component): string {
     const components = this.findHierarchyComponentsForRef(aligned.chainComponentRef);
     if (components.length === 0) return;
 
+    // Always clear existing overpaint first. Without this, sequential toggles can
+    // leave stale paint from a prior set of residues that aren't in the current
+    // colorings, and the MSA/3D go out of sync. This makes the call idempotent:
+    // empty colorings == fully cleared (ghost) aligned chain.
+    try {
+      await setStructureOverpaint(
+        plugin, components, -1 as any,
+        async (structure) => Structure.toStructureElementLoci(structure)
+      );
+      await setStructureTransparency(
+        plugin, components, 0.75,
+        async (structure) => Structure.toStructureElementLoci(structure)
+      );
+    } catch (err) {
+      console.error(`[${this.id}] Failed to clear aligned ${alignedStructureId} overpaint:`, err);
+    }
+
+    if (colorings.length === 0) return;
+
     // Group by color for batch application
     const colorGroups = new Map<number, number[]>();
     for (const c of colorings) {
@@ -958,10 +977,15 @@ const color = getMolstarGhostColor(family);
           .commit();
       }
 
-      // Ghost style: family-colored, semi-transparent
+      // Ghost style: family-colored, semi-transparent.
+      // typeParams.ignoreLight matches the primary representation (see preset_structure.tsx)
+      // so the aligned chain renders with the same flat/matte look — without it the aligned
+      // cartoon picks up Molstar's default lit material and shows specular highlights the
+      // primary doesn't have.
       const ghostColor = getMolstarGhostColor(family);
       await plugin.builders.structure.representation.addRepresentation(chainComponent, {
         type: 'cartoon',
+        typeParams: { ignoreLight: true },
         color: 'uniform',
         colorParams: { value: ghostColor },
       });
@@ -1521,9 +1545,15 @@ const color = getMolstarGhostColor(family);
     const shouldReallyShow =
       visible && this.viewMode === 'monomer' && this.activeMonomerChainId === targetChainId;
 
-    // Hide the entire structure subtree (parent), not just the chain component.
-    // This prevents ghost contours from the parent structure node leaking through.
+    // Toggle BOTH the parent structure subtree and the chain-component subtree.
+    // Setting one alone has proven fragile when Molstar's state tree re-normalizes
+    // during overpaint/transparency rebuilds: a stale parentRef silently no-ops
+    // (and the structure stays visible), or a rebuild clears isHidden on the
+    // component while the parent's flag is intact. Toggling both refs makes the
+    // hide/show idempotent regardless of which part of the subtree a later Molstar
+    // rebuild touches. Shown visibility = AND of all gates, hidden = any gate off.
     this.viewer.setSubtreeVisibility(aligned.parentRef, shouldReallyShow);
+    this.viewer.setSubtreeVisibility(aligned.chainComponentRef, shouldReallyShow);
 
     this.dispatch(
       setAlignedStructureVisibility({ instanceId: this.id, targetChainId, alignedStructureId, visible })

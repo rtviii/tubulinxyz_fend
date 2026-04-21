@@ -93,9 +93,6 @@ class CanvasTilingGridComponent {
     if (text !== undefined) {
       const cellKey = `${row}-${column}`;
       const cellOverride = this.props.cellColors?.[cellKey];
-      if (cellOverride) {
-        console.log('[TilingGrid] cell override hit:', cellKey, cellOverride);
-      }
 
       const colorSchemeName = cellOverride ?? this.props.colorScheme.getColor(text, column, row);
       const overlayFactor = cellOverride ? 1 : this.getOverlayFactor(text, column);
