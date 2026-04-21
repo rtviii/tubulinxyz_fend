@@ -25,6 +25,7 @@ import { createClassificationFromProfile } from '@/services/profile_service';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { StructureSidebar } from '@/components/structure/StructureSidebar';
 import { ViewerToolbar } from '@/components/structure/ViewerToolbar';
+import { MonomerToolbar } from '@/components/structure/MonomerToolbar';
 import { MonomerSidebar } from '@/components/monomer/MonomerSidebar';
 import { SequenceAlignmentPanel, type MSAContextMenuEvent } from '@/components/msa/SequenceAlignmentPanel';
 import { ResiduePopupLayer } from '@/components/residue_popup/ResiduePopup';
@@ -577,17 +578,30 @@ export default function StructureProfilePage() {
       </div>
 
       {/* ── Floating toolbar (centered in viewer area) ── */}
-      {!isLoading && isInitialized && !isMonomerView && (
+      {!isLoading && isInitialized && (
         <div
           className="absolute top-3 z-20 pointer-events-auto flex justify-center"
           style={{ left: sidebarWidth + 12, right: 0 }}
         >
-          <ViewerToolbar
-            instanceId="structure"
-            instance={instance}
-            loadedStructure={loadedStructure}
-            profile={profile}
-          />
+          {isMonomerView ? (
+            <MonomerToolbar
+              instanceId="structure"
+              instance={instance}
+              loadedStructure={loadedStructure}
+              profile={profile}
+              activeChainId={activeChainId}
+            />
+          ) : (
+            <ViewerToolbar
+              instanceId="structure"
+              instance={instance}
+              loadedStructure={loadedStructure}
+              profile={profile}
+              defaultMonomerChainId={
+                structureSequenceChainId ?? polymerComponents[0]?.chainId ?? null
+              }
+            />
+          )}
         </div>
       )}
 

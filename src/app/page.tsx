@@ -2,12 +2,12 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { Home, LayoutGrid, Mail, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
 import LandingViewer from '@/app/landing/LandingViewer';
 import { useExistingInstance } from '@/components/molstar/services/MolstarInstanceManager';
 import { LANDING_DEMOS, DEMO_CATEGORY_LABELS, type DemoCategory, type DemoResult } from '@/app/landing/demos';
 import { DemoExplanationCard, type DemoExplanation } from '@/app/landing/DemoExplanationCard';
+import { AppPill, PillDivider, PillSection, PillNavLink, PillAnchor } from '@/components/ui/AppPill';
 
 const STRUCTURES = [
   {
@@ -116,16 +116,41 @@ export default function Page() {
         </p>
       </header>
 
-      {/* ---- Toolbar row: controls | assistant | nav ---- */}
-      <div className="max-w-[1400px] w-full mx-auto px-6 pb-4 flex items-center gap-3 relative z-20">
-        {/* Controls: pause + demos dropdown */}
-        <div className="flex items-center gap-0 rounded-full border border-slate-200/60
-                        bg-white/80 backdrop-blur shadow-sm px-1 py-0.5 text-[11px]">
+      {/* ---- Unified pill: nav | assistant | tools ---- */}
+      <div className="max-w-[1400px] w-full mx-auto px-6 pb-4 relative z-20">
+        <AppPill>
+          {/* ── Left: nav ── */}
+          <PillNavLink href="/" icon={Home} title="Home" active />
+          <PillNavLink href="/structures" icon={LayoutGrid} label="See All Structures" title="Browse tubulin structure catalogue" />
+
+          <PillDivider />
+
+          {/* ── Center: AI assistant placeholder ── */}
+          <PillSection stretch className="px-1">
+            <div className="flex-1 min-w-0 relative">
+              <input
+                disabled
+                placeholder="Ask about structures, binding sites, ligands, mutations..."
+                className="w-full h-7 rounded-full border border-slate-200/60 bg-white/60
+                           px-3 pr-20 text-[11px]
+                           text-slate-400 placeholder:text-slate-400"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-slate-300
+                               tracking-wider font-medium uppercase">
+                coming soon
+              </span>
+            </div>
+          </PillSection>
+
+          <PillDivider />
+
+          {/* ── Right: tools (spin · explore · feedback) ── */}
           <button
             onClick={() => setSpinning(v => !v)}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full font-medium transition-colors
                        text-slate-500 hover:text-slate-700 hover:bg-slate-50"
             title={spinning ? 'Pause rotation' : 'Resume rotation'}
+            type="button"
           >
             {spinning ? (
               <svg width="11" height="11" viewBox="0 0 14 14" fill="currentColor">
@@ -140,8 +165,6 @@ export default function Page() {
             {spinning ? 'Pause' : 'Spin'}
           </button>
 
-          <div className="w-px h-4 bg-slate-200 mx-0.5" />
-
           {/* Demos dropdown */}
           <div className="relative" ref={demoRef}>
             <button
@@ -151,13 +174,14 @@ export default function Page() {
                   ? 'bg-slate-100 text-slate-700'
                   : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                 }`}
+              type="button"
             >
               Explore
               <ChevronDown size={11} className={`transition-transform ${demoOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {demoOpen && (
-              <div className="absolute top-full left-0 mt-1.5 w-56 rounded-lg border border-slate-200
+              <div className="absolute top-full right-0 mt-1.5 w-56 rounded-lg border border-slate-200
                               bg-white shadow-lg z-50 py-1 text-[11px]">
                 {(Object.entries(DEMOS_BY_CATEGORY) as [DemoCategory, typeof LANDING_DEMOS][]).map(
                   ([category, demos]) => (
@@ -185,49 +209,15 @@ export default function Page() {
               </div>
             )}
           </div>
-        </div>
 
-        {/* Assistant search bar (center) */}
-        <div className="flex-1 max-w-md mx-auto relative">
-          <input
-            disabled
-            placeholder="Ask about structures, binding sites, ligands, mutations..."
-            className="w-full h-8 rounded-full border border-slate-200/60 bg-white/80 backdrop-blur
-                       shadow-sm px-4 pr-24 text-[11px]
-                       text-slate-400 placeholder:text-slate-400"
-          />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-slate-300
-                           tracking-wider font-medium uppercase">
-            coming soon
-          </span>
-        </div>
+          <PillDivider />
 
-        {/* Navigation pill (ViewerToolbar style) */}
-        <div className="flex items-center gap-0 rounded-full border border-slate-200/60
-                        bg-white/80 backdrop-blur shadow-sm px-1 py-0.5 text-[11px]">
-          <Link
-            href="/"
-            className="p-1.5 rounded-full text-slate-600 hover:text-slate-800 transition-colors"
-            title="Home"
-          >
-            <Home size={13} />
-          </Link>
-          <Link
-            href="/structures"
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 transition-colors"
-            title="Structures"
-          >
-            <LayoutGrid size={13} />
-          </Link>
-          <div className="w-px h-4 bg-slate-200" />
-          <a
+          <PillAnchor
             href="mailto:feedback@tube.xyz?subject=tube.xyz%20feedback"
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 transition-colors"
+            icon={Mail}
             title="Send feedback"
-          >
-            <Mail size={13} />
-          </a>
-        </div>
+          />
+        </AppPill>
       </div>
 
       {/* ---- Viewers ---- */}
