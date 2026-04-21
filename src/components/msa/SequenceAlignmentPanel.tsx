@@ -90,6 +90,8 @@ interface SequenceAlignmentPanelProps {
   onResidueContextMenu?: (event: MSAContextMenuEvent) => void;
   /** Emits the full display sequence list (including auxiliaries) for correct color rule row indexing */
   onDisplaySequencesChange?: (seqs: MsaSequence[]) => void;
+  /** Emits the set of chain keys whose parent PDB row is currently expanded (aux rows showing). */
+  onExpandedChainKeysChange?: (keys: Set<string>) => void;
   onAddAlignment?: () => void;
 }
 
@@ -97,7 +99,9 @@ interface SequenceAlignmentPanelProps {
 // Auxiliary Track Helpers
 // ────────────────────────────────────────────
 
-/** Build auxiliary MsaSequence rows (variants + ligands only -- modifications are top-level). */
+/** Build auxiliary MsaSequence rows (variants + ligands only -- modifications are top-level).
+ *  Rows are materialized based on data availability, independent of visibility flags.
+ *  Visibility flags now only gate *coloring* of these rows, not their presence. */
 function buildAuxiliarySequences(
   primary: MsaSequence,
   annotationEntry: ChainAnnotationEntry | null,
@@ -107,11 +111,11 @@ function buildAuxiliarySequences(
 
   const gapSequence = ' '.repeat(maxLength);
   const auxiliaries: MsaSequence[] = [];
-  const { data, visibility } = annotationEntry;
+  const { data } = annotationEntry;
 
   // Structural variants layer
   const structuralVariants = data.variants.filter(v => v.source !== 'morisette');
-  if (structuralVariants.length > 0 && visibility.showVariants) {
+  if (structuralVariants.length > 0) {
     auxiliaries.push({
       id: `aux__${primary.id}__variants`,
       name: `variants`,
@@ -125,9 +129,8 @@ function buildAuxiliarySequences(
     });
   }
 
-  // One layer per visible ligand
+  // One row per ligand site that exists in the data
   for (const site of data.ligandSites) {
-    if (!visibility.visibleLigandIds.includes(site.id)) continue;
     auxiliaries.push({
       id: `aux__${primary.id}__ligand__${site.id}`,
       name: site.ligandId,
@@ -144,7 +147,9 @@ function buildAuxiliarySequences(
   return auxiliaries;
 }
 
-/** Build top-level modification tracks from the primary chain's annotation data. */
+/** Build top-level modification tracks from the primary chain's annotation data.
+ *  One row per modification type present in the data, independent of visibility flags
+ *  (visibility only gates coloring, not row presence). */
 function buildModificationSequences(
   primary: MsaSequence,
   annotationEntry: ChainAnnotationEntry | null,
@@ -154,11 +159,23 @@ function buildModificationSequences(
 
   const gapSequence = ' '.repeat(maxLength);
   const tracks: MsaSequence[] = [];
-  const { data, visibility } = annotationEntry;
+  const { data } = annotationEntry;
 
-  for (const modType of visibility.visibleModificationTypes ?? []) {
-    const modsOfType = data.modifications.filter(m => m.modificationType === modType);
-    if (modsOfType.length === 0) continue;
+  // Unique modification types found in the data (preserve first-seen order)
+  const seen = new Set<string>();
+  const orderedTypes: string[] = [];
+  for (const m of data.modifications) {
+    if (!seen.has(m.modificationType)) {
+      seen.add(m.modificationType);
+      orderedTypes.push(m.modificationType);
+    }
+  }
+
+  for (const modType of orderedTypes) {
+    const count = data.modifications.reduce(
+      (n, m) => (m.modificationType === modType ? n + 1 : n),
+      0,
+    );
     tracks.push({
       id: `aux__${primary.id}__ptm__${modType}`,
       name: modType,
@@ -168,7 +185,7 @@ function buildModificationSequences(
       family: primary.family,
       parentSequenceId: primary.id,
       layerType: toLayerType({ kind: 'ptm', id: modType }),
-      layerLabel: `${modType.charAt(0).toUpperCase() + modType.slice(1)} (${modsOfType.length})`,
+      layerLabel: `${modType.charAt(0).toUpperCase() + modType.slice(1)} (${count})`,
     });
   }
 
@@ -270,6 +287,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       onWindowMaskClear,
       onResidueContextMenu,
       onDisplaySequencesChange,
+      onExpandedChainKeysChange,
       onAddAlignment,
     } = props;
 
@@ -364,7 +382,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
     }, [allSequences, family]);
 
     // ── Local UI state ──
-    const [colorScheme, setColorScheme] = useState('substitution');
+    const [colorScheme, setColorScheme] = useState('salience-mono');
     const [showMasters, setShowMasters] = useState(true);
     const [inRangeOnly, setInRangeOnly] = useState(false);
     const currentRangeRef = useRef<[number, number] | null>(null);
@@ -408,6 +426,19 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
     useEffect(() => {
       onDisplaySequencesChange?.(displaySequences);
     }, [displaySequences]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Emit the set of chain keys whose parent PDB row is expanded.
+    // For pdb sequences the seq.id IS the chain key, so the expanded set maps 1:1 to chain keys
+    // for any entry that is present in pdbSequences.
+    useEffect(() => {
+      if (!onExpandedChainKeysChange) return;
+      const pdbIds = new Set(pdbSequences.map(s => s.id));
+      const expandedChainKeys = new Set<string>();
+      for (const id of expandedSequences) {
+        if (pdbIds.has(id)) expandedChainKeys.add(id);
+      }
+      onExpandedChainKeysChange(expandedChainKeys);
+    }, [expandedSequences, pdbSequences]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Visibility for aligned structures ──
     const visibleChainKeys = useMemo(() => {
@@ -476,8 +507,8 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
 
     const handleReset = useCallback(() => {
       onClearColors?.();
-      setColorScheme('substitution');
-      msaRef.current?.setColorScheme('substitution');
+      setColorScheme('salience-mono');
+      msaRef.current?.setColorScheme('salience-mono');
     }, [onClearColors]);
 
     // ── MSA interaction callbacks ──

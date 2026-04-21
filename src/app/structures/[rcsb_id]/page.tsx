@@ -129,6 +129,7 @@ export default function StructureProfilePage() {
 
   const [displaySequenceIds, setDisplaySequenceIds] = useState<string[]>(fallbackVisibleIds);
   const [displaySequencesForSync, setDisplaySequencesForSync] = useState<import('@/store/slices/sequence_registry').MsaSequence[]>([]);
+  const [expandedChainKeys, setExpandedChainKeys] = useState<Set<string>>(() => new Set());
 
   // Keep fallback in sync when master/pdb data changes (before panel emits)
   useEffect(() => {
@@ -175,6 +176,7 @@ export default function StructureProfilePage() {
     visibleSequenceIds: displaySequenceIds,
     displaySequences: displaySequencesForSync,
     chainRowMap: chainRowMapRef.current,
+    expandedChainKeys,
     onMolstarResidueSelect: handleMolstarResidueSelect,
   });
 
@@ -639,6 +641,7 @@ export default function StructureProfilePage() {
                   onWindowMaskClear={clearWindowMask}
                   onResidueContextMenu={handleMSAContextMenu}
                   onDisplaySequencesChange={handleDisplaySequencesChange}
+                  onExpandedChainKeysChange={setExpandedChainKeys}
                   onAddAlignment={isMonomerView ? handleOpenAlignDialog : undefined}
                 />
               )}

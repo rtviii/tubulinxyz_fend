@@ -23,13 +23,18 @@ interface UseViewerSyncOptions {
     displaySequences?: Array<Pick<MsaSequence, 'id' | 'originType' | 'parentSequenceId' | 'layerType'>>;
     /** Maps auth_asym_id -> { chainKey, displayRow } for all structural chains in the MSA */
     chainRowMap?: Record<string, { chainKey: string; displayRow: number }>;
+    /** Chain keys whose parent PDB row is expanded in the MSA. When expanded, the
+     *  annotation overpaint is dropped from the principal row in the MSA so that the
+     *  mono base colorscheme shows through; the aux rows below carry the colors.
+     *  Molstar 3D overpaint is unaffected. */
+    expandedChainKeys?: Set<string>;
     /** Called when a Molstar click selects a residue (single click) */
     onMolstarResidueSelect?: (chainKey: string, masterIdx: number, authSeqId: number) => void;
 }
 
 const selectRulesForVisible = makeSelectActiveColorRulesForSequenceIds();
 
-export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequenceIds, displaySequences, chainRowMap, onMolstarResidueSelect }: UseViewerSyncOptions) {
+export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequenceIds, displaySequences, chainRowMap, expandedChainKeys, onMolstarResidueSelect }: UseViewerSyncOptions) {
     const dispatch = useAppDispatch();
     const colorRules = useAppSelector(state => selectRulesForVisible(state, visibleSequenceIds));
     const positionMapping = useAppSelector(state => selectPositionMapping(state, chainKey));
@@ -211,8 +216,12 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         if (msaRef.current) {
             const cellColors: Record<string, string> = {};
 
-            // Primary row colors from color rules
+            // Primary row colors from color rules.
+            // When a chain's parent row is expanded in the MSA, skip painting its principal
+            // row -- the aux rows below carry the annotation colors, and the principal stays
+            // under the base mono colorscheme. Molstar 3D overpaint is unaffected (see below).
             for (const rule of colorRules) {
+                if (expandedChainKeys?.has(rule.chainKey)) continue;
                 for (const cell of rule.msaCells) {
                     cellColors[`${cell.row}-${cell.column}`] = rule.color;
                 }
@@ -240,7 +249,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
             if (colorSyncTimerRef.current) clearTimeout(colorSyncTimerRef.current);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [colorRules, molstarInstance, msaRef, chainKey, alignedIds, displaySequences, annotationChains]);
+    }, [colorRules, molstarInstance, msaRef, chainKey, alignedIds, displaySequences, annotationChains, expandedChainKeys]);
 
     // ============================================================
     // Click handlers

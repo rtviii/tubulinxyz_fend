@@ -5,7 +5,7 @@ import { authAsymIdFromChainKey } from '@/lib/chain_key';
 import type { MsaSequence } from './sequence_registry';
 import { VARIANT_COLORS, getHexForLigand } from '@/lib/colors/annotationPalette';
 import { parseLayerType } from '@/components/msa/auxiliary/layerKind';
-import { AUX_COLOR_PROVIDERS } from '@/components/msa/auxiliary/colorProviders';
+import { AUX_COLOR_PROVIDERS, isAuxLayerActive } from '@/components/msa/auxiliary/colorProviders';
 
 export interface ColorRule {
   id: string;
@@ -104,6 +104,10 @@ export function computeAuxiliaryCellColors(
 
     const entry = annotationChains[chainKey];
     if (!entry?.data) continue;
+
+    // Row is always materialized, but colors only paint when the layer is "active"
+    // (eye icon on). Inactive layers keep the row but leave its cells blank.
+    if (!isAuxLayerActive(desc, entry.visibility)) continue;
 
     for (const { masterIndex, color } of AUX_COLOR_PROVIDERS[desc.kind](desc, entry.data)) {
       cellColors[`${rowIdx}-${masterIndex - 1}`] = color;
