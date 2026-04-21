@@ -22,6 +22,24 @@ import {
 import { makeChainKey } from '@/lib/chain_key';
 import { parseLayerType } from './auxiliary/layerKind';
 import { isAuxLayerActive } from './auxiliary/colorProviders';
+import { ColorSwatchPicker } from '@/components/ui/ColorSwatchPicker';
+import {
+  resolveLigandColor,
+  resolveVariantColor,
+  resolveModificationColor,
+} from '@/lib/colors/annotationPaletteResolve';
+import {
+  setLigandColorOverride,
+  clearLigandColorOverride,
+  setVariantColorOverride,
+  clearVariantColorOverride,
+  setModificationColorOverride,
+  clearModificationColorOverride,
+  selectLigandOverrides,
+  selectVariantOverrides,
+  selectModificationOverrides,
+} from '@/store/slices/colorOverridesSlice';
+import type { VariantType } from '@/store/slices/annotationsSlice';
 
 interface MSALabelsProps {
   sequences: MsaSequence[];
@@ -108,6 +126,9 @@ export function MSALabels({
   const hoveredChainKey = useAppSelector(selectHoveredChainKey);
   const selectedChainKey = useAppSelector(selectSelectedChainKey);
   const annotationChains = useAppSelector(state => state.annotations.chains);
+  const ligandOverrides = useAppSelector(selectLigandOverrides);
+  const variantOverrides = useAppSelector(selectVariantOverrides);
+  const modificationOverrides = useAppSelector(selectModificationOverrides);
   const containerRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
 
@@ -215,6 +236,77 @@ export function MSALabels({
 
             const EyeIcon = layerActive ? Eye : EyeOff;
 
+            // Build a color swatch (or swatches) for the aux row based on layer kind.
+            // - ligand: one swatch keyed by ligandId (look up the site to resolve ligandId from site.id)
+            // - ptm:    one swatch keyed by modification type (desc.id)
+            // - variants: three tiny swatches for SUB/INS/DEL (one row contains all three types)
+            let swatches: React.ReactNode = null;
+            if (desc?.kind === 'ligand' && desc.id) {
+              const site = annotationChains[chainKey]?.data?.ligandSites.find(s => s.id === desc.id);
+              const ligandId = site?.ligandId;
+              if (ligandId) {
+                const color = resolveLigandColor(ligandOverrides, ligandId);
+                const isOverridden = Boolean(ligandOverrides[ligandId]);
+                swatches = (
+                  <ColorSwatchPicker
+                    color={color}
+                    isOverridden={isOverridden}
+                    onChange={(hex) => dispatch(setLigandColorOverride({ key: ligandId, color: hex }))}
+                    onReset={() => dispatch(clearLigandColorOverride(ligandId))}
+                    title={`Color for ${ligandId}`}
+                  >
+                    <span
+                      className="inline-block w-2 h-2 rounded-sm flex-shrink-0"
+                      style={{ backgroundColor: color }}
+                    />
+                  </ColorSwatchPicker>
+                );
+              }
+            } else if (desc?.kind === 'ptm' && desc.id) {
+              const color = resolveModificationColor(modificationOverrides, desc.id);
+              const isOverridden = Boolean(modificationOverrides[desc.id]);
+              const modType = desc.id;
+              swatches = (
+                <ColorSwatchPicker
+                  color={color}
+                  isOverridden={isOverridden}
+                  onChange={(hex) => dispatch(setModificationColorOverride({ key: modType, color: hex }))}
+                  onReset={() => dispatch(clearModificationColorOverride(modType))}
+                  title={`Color for ${modType}`}
+                >
+                  <span
+                    className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: color }}
+                  />
+                </ColorSwatchPicker>
+              );
+            } else if (desc?.kind === 'variants') {
+              const types: VariantType[] = ['substitution', 'insertion', 'deletion'];
+              swatches = (
+                <span className="inline-flex items-center gap-0.5 flex-shrink-0">
+                  {types.map(t => {
+                    const color = resolveVariantColor(variantOverrides, t);
+                    const isOverridden = Boolean(variantOverrides[t]);
+                    return (
+                      <ColorSwatchPicker
+                        key={t}
+                        color={color}
+                        isOverridden={isOverridden}
+                        onChange={(hex) => dispatch(setVariantColorOverride({ key: t, color: hex }))}
+                        onReset={() => dispatch(clearVariantColorOverride(t))}
+                        title={`Color for ${t}`}
+                      >
+                        <span
+                          className="inline-block w-1.5 h-2 rounded-[1px]"
+                          style={{ backgroundColor: color }}
+                        />
+                      </ColorSwatchPicker>
+                    );
+                  })}
+                </span>
+              );
+            }
+
             if (isTopLevelMod) {
               return (
                 <div
@@ -232,6 +324,7 @@ export function MSALabels({
                   >
                     <EyeIcon size={9} />
                   </button>
+                  {swatches}
                   <span className={layerActive ? 'text-orange-500' : 'text-gray-300'}>{seq.layerLabel ?? seq.name}</span>
                 </div>
               );
@@ -258,6 +351,7 @@ export function MSALabels({
                 >
                   <EyeIcon size={9} />
                 </button>
+                {swatches}
                 <span className={layerActive ? 'text-gray-400' : 'text-gray-300'}>{seq.layerLabel ?? seq.name}</span>
               </div>
             );

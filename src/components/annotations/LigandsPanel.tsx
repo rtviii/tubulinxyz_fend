@@ -4,7 +4,14 @@ import { useState } from 'react';
 import { ChevronRight, Eye, EyeOff, Focus, Download, ExternalLink } from 'lucide-react';
 import { LigandSite } from '@/store/slices/annotationsSlice';
 import { LIGAND_IGNORE_IDS } from '@/components/molstar/colors/palette';
-import { getHexForLigand } from '@/lib/colors/annotationPalette';
+import { resolveLigandColor } from '@/lib/colors/annotationPaletteResolve';
+import { useAppDispatch, useAppSelector } from '@/store/store';
+import {
+  setLigandColorOverride,
+  clearLigandColorOverride,
+  selectLigandOverrides,
+} from '@/store/slices/colorOverridesSlice';
+import { ColorSwatchPicker } from '@/components/ui/ColorSwatchPicker';
 
 interface LigandsPanelProps {
   ligandSites: LigandSite[];
@@ -93,13 +100,26 @@ function LigandRow({
   onToggle: () => void;
   onFocus: () => void;
 }) {
+  const dispatch = useAppDispatch();
+  const overrides = useAppSelector(selectLigandOverrides);
+  const defaultColor = resolveLigandColor(overrides, site.ligandId);
+  const isOverridden = Boolean(overrides[site.ligandId]);
+
   return (
     <div className="group flex items-center gap-1.5 px-1.5 py-1 hover:bg-gray-50 text-[10px] border-b border-gray-50 last:border-b-0">
-      {/* Color indicator */}
-      <div
-        className="w-1.5 h-4 rounded-sm flex-shrink-0"
-        style={{ backgroundColor: isVisible ? getHexForLigand(site.ligandId) : '#e0e0e0' }}
-      />
+      {/* Color indicator / picker */}
+      <ColorSwatchPicker
+        color={defaultColor}
+        isOverridden={isOverridden}
+        onChange={(hex) => dispatch(setLigandColorOverride({ key: site.ligandId, color: hex }))}
+        onReset={() => dispatch(clearLigandColorOverride(site.ligandId))}
+        title={`Color for ${site.ligandId}`}
+      >
+        <div
+          className="w-1.5 h-4 rounded-sm flex-shrink-0"
+          style={{ backgroundColor: isVisible ? defaultColor : '#e0e0e0' }}
+        />
+      </ColorSwatchPicker>
 
       {/* Ligand ID */}
       <span className="w-10 font-mono font-semibold text-gray-700 flex-shrink-0 truncate">

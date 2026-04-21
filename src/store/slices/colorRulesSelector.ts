@@ -3,7 +3,13 @@ import { RootState } from '../store';
 import { VariantType } from './annotationsSlice';
 import { authAsymIdFromChainKey } from '@/lib/chain_key';
 import type { MsaSequence } from './sequence_registry';
-import { VARIANT_COLORS, getHexForLigand } from '@/lib/colors/annotationPalette';
+import {
+  resolveLigandColor,
+  resolveVariantColor,
+  type LigandOverrideMap,
+  type VariantOverrideMap,
+  type ModificationOverrideMap,
+} from '@/lib/colors/annotationPaletteResolve';
 import { parseLayerType } from '@/components/msa/auxiliary/layerKind';
 import { AUX_COLOR_PROVIDERS, isAuxLayerActive } from '@/components/msa/auxiliary/colorProviders';
 
@@ -22,9 +28,11 @@ export const makeSelectActiveColorRulesForSequenceIds = () =>
   createSelector(
     [
       (state: RootState) => state.annotations.chains,
+      (state: RootState) => state.colorOverrides.ligand,
+      (state: RootState) => state.colorOverrides.variant,
       (_state: RootState, visibleSeqIds: string[]) => visibleSeqIds,
     ],
-    (chains, visibleSeqIds): ColorRule[] => {
+    (chains, ligandOverrides, variantOverrides, visibleSeqIds): ColorRule[] => {
       const rules: ColorRule[] = [];
       const visible = new Set(visibleSeqIds);
       const chainKeyToRowIndex: Record<string, number> = {};
@@ -46,7 +54,7 @@ export const makeSelectActiveColorRulesForSequenceIds = () =>
             id: site.id,
             chainKey,                   // <-- added
             type: 'ligand',
-            color: getHexForLigand(site.ligandId),
+            color: resolveLigandColor(ligandOverrides, site.ligandId),
             msaCells: site.masterIndices.map(mi => ({ row: rowIndex, column: mi - 1 })),
             residues: site.authSeqIds.map(id => ({ chainId: authAsymId, authSeqId: id })),
           });
@@ -61,7 +69,7 @@ export const makeSelectActiveColorRulesForSequenceIds = () =>
               chainKey,                 // <-- added
               type: 'variant',
               variantType: variant.type,
-              color: VARIANT_COLORS[variant.type],
+              color: resolveVariantColor(variantOverrides, variant.type),
               msaCells: [{ row: rowIndex, column: variant.masterIndex - 1 }],
               residues: [{ chainId: authAsymId, authSeqId: variant.authSeqId }],
             });
@@ -80,6 +88,11 @@ export const makeSelectActiveColorRulesForSequenceIds = () =>
 export function computeAuxiliaryCellColors(
   displaySequences: Array<Pick<MsaSequence, 'id' | 'originType' | 'parentSequenceId' | 'layerType'>>,
   annotationChains: RootState['annotations']['chains'],
+  overrides: {
+    ligand: LigandOverrideMap;
+    variant: VariantOverrideMap;
+    modification: ModificationOverrideMap;
+  },
 ): Record<string, string> {
   const cellColors: Record<string, string> = {};
 
@@ -109,7 +122,7 @@ export function computeAuxiliaryCellColors(
     // (eye icon on). Inactive layers keep the row but leave its cells blank.
     if (!isAuxLayerActive(desc, entry.visibility)) continue;
 
-    for (const { masterIndex, color } of AUX_COLOR_PROVIDERS[desc.kind](desc, entry.data)) {
+    for (const { masterIndex, color } of AUX_COLOR_PROVIDERS[desc.kind](desc, entry.data, overrides)) {
       cellColors[`${rowIdx}-${masterIndex - 1}`] = color;
     }
   }

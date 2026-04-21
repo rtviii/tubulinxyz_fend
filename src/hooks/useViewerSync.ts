@@ -45,6 +45,9 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
     const colorRules = useAppSelector(state => selectRulesForVisible(state, visibleSequenceIds));
     const positionMapping = useAppSelector(state => selectPositionMapping(state, chainKey));
     const annotationChains = useAppSelector(state => state.annotations.chains);
+    const ligandOverrides = useAppSelector(state => state.colorOverrides.ligand);
+    const variantOverrides = useAppSelector(state => state.colorOverrides.variant);
+    const modificationOverrides = useAppSelector(state => state.colorOverrides.modification);
 
     const activeChainId = useAppSelector(state => selectActiveMonomerChainId(state, 'structure'));
     const alignedStructures = useAppSelector(state => selectAlignedStructuresForActiveChain(state, 'structure'));
@@ -169,6 +172,8 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
     chainKeyRef.current = chainKey;
     const molstarRef = useRef(molstarInstance);
     molstarRef.current = molstarInstance;
+    const ligandOverridesRef = useRef(ligandOverrides);
+    ligandOverridesRef.current = ligandOverrides;
 
     const runColorSync = useCallback(async () => {
         if (colorSyncInFlightRef.current) {
@@ -236,6 +241,9 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
                 );
                 await instance.applyColorschemeToAligned(a.targetChainId, a.id, colorings);
             }
+
+            // --- Ligand ball-and-stick recolor (applies overrides, falls back to defaults) ---
+            await instance.applyLigandRepresentationColors(ligandOverridesRef.current);
         } catch (err) {
             console.error('[useViewerSync] Color sync error:', err);
         } finally {
@@ -269,7 +277,11 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
 
             // Auxiliary row colors
             if (displaySequences) {
-                const auxColors = computeAuxiliaryCellColors(displaySequences, annotationChains);
+                const auxColors = computeAuxiliaryCellColors(displaySequences, annotationChains, {
+                    ligand: ligandOverrides,
+                    variant: variantOverrides,
+                    modification: modificationOverrides,
+                });
                 Object.assign(cellColors, auxColors);
             }
 
@@ -306,7 +318,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
             if (colorSyncTimerRef.current) clearTimeout(colorSyncTimerRef.current);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [colorRules, molstarInstance, msaRef, chainKey, alignedIds, displaySequences, annotationChains, expandedChainKeysKey, hiddenChainKeysKey]);
+    }, [colorRules, molstarInstance, msaRef, chainKey, alignedIds, displaySequences, annotationChains, expandedChainKeysKey, hiddenChainKeysKey, ligandOverrides, variantOverrides, modificationOverrides]);
 
     // ============================================================
     // Click handlers
@@ -538,7 +550,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         }
         const authAsymId = authAsymIdFromChainKey(chainKey);
 
-        molstarInstance.clearWindowMask(authAsymId).then(() => {
+        molstarInstance.clearWindowMask(authAsymId).then(async () => {
             const primaryColorings = colorRules
                 .filter(r => r.chainKey === chainKey)
                 .flatMap(rule => rule.residues.map(r => ({
@@ -547,8 +559,10 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
                     color: Color(parseInt(rule.color.replace('#', ''), 16)),
                 })));
             if (primaryColorings.length > 0) {
-                molstarInstance.applyColorscheme('annotations', primaryColorings);
+                await molstarInstance.applyColorscheme('annotations', primaryColorings);
             }
+            // Re-apply ligand overpaint since applyColorscheme/restoreDefaultColors clears all overpaint
+            await molstarInstance.applyLigandRepresentationColors(ligandOverridesRef.current);
         });
 
         // Clear aligned masks too

@@ -1294,6 +1294,42 @@ const color = getMolstarGhostColor(family);
     await this.reapplyWindowMasks();
   }
 
+  /**
+   * Re-color every ligand ball-and-stick representation according to an override map,
+   * falling back to the default palette color per ligand compId when no override is present.
+   * Always applies — this keeps the visual in sync whether an override was just set OR cleared.
+   */
+  async applyLigandRepresentationColors(
+    ligandOverrides: Record<string, string>,
+  ): Promise<void> {
+    const plugin = this.viewer.ctx;
+    if (!plugin) return;
+
+    const hierarchy = plugin.managers.structure.hierarchy.current;
+    if (hierarchy.structures.length === 0) return;
+    const structureRef = hierarchy.structures[0];
+
+    for (const component of Object.values(this.instanceState.components)) {
+      if (!isLigandComponent(component)) continue;
+
+      const overrideHex = ligandOverrides[component.compId];
+      const effectiveColor = overrideHex
+        ? Color(parseInt(overrideHex.replace('#', ''), 16))
+        : getMolstarLigandColor(component.compId);
+
+      const lociGetter = async (structure: Structure) => {
+        const loci = executeQuery(buildLigandQuery(component), structure);
+        return loci ?? StructureElement.Loci.none(structure);
+      };
+
+      try {
+        await setStructureOverpaint(plugin, structureRef.components, effectiveColor, lociGetter);
+      } catch (err) {
+        console.error(`[${this.id}] Failed to apply ligand overpaint for ${component.compId}:`, err);
+      }
+    }
+  }
+
   async restoreDefaultColors(): Promise<void> {
     const plugin = this.viewer.ctx;
     if (!plugin) return;

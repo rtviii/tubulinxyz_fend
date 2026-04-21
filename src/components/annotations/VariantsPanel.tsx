@@ -3,7 +3,14 @@
 import { useState } from 'react';
 import { ChevronRight, Eye, EyeOff, Focus, ExternalLink } from 'lucide-react';
 import { Variant, VariantType } from '@/store/slices/annotationsSlice';
-import { VARIANT_COLORS } from '@/lib/colors/annotationPalette';
+import { resolveVariantColor } from '@/lib/colors/annotationPaletteResolve';
+import { useAppDispatch, useAppSelector } from '@/store/store';
+import {
+  setVariantColorOverride,
+  clearVariantColorOverride,
+  selectVariantOverrides,
+} from '@/store/slices/colorOverridesSlice';
+import { ColorSwatchPicker } from '@/components/ui/ColorSwatchPicker';
 
 const SOURCE_BADGE: Record<string, { label: string; className: string }> = {
   structural: { label: 'PDB', className: 'bg-gray-100 text-gray-500' },
@@ -30,6 +37,8 @@ export function VariantsPanel({
   onFocusVariant,
 }: VariantsPanelProps) {
   const [expanded, setExpanded] = useState(true);
+  const dispatch = useAppDispatch();
+  const variantOverrides = useAppSelector(selectVariantOverrides);
 
   if (variants.length === 0) return null;
 
@@ -76,12 +85,20 @@ export function VariantsPanel({
                 key={`${v.masterIndex}-${v.source}-${i}`}
                 className="group flex items-center gap-1.5 px-1.5 py-0.5 hover:bg-gray-50 text-[10px] border-b border-gray-50 last:border-b-0"
               >
-                <span
-                  className="w-7 text-center text-[8px] py-px rounded font-semibold text-white flex-shrink-0 leading-tight"
-                  style={{ backgroundColor: VARIANT_COLORS[v.type] }}
+                <ColorSwatchPicker
+                  color={resolveVariantColor(variantOverrides, v.type)}
+                  isOverridden={Boolean(variantOverrides[v.type])}
+                  onChange={(hex) => dispatch(setVariantColorOverride({ key: v.type, color: hex }))}
+                  onReset={() => dispatch(clearVariantColorOverride(v.type))}
+                  title={`Color for ${v.type}`}
                 >
-                  {TYPE_LABEL[v.type]}
-                </span>
+                  <span
+                    className="w-7 text-center text-[8px] py-px rounded font-semibold text-white flex-shrink-0 leading-tight"
+                    style={{ backgroundColor: resolveVariantColor(variantOverrides, v.type) }}
+                  >
+                    {TYPE_LABEL[v.type]}
+                  </span>
+                </ColorSwatchPicker>
                 <span
                   className={`text-[8px] px-1 py-px rounded font-medium flex-shrink-0 ${badge.className}`}
                 >

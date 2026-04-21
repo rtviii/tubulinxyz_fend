@@ -1,9 +1,12 @@
 import type { ChainAnnotationData, ChainVisibility } from '@/store/slices/annotationsSlice';
 import {
-  getVariantColor,
-  getModificationColor,
-  getHexForLigand,
-} from '@/lib/colors/annotationPalette';
+  resolveLigandColor,
+  resolveVariantColor,
+  resolveModificationColor,
+  type LigandOverrideMap,
+  type VariantOverrideMap,
+  type ModificationOverrideMap,
+} from '@/lib/colors/annotationPaletteResolve';
 import type { AuxLayerDescriptor, AuxLayerKind } from './layerKind';
 
 export interface AuxColorCell {
@@ -11,27 +14,34 @@ export interface AuxColorCell {
   color: string;
 }
 
+export interface AuxColorOverrides {
+  ligand: LigandOverrideMap;
+  variant: VariantOverrideMap;
+  modification: ModificationOverrideMap;
+}
+
 export type AuxColorProvider = (
   desc: AuxLayerDescriptor,
   data: ChainAnnotationData,
+  overrides: AuxColorOverrides,
 ) => AuxColorCell[];
 
 export const AUX_COLOR_PROVIDERS: Record<AuxLayerKind, AuxColorProvider> = {
-  variants: (_desc, data) =>
+  variants: (_desc, data, overrides) =>
     data.variants
       .filter(v => v.source !== 'morisette')
-      .map(v => ({ masterIndex: v.masterIndex, color: getVariantColor(v.type) })),
+      .map(v => ({ masterIndex: v.masterIndex, color: resolveVariantColor(overrides.variant, v.type) })),
 
-  ligand: (desc, data) => {
+  ligand: (desc, data, overrides) => {
     const site = data.ligandSites.find(s => s.id === desc.id);
     if (!site) return [];
-    const color = getHexForLigand(site.ligandId);
+    const color = resolveLigandColor(overrides.ligand, site.ligandId);
     return site.masterIndices.map(mi => ({ masterIndex: mi, color }));
   },
 
-  ptm: (desc, data) => {
+  ptm: (desc, data, overrides) => {
     if (!desc.id) return [];
-    const color = getModificationColor(desc.id);
+    const color = resolveModificationColor(overrides.modification, desc.id);
     return data.modifications
       .filter(m => m.modificationType === desc.id)
       .map(m => ({ masterIndex: m.masterIndex, color }));
