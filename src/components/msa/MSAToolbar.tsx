@@ -1,7 +1,7 @@
 // src/components/msa/MSAToolbar.tsx
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { RotateCcw, HelpCircle } from 'lucide-react';
 
@@ -109,15 +109,27 @@ export function MSAToolbar({
   const activePalette = currentScheme === 'salience-mono' ? PALETTE_BW : PALETTE_SALIENCE;
   const legendTitle = SCHEME_LABELS[currentScheme] ?? 'Substitution Salience';
 
+  const handleJumpToKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    const val = (e.currentTarget.value ?? '').trim();
+    // Accept "start-end" or "start end" or "start,end"; "start" alone jumps to [start, start]
+    const m = val.match(/^(\d+)\s*(?:[-\u2013,\s]+\s*(\d+))?$/);
+    if (!m) return;
+    const start = Math.max(1, parseInt(m[1], 10));
+    const end = m[2] ? Math.min(maxLength, parseInt(m[2], 10)) : start;
+    if (end < start) return;
+    onJumpToRange(start, end);
+  };
+
   return (
-    <div className={`flex items-center gap-3 ${compact ? 'text-xs' : 'text-sm'}`}>
-      {/* Color scheme selector */}
-      <div className="relative flex items-center gap-1.5">
+    <div className="flex items-center gap-2 w-full text-[11px] text-gray-600">
+      {/* ── Color group ── */}
+      <div className="relative flex items-center gap-1">
         <span className="text-gray-500">Color:</span>
         <select
           value={currentScheme.startsWith('custom') ? '' : currentScheme}
           onChange={(e) => e.target.value && onSchemeChange(e.target.value)}
-          className={`border rounded px-1.5 py-0.5 bg-white ${compact ? 'text-xs' : 'text-sm'}`}
+          className="border rounded px-1.5 py-0.5 bg-white text-[11px]"
         >
           {currentScheme.startsWith('custom') && (
             <option value="">Custom</option>
@@ -132,12 +144,21 @@ export function MSAToolbar({
             onMouseEnter={() => setShowLegend(true)}
             onMouseLeave={() => setShowLegend(false)}
           >
-            <HelpCircle size={13} className="text-gray-400 hover:text-gray-600 cursor-help" />
+            <HelpCircle size={12} className="text-gray-400 hover:text-gray-600 cursor-help" />
           </div>
+        )}
+        {onReset && (
+          <button
+            onClick={onReset}
+            className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+            title="Reset colors"
+          >
+            <RotateCcw size={12} />
+          </button>
         )}
         {showLegend && legendPos && createPortal(
           <div
-            className="fixed z-[9999] w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs"
+            className="fixed z-[9999] w-72 bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-[11px]"
             style={{ top: legendPos.top, left: legendPos.left }}
             onMouseEnter={() => setShowLegend(true)}
             onMouseLeave={() => setShowLegend(false)}
@@ -164,41 +185,26 @@ export function MSAToolbar({
           document.body
         )}
       </div>
+
       <div className="w-px h-4 bg-gray-300" />
-      <button
-        onClick={() => onJumpToRange(1, maxLength)}
-        className="px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-      >
-        Full
-      </button>
-      {onReset && (
+
+      {/* ── Range controls ── */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-gray-500">Jump to:</span>
+        <input
+          type="text"
+          placeholder="e.g. 100-200"
+          onKeyDown={handleJumpToKey}
+          className="w-20 border rounded px-1.5 py-0.5 bg-white text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-300"
+        />
         <button
-          onClick={onReset}
-          className="p-1 rounded hover:bg-gray-100 text-gray-500"
-          title="Reset to default"
+          onClick={() => onJumpToRange(1, maxLength)}
+          className="px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 text-[11px]"
         >
-          <RotateCcw size={14} />
+          Full
         </button>
-      )}
-      {onShowMastersChange != null && (
-        <>
-          <div className="w-px h-4 bg-gray-300" />
-          <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={showMasters ?? true}
-              onChange={e => onShowMastersChange(e.target.checked)}
-              className="rounded"
-            />
-            Reference
-            {masterCount != null && <span className="text-gray-400">({masterCount})</span>}
-          </label>
-        </>
-      )}
-      {onInRangeOnlyChange != null && (
-        <>
-          <div className="w-px h-4 bg-gray-300" />
-          <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+        {onInRangeOnlyChange != null && (
+          <label className="flex items-center gap-1 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={inRangeOnly ?? false}
@@ -207,7 +213,21 @@ export function MSAToolbar({
             />
             In-range only
           </label>
-        </>
+        )}
+      </div>
+
+      {/* ── Reference toggle (far right) ── */}
+      {onShowMastersChange != null && (
+        <label className="ml-auto flex items-center gap-1 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showMasters ?? true}
+            onChange={e => onShowMastersChange(e.target.checked)}
+            className="rounded"
+          />
+          Reference
+          {masterCount != null && <span className="text-gray-400">({masterCount})</span>}
+        </label>
       )}
     </div>
   );

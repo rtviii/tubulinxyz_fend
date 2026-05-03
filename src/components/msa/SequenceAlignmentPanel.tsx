@@ -883,25 +883,27 @@ function ChainDropdownHeader({
   return (
     <div className={wrapperClass}>
       <div
-        className={`flex items-center gap-2 transition-colors duration-500 rounded px-1.5 py-0.5 ${
+        className={`flex items-center gap-1.5 transition-colors duration-500 rounded px-1 py-0.5 ${
           flash ? 'bg-blue-100' : 'bg-transparent'
         }`}
       >
         <select
           value={chainId}
           onChange={e => onChainChange(e.target.value)}
-          className="text-xs font-medium bg-transparent border border-gray-200 rounded px-1.5 py-0.5 cursor-pointer hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-300"
+          className="text-[11px] font-medium bg-transparent border border-gray-200 rounded px-1.5 py-0.5 cursor-pointer hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-300"
         >
           {chainOptions.map(opt => (
             <option key={opt.chainId} value={opt.chainId}>
-              {opt.chainId}
-              {opt.familyLabel ? ` \u2014 ${opt.familyLabel}` : ''}
-              {opt.isotype ? ` (${opt.isotype})` : ''}
-              {opt.organism ? ` \u2014 ${opt.organism}` : ''}
-              {opt.seqLength ? ` \u2014 ${opt.seqLength} aa` : ''}
+              {[opt.chainId, opt.familyLabel, opt.isotype].filter(Boolean).join('  ')}
             </option>
           ))}
         </select>
+        {current && (current.organism || current.seqLength) && (
+          <span className="text-[10px] text-gray-400 flex items-center gap-1 whitespace-nowrap">
+            {current.organism && <span className="italic">{current.organism}</span>}
+            {current.seqLength ? <span>{current.seqLength}aa</span> : null}
+          </span>
+        )}
         {current?.uniprotId && (
           <a
             href={`https://www.uniprot.org/uniprot/${current.uniprotId}`}
