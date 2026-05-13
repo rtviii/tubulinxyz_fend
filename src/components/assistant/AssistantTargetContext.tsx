@@ -14,6 +14,24 @@ import { createContext, useContext, type ReactNode } from 'react';
 
 export type AssistantTarget = 'viewer' | 'filters';
 
+export interface AssistantConfirmItem {
+  label: string;
+  value: string;
+}
+
+// Returned by handlers that want the user to review inferred actions before
+// they take effect (e.g. NL → filter inference). The pill renders a panel
+// listing `items`, with Apply / Cancel buttons. Only on Apply does the
+// handler's `onApply` run.
+export interface AssistantConfirmPayload {
+  summary: string;
+  items: AssistantConfirmItem[];
+  onApply: () => void | Promise<void>;
+  onCancel?: () => void;
+  applyLabel?: string;
+  cancelLabel?: string;
+}
+
 export interface AssistantHandlerResult {
   // Short human readback; the pill shows this in the feedback popover.
   summary?: string;
@@ -21,6 +39,9 @@ export interface AssistantHandlerResult {
   clarification?: string;
   // If set, the pill shows an error state with this message.
   error?: string;
+  // If set, the pill shows a confirmation panel with Apply/Cancel buttons.
+  // Mutually exclusive with the immediate-feedback states above.
+  confirm?: AssistantConfirmPayload;
 }
 
 export interface AssistantTargetValue {

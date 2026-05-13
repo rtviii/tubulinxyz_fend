@@ -26,7 +26,7 @@ import {
   AssistantTargetProvider,
   type AssistantTargetValue,
 } from "@/components/assistant/AssistantTargetContext";
-import { backendFiltersToUi, type NLQueryResponse } from "./nlFilterMapper";
+import { backendFiltersToUi, humanizeUiFilters, type NLQueryResponse } from "./nlFilterMapper";
 
 /** Nucleotides + ions to hide from the card ligand display (they're ubiquitous and uninteresting) */
 const CARD_LIGAND_HIDE = new Set([
@@ -428,8 +428,13 @@ export default function StructureCataloguePage() {
       if (Object.keys(parsed).length === 0) {
         return { summary: data.summary || "No filter changes inferred." };
       }
-      applyNLFilters(parsed);
-      return { summary: data.summary || "Filters applied." };
+      return {
+        confirm: {
+          summary: data.summary || "Apply these filters?",
+          items: humanizeUiFilters(parsed),
+          onApply: () => applyNLFilters(parsed),
+        },
+      };
     },
   }), [filters]);
 
@@ -449,7 +454,9 @@ export default function StructureCataloguePage() {
           </div>
 
           {/* Unified pill: nav | AI search placeholder | counter + feedback */}
-          <div className="flex-1 min-w-0 max-w-[720px]">
+          {/* `relative z-50` lifts the AppPill stacking context above the
+              catalogue grid so the chat-input confirm panel isn't covered. */}
+          <div className="relative z-50 flex-1 min-w-0 max-w-[720px]">
             <AppPill>
               <PillNavLink href="/" icon={Home} title="Home" />
               <PillNavLink href="/structures" icon={LayoutGrid} label="Structures" title="Structures" active />

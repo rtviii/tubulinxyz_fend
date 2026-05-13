@@ -2,9 +2,6 @@ FROM node:20 AS builder
 
 WORKDIR /app
 
-ARG NEXT_PUBLIC_API_URL=http://localhost/api
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ pkg-config \
     libx11-dev libxi-dev libxext-dev libglx-dev libgl1-mesa-dev \

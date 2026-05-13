@@ -5,6 +5,7 @@
 // neo4j_tubxz/models.py and with `UiFilters` in ./StructureFiltersPanel.tsx.
 
 import type { UiFilters } from "./StructureFiltersPanel";
+import type { AssistantConfirmItem } from "@/components/assistant/AssistantTargetContext";
 
 // Backend field names (snake_case). Only listing the ones we map.
 type BackendStructureFilters = {
@@ -71,3 +72,61 @@ export type NLQueryResponse = {
   summary: string;
   clarification?: string | null;
 };
+
+// Helpers for the NL confirmation panel.
+
+function joinList(xs: string[] | number[], cap = 5): string {
+  const arr = (xs as Array<string | number>).map(String);
+  if (arr.length <= cap) return arr.join(", ");
+  return `${arr.slice(0, cap).join(", ")} +${arr.length - cap} more`;
+}
+
+function rangeStr(
+  min: number | undefined,
+  max: number | undefined,
+  unit = "",
+): string {
+  if (min !== undefined && max !== undefined) return `${min}–${max}${unit}`;
+  if (max !== undefined) return `≤ ${max}${unit}`;
+  if (min !== undefined) return `≥ ${min}${unit}`;
+  return "";
+}
+
+// Render a Partial<UiFilters> as a flat list of label/value rows for the
+// confirm panel. One row per logical group (resolution/year are merged across
+// min/max). Pure, no async lookups — organism / uniprot IDs are rendered as
+// raw IDs since the LLM summary already carries human context.
+export function humanizeUiFilters(parsed: Partial<UiFilters>): AssistantConfirmItem[] {
+  const out: AssistantConfirmItem[] = [];
+
+  if (parsed.search) out.push({ label: "Text search", value: parsed.search });
+  if (parsed.ids?.length) out.push({ label: "PDB IDs", value: joinList(parsed.ids) });
+
+  const resolution = rangeStr(parsed.resMin, parsed.resMax, " Å");
+  if (resolution) out.push({ label: "Resolution", value: resolution });
+
+  const year = rangeStr(parsed.yearMin, parsed.yearMax);
+  if (year) out.push({ label: "Year", value: year });
+
+  if (parsed.expMethod?.length) out.push({ label: "Exp method", value: joinList(parsed.expMethod) });
+  if (parsed.polyState?.length) out.push({ label: "Polymerization", value: joinList(parsed.polyState) });
+  if (parsed.family?.length) out.push({ label: "Family", value: joinList(parsed.family) });
+  if (parsed.isotype?.length) out.push({ label: "Isotype", value: joinList(parsed.isotype) });
+  if (parsed.ligands?.length) out.push({ label: "Has ligand", value: joinList(parsed.ligands) });
+  if (parsed.uniprot?.length) out.push({ label: "UniProt", value: joinList(parsed.uniprot) });
+  if (parsed.sourceTaxa?.length) out.push({ label: "Source organism IDs", value: joinList(parsed.sourceTaxa) });
+  if (parsed.hostTaxa?.length) out.push({ label: "Host organism IDs", value: joinList(parsed.hostTaxa) });
+
+  if (parsed.hasVariants !== undefined) {
+    out.push({ label: "Has variants", value: parsed.hasVariants ? "yes" : "no" });
+  }
+  if (parsed.variantFamily) out.push({ label: "Variant family", value: parsed.variantFamily });
+  if (parsed.variantType) out.push({ label: "Variant type", value: parsed.variantType });
+  const variantPos = rangeStr(parsed.variantPosMin, parsed.variantPosMax);
+  if (variantPos) out.push({ label: "Variant position", value: variantPos });
+  if (parsed.variantWildType) out.push({ label: "Wild-type residue", value: parsed.variantWildType });
+  if (parsed.variantObserved) out.push({ label: "Observed residue", value: parsed.variantObserved });
+  if (parsed.variantSource) out.push({ label: "Variant source", value: parsed.variantSource });
+
+  return out;
+}

@@ -3,8 +3,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
-import { Loader2 } from 'lucide-react';
-import { useAssistantTarget } from '@/components/assistant/AssistantTargetContext';
+import { X } from 'lucide-react';
+import {
+  useAssistantTarget,
+  type AssistantConfirmPayload,
+} from '@/components/assistant/AssistantTargetContext';
 
 /**
  * Shared floating-pill shell used across landing, catalogue, and structure pages.
@@ -182,23 +185,37 @@ export function PillChatInput({
     | { kind: 'done'; summary: string }
     | { kind: 'clarify'; message: string }
     | { kind: 'error'; message: string }
+    | { kind: 'confirm'; payload: AssistantConfirmPayload }
+    | { kind: 'applying' }
   >({ kind: 'idle' });
 
   const abortRef = useRef<AbortController | null>(null);
 
   const dismiss = useCallback(() => {
-    setStatus({ kind: 'idle' });
+    setStatus(prev => {
+      // Outside-click on a confirm panel counts as a Cancel.
+      if (prev.kind === 'confirm') prev.payload.onCancel?.();
+      return { kind: 'idle' };
+    });
   }, []);
 
-  // Dismiss feedback popover on outside click.
+  // Dismiss feedback popover on outside click. Skip while loading/applying so
+  // we don't tear down a request that's still in flight.
   useEffect(() => {
-    if (status.kind === 'idle' || status.kind === 'loading') return;
+    if (status.kind === 'idle' || status.kind === 'loading' || status.kind === 'applying') return;
     const onDown = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) dismiss();
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [status.kind, dismiss]);
+
+  // Auto-dismiss the success popover after a short delay.
+  useEffect(() => {
+    if (status.kind !== 'done') return;
+    const t = setTimeout(() => setStatus({ kind: 'idle' }), 1800);
+    return () => clearTimeout(t);
+  }, [status.kind]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -237,6 +254,11 @@ export function PillChatInput({
       if (controller.signal.aborted) return;
       if (r.error) setStatus({ kind: 'error', message: r.error });
       else if (r.clarification) setStatus({ kind: 'clarify', message: r.clarification });
+      else if (r.confirm) {
+        setStatus({ kind: 'confirm', payload: r.confirm });
+        // Keep `text` populated so the user can tweak & resubmit on cancel.
+        return;
+      }
       else setStatus({ kind: 'done', summary: r.summary ?? '' });
       setText('');
     } catch (e) {
@@ -248,8 +270,28 @@ export function PillChatInput({
     }
   };
 
-  const loading = status.kind === 'loading';
+  const handleApply = async () => {
+    if (status.kind !== 'confirm') return;
+    const payload = status.payload;
+    setStatus({ kind: 'applying' });
+    try {
+      await payload.onApply();
+      setStatus({ kind: 'done', summary: payload.summary || 'Filters applied.' });
+      setText('');
+    } catch (e) {
+      setStatus({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
+    }
+  };
+
+  const handleCancel = () => {
+    if (status.kind !== 'confirm') return;
+    status.payload.onCancel?.();
+    setStatus({ kind: 'idle' });
+  };
+
+  const loading = status.kind === 'loading' || status.kind === 'applying';
   const showPopover = status.kind === 'done' || status.kind === 'clarify' || status.kind === 'error';
+  const showConfirm = status.kind === 'confirm';
 
   return (
     <div ref={wrapperRef} className={`relative ${widthClass} min-w-0`}>
@@ -264,21 +306,90 @@ export function PillChatInput({
         }}
         placeholder={placeholder ?? target.placeholder ?? 'Ask...'}
         disabled={loading}
-        className="w-full h-7 rounded-full border border-slate-200/60 bg-white/90
-                   px-3 pr-8 text-[11px]
+        className={`w-full h-7 rounded-full bg-white/90
+                   px-3 pr-9 text-[11px]
                    text-slate-700 placeholder:text-slate-400
-                   outline-none focus:border-indigo-400 focus:bg-white
-                   disabled:opacity-60"
+                   outline-none focus:bg-white
+                   transition-colors
+                   ${loading
+                     ? 'border border-indigo-300 bg-indigo-50/40'
+                     : 'border border-slate-200/60 focus:border-indigo-400'}`}
       />
       {loading && (
-        <Loader2
-          size={12}
-          className="absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-indigo-500 pointer-events-none"
-        />
+        <span
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-end gap-[3px] pointer-events-none"
+          aria-label={status.kind === 'applying' ? 'Applying' : 'Thinking'}
+        >
+          <span
+            className="w-[3px] h-[3px] rounded-full bg-indigo-500 animate-bounce"
+            style={{ animationDelay: '0ms', animationDuration: '0.9s' }}
+          />
+          <span
+            className="w-[3px] h-[3px] rounded-full bg-indigo-500 animate-bounce"
+            style={{ animationDelay: '140ms', animationDuration: '0.9s' }}
+          />
+          <span
+            className="w-[3px] h-[3px] rounded-full bg-indigo-500 animate-bounce"
+            style={{ animationDelay: '280ms', animationDuration: '0.9s' }}
+          />
+        </span>
+      )}
+      {showConfirm && status.kind === 'confirm' && (
+        <div
+          className="absolute left-0 top-[calc(100%+6px)] z-[100]
+                     min-w-full w-[420px] max-w-[calc(100vw-2rem)]
+                     rounded-lg border border-slate-200 bg-white shadow-lg
+                     text-[11px] text-slate-700"
+        >
+          <div className="flex items-start justify-between px-3 pt-2.5 pb-1">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Apply these filters?
+            </div>
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="text-slate-400 hover:text-slate-700 -mr-1 -mt-0.5 p-0.5 rounded"
+              title="Cancel"
+            >
+              <X size={12} />
+            </button>
+          </div>
+          {status.payload.items.length > 0 && (
+            <div className="mx-3 mt-1 mb-2 rounded border border-slate-100 bg-slate-50/60 divide-y divide-slate-100">
+              {status.payload.items.map((item, i) => (
+                <div
+                  key={i}
+                  className="flex items-baseline gap-2 px-2 py-1.5 text-[11px]"
+                >
+                  <span className="text-slate-500 shrink-0">{item.label}</span>
+                  <span className="text-slate-800 font-medium break-words text-right ml-auto">
+                    {item.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-2 px-3 pb-2.5 pt-1 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="px-2.5 py-1 rounded text-[11px] text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              {status.payload.cancelLabel ?? 'Cancel'}
+            </button>
+            <button
+              type="button"
+              onClick={handleApply}
+              className="px-2.5 py-1 rounded text-[11px] text-white bg-indigo-500 hover:bg-indigo-600 transition-colors"
+            >
+              {status.payload.applyLabel ?? 'Apply'}
+            </button>
+          </div>
+        </div>
       )}
       {showPopover && (
         <div
-          className="absolute left-0 top-[calc(100%+4px)] z-50 min-w-full max-w-[320px]
+          className="absolute left-0 top-[calc(100%+4px)] z-[100] min-w-full max-w-[320px]
                      rounded-md border shadow-md px-2.5 py-1.5 text-[11px]
                      bg-white"
           style={{
