@@ -55,6 +55,9 @@ notes*
 
 output/**
 *.png
+# But DO track the vendor/institutional logos for the landing page.
+# These are static UI assets (~350 KB total), not generated content.
+!public/landing/*.png
 
 
 
