@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, ArrowRight, Home, LayoutGrid, Mail } from "lucide-react";
 import {
   AppPill,
@@ -27,6 +28,36 @@ import {
   type AssistantTargetValue,
 } from "@/components/assistant/AssistantTargetContext";
 import { backendFiltersToUi, humanizeUiFilters, type NLQueryResponse } from "./nlFilterMapper";
+import {
+  buildCatalogueUrl,
+  buildStructureUrl,
+  searchParamsToUiFilters,
+} from "@/lib/url_state";
+
+const EMPTY_FILTERS: UiFilters = {
+  search: "",
+  ids: [],
+  expMethod: [],
+  polyState: [],
+  family: [],
+  isotype: [],
+  ligands: [],
+  uniprot: [],
+  sourceTaxa: [],
+  hostTaxa: [],
+  resMin: undefined,
+  resMax: undefined,
+  yearMin: undefined,
+  yearMax: undefined,
+  hasVariants: undefined,
+  variantFamily: undefined,
+  variantType: undefined,
+  variantPosMin: undefined,
+  variantPosMax: undefined,
+  variantWildType: undefined,
+  variantObserved: undefined,
+  variantSource: undefined,
+};
 
 /** Nucleotides + ions to hide from the card ligand display (they're ubiquitous and uninteresting) */
 const CARD_LIGAND_HIDE = new Set([
@@ -75,7 +106,7 @@ const StructureCard = ({ structure, ligandLookup }: { structure: StructureSummar
     : `${authors[0]} et al.`;
 
   return (
-    <a href={`/structures/${structure.rcsb_id}`} className="group block h-full">
+    <a href={buildStructureUrl(structure.rcsb_id)} className="group block h-full">
       <div className="w-full h-full bg-white rounded-lg border border-gray-200 overflow-hidden transition-all duration-200 hover:shadow-md hover:border-gray-300 flex flex-col">
         {/* Image */}
         <div className="relative h-48 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
@@ -253,41 +284,44 @@ function MapPopover({ families }: { families: string[] }) {
 // ── Page ──
 
 export default function StructureCataloguePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50/50" />}>
+      <StructureCataloguePageInner />
+    </Suspense>
+  );
+}
+
+function StructureCataloguePageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [cursor, setCursor] = useState<string | null>(null);
   const [items, setItems] = useState<StructureSummary[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
 
-  const [filters, setFilters] = useState<UiFilters>({
-    search: "",
-    ids: [],
-    expMethod: [],
-    polyState: [],
-    family: [],
-    isotype: [],
-    ligands: [],
-    uniprot: [],
-    sourceTaxa: [],
-    hostTaxa: [],
-    resMin: undefined,
-    resMax: undefined,
-    yearMin: undefined,
-    yearMax: undefined,
-    hasVariants: undefined,
-    variantFamily: undefined,
-    variantType: undefined,
-    variantPosMin: undefined,
-    variantPosMax: undefined,
-    variantWildType: undefined,
-    variantObserved: undefined,
-    variantSource: undefined,
-  });
+  // Hydrate filters from URL on first render. URL is the source of truth on
+  // mount; after that the page owns state and pushes updates back to URL.
+  const [filters, setFilters] = useState<UiFilters>(() => ({
+    ...EMPTY_FILTERS,
+    ...searchParamsToUiFilters(searchParams),
+  }));
 
-  const [searchText, setSearchText] = useState(filters.search ?? "");
+  const [searchText, setSearchText] = useState(() => filters.search ?? "");
   const debouncedSearch = useDebouncedValue(searchText, 300);
 
   useEffect(() => {
     setFilters((prev) => ({ ...prev, search: debouncedSearch }));
   }, [debouncedSearch]);
+
+  // URL writeback. Skip first render — we already hydrated from URL.
+  const skipFirstWriteRef = useRef(true);
+  useEffect(() => {
+    if (skipFirstWriteRef.current) {
+      skipFirstWriteRef.current = false;
+      return;
+    }
+    router.replace(buildCatalogueUrl(filters), { scroll: false });
+  }, [filters, router]);
 
   const queryArgs: ListStructuresApiArg = useMemo(() => {
     return {

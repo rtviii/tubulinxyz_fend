@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { Suspense, useRef, useState, useEffect, useMemo, useCallback } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useAppSelector, useAppDispatch, useAppStore } from '@/store/store';
 import { selectIsChainAligned } from '@/store/slices/sequence_registry';
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
@@ -42,6 +42,11 @@ import {
 } from '@/components/assistant/AssistantTargetContext';
 import { dispatchViewerActions } from '@/components/assistant/viewerCommandDispatcher';
 import type { ViewerResponse } from '@/components/assistant/types';
+import {
+  searchParamsToStructureView,
+  type AlignedChainRef,
+  type StructureViewParams,
+} from '@/lib/url_state';
 
 // ============================================================
 // Loading overlay
@@ -63,9 +68,29 @@ function LoadingOverlay({ text }: { text: string }) {
 // ============================================================
 
 export default function StructureProfilePage() {
+  return (
+    <Suspense fallback={<div className="h-screen w-screen bg-gray-200" />}>
+      <StructureProfilePageInner />
+    </Suspense>
+  );
+}
+
+function StructureProfilePageInner() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const pdbIdFromUrl = (params.rcsb_id as string)?.toUpperCase();
   const dispatch = useAppDispatch();
+
+  // Snapshot the URL state at mount. Subsequent URL changes don't re-trigger
+  // hydration — that prevents loops with router writebacks.
+  const [urlInitialState] = useState<StructureViewParams>(() =>
+    searchParamsToStructureView(searchParams)
+  );
+  const urlHydratedRef = useRef(false);
+  const [pendingAligns, setPendingAligns] = useState<AlignedChainRef[]>([]);
+  const [pendingRange, setPendingRange] = useState<
+    { start: number; end: number } | null
+  >(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const msaRef = useRef<MSAHandle>(null);
@@ -380,6 +405,26 @@ export default function StructureProfilePage() {
           loadedFromUrlRef.current = pdbIdFromUrl;
 
           await instance.setStructureGhostColors(true);  // add this
+
+          // Apply URL-driven state once. Mode + chain happen now; aligns and
+          // range get staged for later effects (they depend on masterData /
+          // activeChainId becoming available).
+          if (!urlHydratedRef.current) {
+            urlHydratedRef.current = true;
+            if (urlInitialState.mode === 'monomer' && urlInitialState.chain) {
+              try {
+                await instance.enterMonomerView(urlInitialState.chain);
+              } catch (e) {
+                console.warn('[url-hydration] enterMonomerView failed:', e);
+              }
+            }
+            if (urlInitialState.align?.length) {
+              setPendingAligns(urlInitialState.align);
+            }
+            if (urlInitialState.range) {
+              setPendingRange(urlInitialState.range);
+            }
+          }
         } else {
           throw new Error('Failed to load structure');
         }
@@ -391,6 +436,65 @@ export default function StructureProfilePage() {
     };
     load();
   }, [isInitialized, instance, pdbIdFromUrl]);
+
+  // Apply URL-pending residue range once active chain is set.
+  useEffect(() => {
+    if (!pendingRange || !activeChainId || !instance) return;
+    instance.focusResidueRange(activeChainId, pendingRange.start, pendingRange.end);
+    setPendingRange(null);
+  }, [pendingRange, activeChainId, instance]);
+
+  // Apply URL-pending alignments once masterData is loaded for the active
+  // family. This mirrors the handleDirectAlign flow used by residue popups:
+  // fetch source profile, resolve entity_id → auth_asym_id, load aligned
+  // structure into Molstar, register the chain with the MSA.
+  useEffect(() => {
+    if (pendingAligns.length === 0) return;
+    if (!instance || !activeChainId || !activeFamily) return;
+    const masterLen = masterData?.alignment_length ?? 0;
+    if (!masterLen) return;
+
+    let cancelled = false;
+    (async () => {
+      for (const ref of pendingAligns) {
+        if (cancelled) return;
+        const sub = dispatch(
+          tubxz_api.endpoints.getStructureProfile.initiate({ rcsbId: ref.pdbId })
+        );
+        try {
+          const sourceProfile = await sub.unwrap();
+          let authAsymId = ref.authAsymId;
+          const polyInstance = sourceProfile.polypeptides?.find(
+            (p: any) => p.entity_id === ref.authAsymId
+          );
+          if (polyInstance?.auth_asym_id) authAsymId = polyInstance.auth_asym_id;
+
+          if (selectIsChainAligned(store.getState(), ref.pdbId, authAsymId)) continue;
+
+          const ok = await instance.loadAlignedStructure(
+            activeChainId,
+            ref.pdbId,
+            authAsymId,
+            activeFamily
+          );
+          if (!ok) continue;
+
+          const alignResult = alignChainFromProfile(sourceProfile, authAsymId, masterLen);
+          if (alignResult) {
+            const alignedId = `${ref.pdbId}_${authAsymId}_on_${activeChainId}`;
+            instance.styleAlignedChainAsGhost(activeChainId, alignedId, activeFamily);
+          }
+        } catch (e) {
+          console.warn('[url-hydration] align failed for', ref, e);
+        } finally {
+          sub.unsubscribe();
+        }
+      }
+      if (!cancelled) setPendingAligns([]);
+    })();
+
+    return () => { cancelled = true; };
+  }, [pendingAligns, instance, activeChainId, activeFamily, masterData, dispatch, store, alignChainFromProfile]);
 
   // Master sequence registration is now handled by SequenceAlignmentPanel.
   // The page still fetches masterData for MonomerSidebar's masterLength prop.

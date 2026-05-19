@@ -12,7 +12,7 @@
 
 import { createContext, useContext, type ReactNode } from 'react';
 
-export type AssistantTarget = 'viewer' | 'filters';
+export type AssistantTarget = 'viewer' | 'filters' | 'global';
 
 export interface AssistantConfirmItem {
   label: string;

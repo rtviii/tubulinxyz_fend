@@ -1,13 +1,20 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { Home, LayoutGrid, Mail, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
 import LandingViewer from '@/app/landing/LandingViewer';
 import { useExistingInstance } from '@/components/molstar/services/MolstarInstanceManager';
 import { LANDING_DEMOS, DEMO_CATEGORY_LABELS, type DemoCategory, type DemoResult } from '@/app/landing/demos';
 import { DemoExplanationCard, type DemoExplanation } from '@/app/landing/DemoExplanationCard';
-import { AppPill, PillDivider, PillSection, PillNavLink, PillAnchor } from '@/components/ui/AppPill';
+import { AppPill, PillDivider, PillSection, PillNavLink, PillAnchor, PillChatInput } from '@/components/ui/AppPill';
+import {
+  AssistantTargetProvider,
+  type AssistantTargetValue,
+} from '@/components/assistant/AssistantTargetContext';
+import { AssistantResultsPanel } from '@/components/assistant/AssistantResultsPanel';
+import type { GlobalNLResponse, NLGlobalResponseBody } from '@/components/assistant/globalTypes';
+import { API_BASE_URL } from '@/config';
 
 const STRUCTURES = [
   {
@@ -43,8 +50,47 @@ export default function Page() {
   const [activeDemo, setActiveDemo] = useState<string | null>(null);
   const [demoExplanation, setDemoExplanation] = useState<DemoExplanation | null>(null);
   const [expandedViewer, setExpandedViewer] = useState<number | null>(null);
+  const [globalResponse, setGlobalResponse] = useState<GlobalNLResponse | null>(null);
   const demoRef = useRef<HTMLDivElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
+
+  // Wire the cross-page PillChatInput into /nl_query/global on this page.
+  // Successful responses go into local state and render below; clarifications
+  // bubble back up through the pill's feedback UI.
+  const assistantValue = useMemo<AssistantTargetValue>(() => ({
+    target: 'global',
+    placeholder: 'Ask about structures, binding sites, ligands, mutations...',
+    handle: async (text, signal) => {
+      try {
+        const resp = await fetch(`${API_BASE_URL}/nl_query/global`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ text }),
+          signal,
+        });
+        if (!resp.ok) {
+          const body = await resp.text().catch(() => '');
+          return { error: `HTTP ${resp.status}: ${body.slice(0, 200)}` };
+        }
+        const data = (await resp.json()) as NLGlobalResponseBody;
+        if (data.kind === 'clarify') {
+          setGlobalResponse(null);
+          return { clarification: data.clarification ?? 'Please clarify.' };
+        }
+        if (!data.response) {
+          return { error: 'Empty global response.' };
+        }
+        setGlobalResponse(data.response);
+        const n = data.response.cards.length;
+        return { summary: n === 0 ? 'No suggestions.' : `${n} suggestion${n === 1 ? '' : 's'}` };
+      } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') {
+          return { summary: 'Cancelled.' };
+        }
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+  }), []);
 
   // Access landing Molstar instances
   const heterodimer = useExistingInstance('landing_9mlf');
@@ -104,6 +150,7 @@ export default function Page() {
   }, [activeDemo, heterodimer, lattice]);
 
   return (
+    <AssistantTargetProvider value={assistantValue}>
     <div className="h-screen flex flex-col bg-white overflow-hidden">
       {/* ---- Header ---- */}
       <header className="max-w-[1400px] w-full mx-auto px-6 pt-5 pb-3">
@@ -125,21 +172,12 @@ export default function Page() {
 
           <PillDivider />
 
-          {/* ── Center: AI assistant placeholder ── */}
+          {/* ── Center: AI assistant ── */}
           <PillSection stretch className="px-1">
-            <div className="flex-1 min-w-0 relative">
-              <input
-                disabled
-                placeholder="Ask about structures, binding sites, ligands, mutations..."
-                className="w-full h-7 rounded-full border border-slate-200/60 bg-white/60
-                           px-3 pr-20 text-[11px]
-                           text-slate-400 placeholder:text-slate-400"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-slate-300
-                               tracking-wider font-medium uppercase">
-                coming soon
-              </span>
-            </div>
+            <PillChatInput
+              placeholder="Ask about structures, binding sites, ligands, mutations..."
+              widthClass="flex-1 min-w-0"
+            />
           </PillSection>
 
           <PillDivider />
@@ -219,6 +257,16 @@ export default function Page() {
           />
         </AppPill>
       </div>
+
+      {/* ---- AI assistant results (rendered between pill and viewers when present) ---- */}
+      {globalResponse && (
+        <div className="w-full pb-3">
+          <AssistantResultsPanel
+            response={globalResponse}
+            onDismiss={() => setGlobalResponse(null)}
+          />
+        </div>
+      )}
 
       {/* ---- Viewers ---- */}
       <main className="max-w-[1400px] w-full mx-auto px-6 flex-1 min-h-0 pb-2">
@@ -316,5 +364,6 @@ export default function Page() {
         </div>
       </footer>
     </div>
+    </AssistantTargetProvider>
   );
 }
