@@ -147,10 +147,12 @@ function buildAuxiliarySequences(
   return auxiliaries;
 }
 
-/** Build top-level modification tracks from the primary chain's annotation data.
- *  PTM rows are opt-in via the top-right "Modifications" control panel: only types
- *  present in visibility.visibleModificationTypes become rows. This differs from
- *  variants/ligands, which materialize on parent expand. */
+/** Build per-chain PTM tracks for a given parent sequence.
+ *  Modifications are filtered to those whose taxId is in the chain's
+ *  visibility.includedSpeciesTaxIds (which is seeded to [chain's own taxId] but
+ *  can be expanded by the user through the PTM dropdown's species pills/search).
+ *  Each enabled PTM type becomes one aux track; cells in that track may come from
+ *  multiple species when the user has selected more than one. */
 function buildModificationSequences(
   primary: MsaSequence,
   annotationEntry: ChainAnnotationEntry | null,
@@ -161,9 +163,13 @@ function buildModificationSequences(
   const gapSequence = ' '.repeat(maxLength);
   const tracks: MsaSequence[] = [];
   const { data, visibility } = annotationEntry;
+  const speciesSet = new Set(visibility.includedSpeciesTaxIds ?? []);
+  if (speciesSet.size === 0) return [];
 
   for (const modType of visibility.visibleModificationTypes ?? []) {
-    const modsOfType = data.modifications.filter(m => m.modificationType === modType);
+    const modsOfType = data.modifications.filter(
+      m => m.modificationType === modType && m.taxId != null && speciesSet.has(m.taxId)
+    );
     if (modsOfType.length === 0) continue;
     tracks.push({
       id: `aux__${primary.id}__ptm__${modType}`,
@@ -181,7 +187,12 @@ function buildModificationSequences(
   return tracks;
 }
 
-/** Interleave auxiliary sequences after their parent, then append top-level modification tracks. */
+/** Interleave auxiliary sequences (variants, ligands, PTMs) under their parent chain.
+ *  Order inside each chain group: [primary] -> [variants] -> [ligands] -> [PTM types ...].
+ *  PTM rows render whenever any types are enabled for that chain (independent of
+ *  the expand toggle, since they are explicitly opted in via the PTMs dropdown).
+ *  Also inserts a single 'spacer' row at the master->pdb boundary to visually
+ *  separate the reference alignment from the loaded chains. */
 function interleaveAuxiliaries(
   primaries: MsaSequence[],
   expandedSet: Set<string>,
@@ -189,9 +200,25 @@ function interleaveAuxiliaries(
   maxLength: number,
 ): MsaSequence[] {
   const result: MsaSequence[] = [];
-  const modificationTracks: MsaSequence[] = [];
+  const gapSequence = ' '.repeat(maxLength);
+  let spacerInserted = false;
 
   for (const seq of primaries) {
+    // Insert a single empty spacer row at the boundary from master to pdb.
+    if (!spacerInserted && seq.originType === 'pdb') {
+      const hasMasterAlready = result.some(r => r.originType === 'master');
+      if (hasMasterAlready) {
+        result.push({
+          id: '__spacer__master_pdb__',
+          name: '',
+          sequence: gapSequence,
+          rowIndex: -1,
+          originType: 'spacer',
+        });
+      }
+      spacerInserted = true;
+    }
+
     result.push(seq);
 
     if (seq.originType !== 'pdb') continue;
@@ -203,20 +230,17 @@ function interleaveAuxiliaries(
 
     const entry = annotationChains[chainKey] ?? null;
 
-    // Collect top-level modification tracks from all PDB chains
-    modificationTracks.push(...buildModificationSequences(seq, entry, maxLength));
-
-    // Variant + ligand aux tracks only shown when expanded
-    if (!expandedSet.has(seq.id)) continue;
-    const auxiliaries = buildAuxiliarySequences(seq, entry, maxLength);
-    for (const aux of auxiliaries) {
-      result.push(aux);
+    // All aux rows (variants, ligands, PTMs) collapse with the parent: they only
+    // render when the chevron is open. The PTMs dropdown still controls *which*
+    // PTM types are listed for the chain; expanding shows them inline below.
+    if (expandedSet.has(seq.id)) {
+      for (const aux of buildAuxiliarySequences(seq, entry, maxLength)) {
+        result.push(aux);
+      }
+      for (const ptm of buildModificationSequences(seq, entry, maxLength)) {
+        result.push(ptm);
+      }
     }
-  }
-
-  // Append modification tracks at the end as top-level rows
-  for (const mod of modificationTracks) {
-    result.push(mod);
   }
 
   return result;

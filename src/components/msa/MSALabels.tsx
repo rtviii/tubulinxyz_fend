@@ -18,6 +18,7 @@ import {
   setVariantsVisible,
   toggleLigandSite,
   toggleModificationType,
+  toggleModificationMuted,
 } from '@/store/slices/annotationsSlice';
 import { makeChainKey } from '@/lib/chain_key';
 import { parseLayerType } from './auxiliary/layerKind';
@@ -40,6 +41,7 @@ import {
   selectModificationOverrides,
 } from '@/store/slices/colorOverridesSlice';
 import type { VariantType } from '@/store/slices/annotationsSlice';
+import { PerChainPtmDropdown } from './PerChainPtmDropdown';
 
 interface MSALabelsProps {
   sequences: MsaSequence[];
@@ -154,7 +156,9 @@ export function MSALabels({
       measureEl.textContent = text;
       maxWidth = Math.max(maxWidth, measureEl.offsetWidth);
     }
-    const finalWidth = Math.max(maxWidth + 24, 120);
+    // +24 baseline buffer + 22 for the per-chain PTMs trigger that sits at the
+    // end of every PDB row (handled inline now, not absolutely positioned).
+    const finalWidth = Math.max(maxWidth + 46, 140);
     onWidthCalculated?.(finalWidth);
   }, [sequences, onWidthCalculated]);
 
@@ -192,6 +196,17 @@ export function MSALabels({
       />
       <div style={{ transform: `translateY(${-scrollTop}px)` }}>
         {sequences.map((seq, idx) => {
+          // Blank gap row between master group and pdb group -- no labels, no events.
+          if (seq.originType === 'spacer') {
+            return (
+              <div
+                key={seq.id}
+                style={{ height: rowHeight }}
+                aria-hidden="true"
+              />
+            );
+          }
+
           const isAux = seq.originType === 'auxiliary';
           const ck = chainKeyForSequence(seq);
           const isPdb = seq.originType === 'pdb';
@@ -199,7 +214,9 @@ export function MSALabels({
           const isSelected = ck ? ck === selectedChainKey : seq.id === selectedId;
           const isHovered = ck ? ck === hoveredChainKey : false;
           const isLastMaster = idx === lastMasterIndex && hasMasters;
-          const isFirstPdb = isPdb && idx === lastMasterIndex + 1;
+          // "First PDB" = the first pdb row after the master group (or after the spacer that follows it).
+          const prevSeq = idx > 0 ? sequences[idx - 1] : null;
+          const isFirstPdb = isPdb && (!prevSeq || prevSeq.originType === 'master' || prevSeq.originType === 'spacer');
 
           // Check if this PDB row is expanded (has visible auxiliary sub-rows)
           const isExpanded = isPdb && expandedSequences?.has(seq.id);
@@ -212,18 +229,25 @@ export function MSALabels({
           // ── Auxiliary track label ──
           if (isAux) {
             const desc = seq.layerType ? parseLayerType(seq.layerType) : null;
-            const isTopLevelMod = desc?.kind === 'ptm';
             const chainKey = seq.parentSequenceId ?? '';
             const chainVis = annotationChains[chainKey]?.visibility;
 
-            // Layer "active" state drives the eye icon.
-            // 'variants' defaults true when no chain visibility is loaded; ptm defaults false.
+            // Layer "active" state drives the eye icon. For PTMs this means
+            // selected AND not muted; for variants/ligands it's the standard
+            // visibility flag.
             const layerActive = desc
               ? (chainVis
                   ? isAuxLayerActive(desc, chainVis)
                   : desc.kind !== 'ptm')
               : true;
 
+            // Eye click semantics:
+            //   - variants: flip showVariants (paint on/off; row stays)
+            //   - ligand:   flip site in visibleLigandIds (paint on/off; row stays)
+            //   - ptm:      flip muted state ONLY (paint on/off; row stays).
+            //               This intentionally does NOT remove the type from
+            //               visibleModificationTypes -- that's what the X button
+            //               below does. Used to fix "clicking eye deletes the row".
             const handleToggleLayer = (e: React.MouseEvent) => {
               e.stopPropagation();
               if (!chainKey || !desc) return;
@@ -235,9 +259,18 @@ export function MSALabels({
                   if (desc.id) dispatch(toggleLigandSite({ chainKey, siteId: desc.id }));
                   break;
                 case 'ptm':
-                  if (desc.id) dispatch(toggleModificationType({ chainKey, modType: desc.id }));
+                  if (desc.id) dispatch(toggleModificationMuted({ chainKey, modType: desc.id }));
                   break;
               }
+            };
+
+            // X click semantics: only meaningful for PTM rows -- removes the type
+            // from visibleModificationTypes so the aux row goes away. Variants/
+            // ligands can't be "deleted" (only hidden) since their data is intrinsic.
+            const handleDeleteLayer = (e: React.MouseEvent) => {
+              e.stopPropagation();
+              if (!chainKey || !desc || desc.kind !== 'ptm' || !desc.id) return;
+              dispatch(toggleModificationType({ chainKey, modType: desc.id }));
             };
 
             const EyeIcon = layerActive ? Eye : EyeOff;
@@ -313,28 +346,10 @@ export function MSALabels({
               );
             }
 
-            if (isTopLevelMod) {
-              return (
-                <div
-                  key={seq.id}
-                  className="flex items-center gap-1 px-1.5 select-none whitespace-nowrap text-[10px] font-mono text-gray-500"
-                  style={{
-                    height: rowHeight,
-                    lineHeight: `${rowHeight}px`,
-                  }}
-                  title={seq.layerLabel ?? seq.name}
-                >
-                  <button
-                    onClick={handleToggleLayer}
-                    className={`flex-shrink-0 p-0 ${layerActive ? 'text-orange-400' : 'text-gray-300'} hover:text-orange-600`}
-                  >
-                    <EyeIcon size={9} />
-                  </button>
-                  {swatches}
-                  <span className={layerActive ? 'text-orange-500' : 'text-gray-300'}>{seq.layerLabel ?? seq.name}</span>
-                </div>
-              );
-            }
+            // Unified aux row layout: all aux rows (variants, ligands, PTMs)
+            // get the indented "quote" border so they visually nest under their
+            // parent chain. PTM rows additionally get an X to deselect the type.
+            const isPtmRow = desc?.kind === 'ptm';
             return (
               <div
                 key={seq.id}
@@ -353,12 +368,24 @@ export function MSALabels({
               >
                 <button
                   onClick={handleToggleLayer}
+                  title={layerActive ? 'Hide overpaint' : 'Show overpaint'}
                   className={`flex-shrink-0 p-0 ${layerActive ? 'text-gray-400' : 'text-gray-300'} hover:text-gray-600`}
                 >
                   <EyeIcon size={9} />
                 </button>
                 {swatches}
-                <span className={layerActive ? 'text-gray-400' : 'text-gray-300'}>{seq.layerLabel ?? seq.name}</span>
+                <span className={layerActive ? 'text-gray-400' : 'text-gray-300'}>
+                  {seq.layerLabel ?? seq.name}
+                </span>
+                {isPtmRow && (
+                  <button
+                    onClick={handleDeleteLayer}
+                    title="Remove this PTM track"
+                    className="ml-auto flex-shrink-0 p-0 text-gray-300 hover:text-red-500"
+                  >
+                    <X size={9} />
+                  </button>
+                )}
               </div>
             );
           }
@@ -388,7 +415,6 @@ export function MSALabels({
                       : 'text-gray-600'
                 }
                 ${isPdb && !isSelected && !isHovered ? 'hover:bg-gray-100' : ''}
-                ${isLastMaster ? 'border-b-[3px] border-gray-400' : ''}
                 ${isPdb && !isFirstPdb ? 'border-t border-gray-300' : ''}
                 ${isFirstPdb ? 'font-semibold' : ''}
                 ${isPdb && !isChainVisible ? 'opacity-40' : ''}
@@ -400,56 +426,82 @@ export function MSALabels({
               }}
               title={seq.name}
             >
-              {isPdb && onToggleExpand ? (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onToggleExpand(seq.id); }}
-                  className="flex-shrink-0 w-3 h-3 flex items-center justify-center text-gray-400 hover:text-gray-600"
+              {/* Tool cluster: uniform h-4 buttons grouped on the left of every PDB row. */}
+              {isPdb && (
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                  {onToggleExpand && (
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => { e.stopPropagation(); onToggleExpand(seq.id); }}
+                      title={isExpanded ? 'Collapse chain' : 'Expand chain (variants, ligands)'}
+                      className="w-4 h-4 inline-flex items-center justify-center rounded text-gray-400 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+                    >
+                      {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                    </button>
+                  )}
+                  {ck && onToggleChainVisibility && (
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => { e.stopPropagation(); onToggleChainVisibility(ck); }}
+                      title={isChainVisible ? 'Hide chain in 3D view' : 'Show chain in 3D view'}
+                      className={`w-4 h-4 inline-flex items-center justify-center rounded hover:bg-gray-100 transition-colors ${
+                        isChainVisible ? 'text-gray-400 hover:text-gray-800' : 'text-gray-300 hover:text-gray-500'
+                      }`}
+                    >
+                      <VisEyeIcon size={10} />
+                    </button>
+                  )}
+                  {(() => {
+                    if (!ck || !onRemoveAlignedChain) return null;
+                    const isPrimary = !!(primaryPdbId && primaryChainId
+                      && ck === makeChainKey(primaryPdbId, primaryChainId));
+                    if (isPrimary) return null;
+                    return (
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); onRemoveAlignedChain(ck); }}
+                        title="Remove alignment"
+                        className="w-4 h-4 inline-flex items-center justify-center rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        <X size={10} />
+                      </button>
+                    );
+                  })()}
+                  {ck && <PerChainPtmDropdown chainKey={ck} />}
+                </div>
+              )}
+
+              {/* Text labels: truncate when the labels column is narrow. */}
+              <div
+                className="flex items-center gap-1 min-w-0 flex-1 overflow-hidden"
+                style={{ marginLeft: isPdb ? 6 : 0 }}
+              >
+                <span
+                  className="whitespace-nowrap overflow-hidden text-ellipsis"
+                  style={{ display: 'block', width: '100%' }}
                 >
-                  {isExpanded
-                    ? <ChevronDown size={10} />
-                    : <ChevronRight size={10} />
-                  }
-                </button>
-              ) : null}
-              {isPdb && ck && onToggleChainVisibility ? (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onToggleChainVisibility(ck); }}
-                  className={`flex-shrink-0 p-0 ${isChainVisible ? 'text-gray-400 hover:text-gray-700' : 'text-gray-300 hover:text-gray-500'}`}
-                  title={isChainVisible ? 'Hide chain in 3D view' : 'Show chain in 3D view'}
-                >
-                  <VisEyeIcon size={10} />
-                </button>
-              ) : null}
-              {(() => {
-                if (!isPdb || !ck || !onRemoveAlignedChain) return null;
-                const isPrimary = !!(primaryPdbId && primaryChainId
-                  && ck === makeChainKey(primaryPdbId, primaryChainId));
-                if (isPrimary) return null;
-                return (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onRemoveAlignedChain(ck); }}
-                    className="flex-shrink-0 p-0 text-gray-300 hover:text-red-500"
-                    title="Remove alignment"
-                  >
-                    <X size={10} />
-                  </button>
-                );
-              })()}
-              {parsed.family && (
-                <span className="text-gray-500 w-3 text-center flex-shrink-0">{parsed.family}</span>
-              )}
-              {parsed.structure && (
-                <span className="text-gray-700 flex-shrink-0">{parsed.structure}</span>
-              )}
-              {parsed.isotype && (
-                <span className="text-blue-500 flex-shrink-0">{parsed.isotype}</span>
-              )}
-              {parsed.name && (
-                <span className={isMaster ? 'text-gray-500' : 'text-gray-700'}>{parsed.name}</span>
-              )}
-              {parsed.species && (
-                <span className="text-gray-400 flex-shrink-0">{parsed.species}</span>
-              )}
+                  {parsed.family && (
+                    <span className="text-gray-500 mr-1">{parsed.family}</span>
+                  )}
+                  {parsed.structure && (
+                    <span className="text-gray-700 mr-1">{parsed.structure}</span>
+                  )}
+                  {parsed.isotype && (
+                    <span className="text-blue-500 mr-1">{parsed.isotype}</span>
+                  )}
+                  {parsed.name && (
+                    <span className={`mr-1 ${isMaster ? 'text-gray-500' : 'text-gray-700'}`}>
+                      {parsed.name}
+                    </span>
+                  )}
+                  {parsed.species && (
+                    <span className="text-gray-400">{parsed.species}</span>
+                  )}
+                </span>
+              </div>
             </div>
           );
         })}

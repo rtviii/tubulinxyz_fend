@@ -129,6 +129,8 @@ export function ChainAnnotationFetcher({ rcsbId, authAsymId, chainKey }: ChainTo
             aminoAcid: m.amino_acid,
             modificationType: m.modification_type,
             species: m.species ?? null,
+            taxId: m.tax_id ?? null,
+            speciesFullName: m.species_full_name ?? null,
             tubulinType: m.tubulin_type ?? null,
             phenotype: m.phenotype ?? null,
             databaseLink: m.database_link ?? null,
@@ -137,7 +139,14 @@ export function ChainAnnotationFetcher({ rcsbId, authAsymId, chainKey }: ChainTo
 
         dispatch(setChainAnnotations({
             chainKey,
-            data: { ligandSites, variants, modifications, family: variantsQuery.data.family ?? null },
+            data: {
+                ligandSites,
+                variants,
+                modifications,
+                family: variantsQuery.data.family ?? null,
+                taxId: variantsQuery.data.chain_tax_id ?? null,
+                speciesFullName: variantsQuery.data.chain_species_full_name ?? null,
+            },
         }));
     }, [chainKey, variantsQuery.data, ligandsQuery.data, positionMapping, existingEntry?.data, dispatch]);
 

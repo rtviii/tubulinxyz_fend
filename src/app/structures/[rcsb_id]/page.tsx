@@ -169,13 +169,21 @@ function StructureProfilePageInner() {
   const [displaySequenceIds, setDisplaySequenceIds] = useState<string[]>(fallbackVisibleIds);
   const [displaySequencesForSync, setDisplaySequencesForSync] = useState<import('@/store/slices/sequence_registry').MsaSequence[]>([]);
   const [expandedChainKeys, setExpandedChainKeys] = useState<Set<string>>(() => new Set());
+  // Once the MSA panel emits its richer (spacer + aux rows) sequence list, it
+  // becomes the authoritative source. Otherwise the fallback effect below kept
+  // overwriting it whenever PDB/annotation state churned, dropping the spacer
+  // row and shifting downstream color-rule row indices by 1 -- i.e., paints
+  // landed on the spacer (invisible) row instead of the PDB chain row.
+  const hasPanelEmittedRef = useRef(false);
 
-  // Keep fallback in sync when master/pdb data changes (before panel emits)
+  // Seed displaySequenceIds from fallback until the panel takes over.
   useEffect(() => {
+    if (hasPanelEmittedRef.current) return;
     setDisplaySequenceIds(fallbackVisibleIds);
   }, [fallbackVisibleIds]);
 
   const handleDisplaySequencesChange = useCallback((seqs: import('@/store/slices/sequence_registry').MsaSequence[]) => {
+    hasPanelEmittedRef.current = true;
     setDisplaySequencesForSync(seqs);
     setDisplaySequenceIds(seqs.map(s => s.id));
   }, []);

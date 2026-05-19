@@ -6,6 +6,7 @@ import type { MsaSequence } from './sequence_registry';
 import {
   resolveLigandColor,
   resolveVariantColor,
+  resolveModificationColor,
   type LigandOverrideMap,
   type VariantOverrideMap,
   type ModificationOverrideMap,
@@ -17,8 +18,10 @@ export interface ColorRule {
   id: string;
 
   chainKey: string;          // <-- added: e.g. "9OT2_A"
-  type: 'ligand' | 'variant';
+  type: 'ligand' | 'variant' | 'modification';
   variantType?: VariantType;
+  /** For modification rules: the PTM type id (e.g. 'palmitoylation'). */
+  modificationType?: string;
   color: string;
   msaCells: Array<{ row: number; column: number }>;
   residues: Array<{ chainId: string; authSeqId: number }>;
@@ -30,9 +33,10 @@ export const makeSelectActiveColorRulesForSequenceIds = () =>
       (state: RootState) => state.annotations.chains,
       (state: RootState) => state.colorOverrides.ligand,
       (state: RootState) => state.colorOverrides.variant,
+      (state: RootState) => state.colorOverrides.modification,
       (_state: RootState, visibleSeqIds: string[]) => visibleSeqIds,
     ],
-    (chains, ligandOverrides, variantOverrides, visibleSeqIds): ColorRule[] => {
+    (chains, ligandOverrides, variantOverrides, modificationOverrides, visibleSeqIds): ColorRule[] => {
       const rules: ColorRule[] = [];
       const visible = new Set(visibleSeqIds);
       const chainKeyToRowIndex: Record<string, number> = {};
@@ -73,6 +77,39 @@ export const makeSelectActiveColorRulesForSequenceIds = () =>
               msaCells: [{ row: rowIndex, column: variant.masterIndex - 1 }],
               residues: [{ chainId: authAsymId, authSeqId: variant.authSeqId }],
             });
+          }
+        }
+
+        // PTM rules: each selected (non-muted) type contributes cells for every
+        // modification in the current species selection. These paint the principal
+        // row when the chain is collapsed; when expanded, useViewerSync skips
+        // principal painting for this chain and the aux PTM rows take over via
+        // computeAuxiliaryCellColors. The /3D/ overpaint always honors these rules.
+        const speciesSet = new Set(visibility.includedSpeciesTaxIds ?? []);
+        const muted = new Set(visibility.mutedModificationTypes ?? []);
+        if (speciesSet.size > 0) {
+          for (const modType of visibility.visibleModificationTypes ?? []) {
+            if (muted.has(modType)) continue;
+            const color = resolveModificationColor(modificationOverrides, modType);
+            for (const m of entry.data.modifications) {
+              if (m.modificationType !== modType) continue;
+              if (m.taxId == null || !speciesSet.has(m.taxId)) continue;
+              const authSeqId = entry.data
+                ? null  // master_index -> auth_seq_id mapping lives outside this slice; skip residue payload for now
+                : null;
+              rules.push({
+                id: `mod_${chainKey}_${modType}_${m.masterIndex}_${m.taxId}`,
+                chainKey,
+                type: 'modification',
+                modificationType: modType,
+                color,
+                msaCells: [{ row: rowIndex, column: m.masterIndex - 1 }],
+                // residues left empty: 3D overpaint for PTMs uses the
+                // computeAuxiliaryCellColors path + the chain's residue mapping
+                // upstream; PTMs typically don't need a per-residue 3D recolor.
+                residues: authSeqId != null ? [{ chainId: authAsymId, authSeqId }] : [],
+              });
+            }
           }
         }
       }
@@ -122,7 +159,7 @@ export function computeAuxiliaryCellColors(
     // (eye icon on). Inactive layers keep the row but leave its cells blank.
     if (!isAuxLayerActive(desc, entry.visibility)) continue;
 
-    for (const { masterIndex, color } of AUX_COLOR_PROVIDERS[desc.kind](desc, entry.data, overrides)) {
+    for (const { masterIndex, color } of AUX_COLOR_PROVIDERS[desc.kind](desc, entry.data, overrides, entry.visibility)) {
       cellColors[`${rowIdx}-${masterIndex - 1}`] = color;
     }
   }

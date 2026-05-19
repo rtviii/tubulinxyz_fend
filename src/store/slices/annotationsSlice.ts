@@ -42,7 +42,9 @@ export interface Modification {
   masterIndex: number;
   aminoAcid: string;
   modificationType: string;
-  species: string | null;
+  species: string | null;            // source abbreviation, e.g. "H. sapiens"
+  taxId: number | null;              // NCBI taxonomy id
+  speciesFullName: string | null;    // canonical scientific name
   tubulinType: string | null;
   phenotype: string | null;
   databaseLink: string | null;
@@ -54,14 +56,26 @@ export interface ChainAnnotationData {
   variants: Variant[];
   modifications: Modification[];
   family: string | null;
+  taxId: number | null;              // this chain's source organism (first src_organism_id)
+  speciesFullName: string | null;    // canonical scientific name matching taxId
 }
 
 export interface ChainVisibility {
   showVariants: boolean;
   showModifications: boolean;
   visibleLigandIds: string[];
-  /** Which modification types are toggled on for auxiliary track display */
+  /** Modification types the user has SELECTED -- these materialize as aux rows
+   *  when the parent chain is expanded, and contribute to the principal row's
+   *  overpaint when the chain is collapsed. Managed via the PTMs+ popup. */
   visibleModificationTypes: string[];
+  /** Modification types whose paint is temporarily SILENCED (eye-off on the aux
+   *  row). Row still exists; just no color cells. Independent from selection so
+   *  toggling the eye doesn't delete the row. */
+  mutedModificationTypes: string[];
+  /** Which species (NCBI taxids) to include when filtering modifications for this chain.
+   *  Seeded to [chain's own taxId] on first data load; user can add/remove via the PTM dropdown.
+   *  Empty array = no PTMs surfaced. */
+  includedSpeciesTaxIds: number[];
 }
 
 export interface ChainAnnotationEntry {
@@ -90,6 +104,8 @@ const DEFAULT_VISIBILITY: ChainVisibility = {
   showModifications: false,
   visibleLigandIds: [],
   visibleModificationTypes: [],
+  mutedModificationTypes: [],
+  includedSpeciesTaxIds: [],
 };
 
 // ============================================================
@@ -140,6 +156,13 @@ export const annotationsSlice = createSlice({
               showModifications: false,
               visibleLigandIds: data.ligandSites.map(s => s.id),
               visibleModificationTypes: existing?.visibility?.visibleModificationTypes ?? [],
+              mutedModificationTypes: existing?.visibility?.mutedModificationTypes ?? [],
+              // First data load ALWAYS seeds with the chain's own species. NOT
+              // `?? []` here -- setChainLoading creates the entry with an empty
+              // array, so a nullish-coalesce would never seed. We're explicitly
+              // entering this branch only when hadData was false (first load), so
+              // overwriting is correct.
+              includedSpeciesTaxIds: data.taxId != null ? [data.taxId] : [],
             },
         isLoading: false,
         error: null,
@@ -230,9 +253,40 @@ export const annotationsSlice = createSlice({
       const idx = chain.visibility.visibleModificationTypes.indexOf(action.payload.modType);
       if (idx >= 0) {
         chain.visibility.visibleModificationTypes.splice(idx, 1);
+        // Clearing selection also clears the muted flag so a later re-add starts un-muted.
+        const m = chain.visibility.mutedModificationTypes.indexOf(action.payload.modType);
+        if (m >= 0) chain.visibility.mutedModificationTypes.splice(m, 1);
       } else {
         chain.visibility.visibleModificationTypes.push(action.payload.modType);
       }
+    },
+
+    /** Mute/unmute a modification type's overpaint without changing whether the
+     *  aux row is materialized. Eye-icon click on a PTM aux row uses this. */
+    toggleModificationMuted: (state, action: PayloadAction<{ chainKey: string; modType: string }>) => {
+      const chain = state.chains[action.payload.chainKey];
+      if (!chain) return;
+      const muted = chain.visibility.mutedModificationTypes;
+      const idx = muted.indexOf(action.payload.modType);
+      if (idx >= 0) muted.splice(idx, 1);
+      else muted.push(action.payload.modType);
+    },
+
+    /** Set the full list of taxids whose PTMs should surface for this chain.
+     *  Used by the PerChainPtmDropdown for both single toggles (add/remove one
+     *  species) and bulk operations (apply a group pill like 'Mammals'). */
+    setSpeciesForChain: (state, action: PayloadAction<{ chainKey: string; taxIds: number[] }>) => {
+      const chain = state.chains[action.payload.chainKey];
+      if (!chain) return;
+      // De-duplicate while preserving order.
+      const seen = new Set<number>();
+      const next: number[] = [];
+      for (const t of action.payload.taxIds) {
+        if (seen.has(t)) continue;
+        seen.add(t);
+        next.push(t);
+      }
+      chain.visibility.includedSpeciesTaxIds = next;
     },
 
     toggleAllLigandsByChemId: (state, action: PayloadAction<string>) => {
@@ -280,6 +334,8 @@ export const {
   clearChain,
   clearAllAnnotations,
   toggleModificationType,
+  toggleModificationMuted,
+  setSpeciesForChain,
   toggleAllVariants,
   toggleAllLigandsByChemId,
 } = annotationsSlice.actions;

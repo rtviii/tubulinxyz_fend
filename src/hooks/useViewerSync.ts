@@ -1,5 +1,5 @@
 // src/hooks/useViewerSync.ts
-import { useEffect, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/store';
 import { makeSelectActiveColorRulesForSequenceIds, computeAuxiliaryCellColors } from '@/store/slices/colorRulesSelector';
 import { selectPositionMapping } from '@/store/slices/sequence_registry';
@@ -272,9 +272,24 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
         }
     }, []); // stable -- reads everything from refs
 
+    // The MSA handle becomes available after ResizableMSAContainer mounts. A plain
+    // ref mutation doesn't trigger React effects, so on first mount the cell-paint
+    // effect below can fire before msaRef.current is set, silently no-op, and never
+    // re-run (because none of its deps actually changed afterwards) until the user
+    // toggles something like expand. Promote ref-readiness to state so effects
+    // depending on it re-fire when the MSA is actually available.
+    const [msaReady, setMsaReady] = useState(false);
+    useEffect(() => {
+        if (msaRef.current && !msaReady) setMsaReady(true);
+    });
+
     // --- MSA cell-color effect (cheap, fine to fire on visibility/expand changes) ---
     useEffect(() => {
-        if (!msaRef.current) return;
+        if (!msaRef.current) {
+            // eslint-disable-next-line no-console
+            console.log('[paint] skip: msaRef not ready', { msaReady, colorRulesLen: colorRules.length });
+            return;
+        }
         const cellColors: Record<string, string> = {};
 
         // Primary row colors from color rules.
@@ -315,13 +330,29 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
             }
         }
 
+        // Diagnostic dump: how many cells, which rows, summary of color rules.
+        // eslint-disable-next-line no-console
+        console.log('[paint] running', {
+            msaReady,
+            colorRulesLen: colorRules.length,
+            displaySeqLen: displaySequences?.length ?? 0,
+            cellCount: Object.keys(cellColors).length,
+            rowsTouched: Array.from(new Set(Object.keys(cellColors).map(k => k.split('-')[0]))).sort(),
+            firstRuleSample: colorRules[0] && {
+                type: colorRules[0].type,
+                chainKey: colorRules[0].chainKey,
+                cellsLen: colorRules[0].msaCells.length,
+                firstCell: colorRules[0].msaCells[0],
+            },
+        });
+
         if (Object.keys(cellColors).length > 0) {
             msaRef.current.applyCellColors(cellColors);
         } else {
             msaRef.current.clearPositionColors();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [colorRules, msaRef, displaySequences, annotationChains, expandedChainKeysKey,
+    }, [msaReady, colorRules, msaRef, displaySequences, annotationChains, expandedChainKeysKey,
         hiddenChainKeysKey, ligandOverrides, variantOverrides, modificationOverrides]);
 
     // --- Molstar color-sync effect (expensive; DO NOT fire on visibility toggles) ---

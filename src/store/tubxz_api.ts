@@ -5,6 +5,7 @@ export const addTagTypes = [
   "Ligands",
   "MSA Alignment",
   "Annotations",
+  "NL Query",
   "Health",
 ] as const;
 const injectedRtkApi = api
@@ -76,6 +77,13 @@ const injectedRtkApi = api
       }),
       listFamilies: build.query<ListFamiliesApiResponse, ListFamiliesApiArg>({
         query: () => ({ url: `/structures/families` }),
+        providesTags: ["Structures"],
+      }),
+      getStructureOrganisms: build.query<
+        GetStructureOrganismsApiResponse,
+        GetStructureOrganismsApiArg
+      >({
+        query: () => ({ url: `/structures/organisms` }),
         providesTags: ["Structures"],
       }),
       getStructure: build.query<GetStructureApiResponse, GetStructureApiArg>({
@@ -259,6 +267,39 @@ const injectedRtkApi = api
         }),
         providesTags: ["Annotations"],
       }),
+      nlQueryToFilters: build.mutation<
+        NlQueryToFiltersApiResponse,
+        NlQueryToFiltersApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/nl_query/filters`,
+          method: "POST",
+          body: queryArg.nlQueryRequest,
+        }),
+        invalidatesTags: ["NL Query"],
+      }),
+      nlQueryToViewerActions: build.mutation<
+        NlQueryToViewerActionsApiResponse,
+        NlQueryToViewerActionsApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/nl_query/viewer`,
+          method: "POST",
+          body: queryArg.nlViewerRequest,
+        }),
+        invalidatesTags: ["NL Query"],
+      }),
+      nlQueryGlobal: build.mutation<
+        NlQueryGlobalApiResponse,
+        NlQueryGlobalApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/nl_query/global`,
+          method: "POST",
+          body: queryArg.nlGlobalRequest,
+        }),
+        invalidatesTags: ["NL Query"],
+      }),
       healthHealthGet: build.query<
         HealthHealthGetApiResponse,
         HealthHealthGetApiArg
@@ -329,6 +370,11 @@ export type GetTaxonomyFlatApiArg = {
 export type ListFamiliesApiResponse =
   /** status 200 Successful Response */ FamilyCount[];
 export type ListFamiliesApiArg = void;
+export type GetStructureOrganismsApiResponse =
+  /** status 200 Successful Response */ {
+    [key: string]: string[];
+  };
+export type GetStructureOrganismsApiArg = void;
 export type GetStructureApiResponse =
   /** status 200 Successful Response */ StructureDetail;
 export type GetStructureApiArg = {
@@ -448,6 +494,21 @@ export type GetModificationsAtPositionApiResponse =
 export type GetModificationsAtPositionApiArg = {
   family: string;
   position: number;
+};
+export type NlQueryToFiltersApiResponse =
+  /** status 200 Successful Response */ NlQueryResponse;
+export type NlQueryToFiltersApiArg = {
+  nlQueryRequest: NlQueryRequest;
+};
+export type NlQueryToViewerActionsApiResponse =
+  /** status 200 Successful Response */ NlViewerResponse;
+export type NlQueryToViewerActionsApiArg = {
+  nlViewerRequest: NlViewerRequest;
+};
+export type NlQueryGlobalApiResponse =
+  /** status 200 Successful Response */ NlGlobalResponseBody;
+export type NlQueryGlobalApiArg = {
+  nlGlobalRequest: NlGlobalRequest;
 };
 export type HealthHealthGetApiResponse =
   /** status 200 Successful Response */ any;
@@ -957,6 +1018,8 @@ export type ModificationAnnotation = {
   modification_type: string;
   uniprot_id?: string | null;
   species?: string | null;
+  tax_id?: number | null;
+  species_full_name?: string | null;
   tubulin_type?: string | null;
   family?: string | null;
   phenotype?: string | null;
@@ -971,6 +1034,8 @@ export type PolymerAnnotationsResponse = {
   auth_asym_id: string;
   entity_id: string;
   family: string | null;
+  chain_tax_id?: number | null;
+  chain_species_full_name?: string | null;
   variants: VariantAnnotation[];
   modifications?: ModificationAnnotation[];
   total_count: number;
@@ -990,12 +1055,215 @@ export type ModificationsResponse = {
   modifications: ModificationAnnotation[];
   total_count: number;
 };
+export type NlQueryResponse = {
+  target?: ("structures" | "polymers" | "ligands") | null;
+  filters?: {
+    [key: string]: any;
+  } | null;
+  summary?: string;
+  clarification?: string | null;
+};
+export type NlQueryRequest = {
+  text: string;
+  target?: "structures" | "polymers" | "ligands";
+  current_filters?: {
+    [key: string]: any;
+  } | null;
+};
+export type ViewerActionEnvelope = {
+  type: string;
+  args?: {
+    [key: string]: any;
+  };
+};
+export type AlignedRef = {
+  rcsb_id: string;
+  auth_asym_id: string;
+};
+export type RangeRef = {
+  start: number;
+  end: number;
+};
+export type ActionCard = {
+  action:
+    | "open_catalogue"
+    | "open_structure"
+    | "open_expert"
+    | "inspect_ligand"
+    | "view_variants"
+    | "clarify";
+  /** Short chip text shown to user */
+  label: string;
+  /** Optional 1-line subtitle under the label */
+  description?: string | null;
+  /** Id of an entry in queries[] whose filters drive this catalogue view */
+  query_ref?: string | null;
+  rcsb_id?: string | null;
+  focus_chains?: string[] | null;
+  focus_ligands?: string[] | null;
+  /** auth_asym_id of the monomer-view primary chain */
+  primary_chain?: string | null;
+  /** Additional chains to load into the MSA alongside the primary */
+  aligned?: AlignedRef[] | null;
+  focus_range?: RangeRef | null;
+  chemical_id?: string | null;
+  /** Chain that contacts this ligand in the chosen structure */
+  suggested_chain?: string | null;
+  family?: string | null;
+  position_min?: number | null;
+  position_max?: number | null;
+  /** substitution | insertion | deletion */
+  variant_type?: string | null;
+  /** NCBI tax ids to filter the catalogue by (e.g. [5811] for Toxoplasma gondii). Use when you want a catalogue card scoped to an organism without spelling out a full query in queries[]. */
+  source_organism_ids?: number[] | null;
+  /** One-sentence clarification when intent is ambiguous */
+  question?: string | null;
+};
+export type NlViewerResponse = {
+  kind: "viewer_actions" | "clarify" | "nav_card";
+  actions?: ViewerActionEnvelope[];
+  /** EntityRef list surfaced via the MentionEntities tool. Frontend renders them as interactive pills in the side panel. */
+  entities?: {
+    [key: string]: any;
+  }[];
+  /** Set when kind='nav_card': a single ActionCard from the global vocabulary, rendered as a navigation chip in the side panel. */
+  card?: ActionCard | null;
+  summary?: string;
+  clarification?: string | null;
+};
+export type ViewContextBody = {
+  rcsb_id?: string | null;
+  chain_ids?: string[];
+  ligand_keys?: string[];
+  view_mode?: string | null;
+  active_monomer_chain?: string | null;
+};
+export type NlViewerRequest = {
+  text: string;
+  view_context?: ViewContextBody;
+};
+export type ExpMethod =
+  | "X-RAY DIFFRACTION"
+  | "ELECTRON MICROSCOPY"
+  | "ELECTRON CRYSTALLOGRAPHY"
+  | "SOLUTION NMR"
+  | "NEUTRON DIFFRACTION"
+  | "FIBER DIFFRACTION"
+  | "OTHER";
+export type PolymerizationState =
+  | "monomer"
+  | "dimer"
+  | "oligomer"
+  | "filament"
+  | "unknown";
+export type VariantTypeFilter = "substitution" | "insertion" | "deletion";
+export type StructureFilters = {
+  /** rcsb_id cursor for keyset pagination */
+  cursor?: string | null;
+  limit?: number;
+  /** Full-text search */
+  search?: string | null;
+  /** Filter to specific PDB IDs */
+  rcsb_ids?: string[] | null;
+  resolution_min?: number | null;
+  resolution_max?: number | null;
+  year_min?: number | null;
+  year_max?: number | null;
+  exp_method?: ExpMethod[] | null;
+  polymerization_state?: PolymerizationState[] | null;
+  sourceTaxa?: number[] | null;
+  host_organism_ids?: number[] | null;
+  has_ligand_ids?: string[] | null;
+  has_polymer_family?: string[] | null;
+  has_uniprot?: string[] | null;
+  has_isotype?: string[] | null;
+  /** Has any variants */
+  has_variants?: boolean | null;
+  /** Family to scope variant filters */
+  variant_family?: string | null;
+  /** Filter by variant type */
+  variant_type?: VariantTypeFilter | null;
+  /** Min master alignment position */
+  variant_position_min?: number | null;
+  /** Max master alignment position */
+  variant_position_max?: number | null;
+  /** Wild-type residue */
+  variant_wild_type?: string | null;
+  /** Observed/mutant residue */
+  variant_observed?: string | null;
+  /** Source: structural or literature */
+  variant_source?: string | null;
+  /** Phenotype keyword search */
+  variant_phenotype?: string | null;
+};
+export type PolypeptideEntityFilters = {
+  /** Compound cursor 'RCSB_ID:ENTITY_ID' */
+  cursor?: string | null;
+  limit?: number;
+  structure_filters?: StructureFilters | null;
+  family?: string[] | null;
+  isotype?: string[] | null;
+  uniprot_accession?: string | null;
+  sequence_contains?: string | null;
+  sequence_length_min?: number | null;
+  sequence_length_max?: number | null;
+  /** Filter to entities with/without variants */
+  has_variants?: boolean | null;
+  /** Filter to polymers whose instances are near these ligands */
+  has_ligand_ids?: string[] | null;
+  /** Exclude structures that contain non-tubulin (MAP) polymer entities */
+  exclude_maps?: boolean | null;
+  /** Filter by variant type: substitution, insertion, deletion */
+  variant_type?: string | null;
+  /** Min master alignment position for variant filter */
+  variant_position_min?: number | null;
+  /** Max master alignment position for variant filter */
+  variant_position_max?: number | null;
+};
+export type LigandFilters = {
+  cursor?: string | null;
+  limit?: number;
+  /** Search chemical name or ID */
+  search?: string | null;
+  chemical_ids?: string[] | null;
+  has_drugbank?: boolean | null;
+  /** Filter to ligands in these PDB IDs */
+  in_structures?: string[] | null;
+};
+export type QuerySpec = {
+  /** Stable id, e.g. 'q1' */
+  id: string;
+  target: "structures" | "polymers" | "ligands";
+  filters_structures?: StructureFilters | null;
+  filters_polymers?: PolypeptideEntityFilters | null;
+  filters_ligands?: LigandFilters | null;
+};
+export type GlobalNlResponse = {
+  /** Optional 1-sentence interpretation/summary; <=180 chars. Leave empty if cards speak for themselves. */
+  blurb?: string;
+  queries?: QuerySpec[];
+  cards?: ActionCard[];
+  validation?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  };
+};
+export type NlGlobalResponseBody = {
+  kind: "global" | "clarify";
+  response?: GlobalNlResponse | null;
+  clarification?: string | null;
+};
+export type NlGlobalRequest = {
+  text: string;
+};
 export const {
   useGetTaxonomyTreeQuery,
   useListStructuresQuery,
   useGetStructureFacetsQuery,
   useGetTaxonomyFlatQuery,
   useListFamiliesQuery,
+  useGetStructureOrganismsQuery,
   useGetStructureQuery,
   useGetStructureProfileQuery,
   useGetStructureThumbnailQuery,
@@ -1012,6 +1280,9 @@ export const {
   useGetVariantStatsQuery,
   useGetModificationsForFamilyQuery,
   useGetModificationsAtPositionQuery,
+  useNlQueryToFiltersMutation,
+  useNlQueryToViewerActionsMutation,
+  useNlQueryGlobalMutation,
   useHealthHealthGetQuery,
   useIngestStatusIngestStatusGetQuery,
   useBootstrapStatusBootstrapStatusGetQuery,

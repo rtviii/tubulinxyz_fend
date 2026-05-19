@@ -7,7 +7,7 @@ export interface ChainRef {
   chainId: string;
 }
 
-export type SequenceOriginType = 'master' | 'custom' | 'pdb' | 'auxiliary' | 'synthetic';
+export type SequenceOriginType = 'master' | 'custom' | 'pdb' | 'auxiliary' | 'synthetic' | 'spacer';
 
 export interface MsaSequence {
   id: string;
