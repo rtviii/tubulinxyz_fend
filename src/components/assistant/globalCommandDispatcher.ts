@@ -83,11 +83,20 @@ export function cardToHref(card: ActionCard, queries: QuerySpec[]): CardNavTarge
       return { href: '#', isClarify: true };
 
     case 'open_catalogue': {
+      // Preferred path: a referenced query (global-endpoint flow).
       const q = queries.find(qq => qq.id === card.query_ref);
-      if (!q || q.target !== 'structures' || !q.filters_structures) {
-        return { href: '/structures' };
+      if (q && q.target === 'structures' && q.filters_structures) {
+        return { href: buildCatalogueUrl(backendStructureFiltersToUi(q.filters_structures)) };
       }
-      return { href: buildCatalogueUrl(backendStructureFiltersToUi(q.filters_structures)) };
+      // Fallback: LLM may encode filter intent directly on the card (the
+      // global endpoint should use queries+query_ref, but the viewer endpoint
+      // and fail-loud organism cards can't reference queries).
+      const fallback: Partial<UiFilters> = {};
+      if (card.focus_ligands?.length) fallback.ligands = card.focus_ligands;
+      if (card.family) fallback.family = [card.family];
+      if (card.source_organism_ids?.length) fallback.sourceTaxa = card.source_organism_ids;
+      if (card.rcsb_id) fallback.ids = [card.rcsb_id];
+      return { href: buildCatalogueUrl(fallback) };
     }
 
     case 'open_structure': {

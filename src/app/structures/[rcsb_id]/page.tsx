@@ -42,6 +42,8 @@ import {
 } from '@/components/assistant/AssistantTargetContext';
 import { dispatchViewerActions } from '@/components/assistant/viewerCommandDispatcher';
 import type { ViewerResponse } from '@/components/assistant/types';
+import type { ActionCard, EntityRef } from '@/components/assistant/globalTypes';
+import { ViewerAssistantPanel } from '@/components/assistant/ViewerAssistantPanel';
 import {
   searchParamsToStructureView,
   type AlignedChainRef,
@@ -91,6 +93,11 @@ function StructureProfilePageInner() {
   const [pendingRange, setPendingRange] = useState<
     { start: number; end: number } | null
   >(null);
+
+  // In-page assistant: surfaced entities + last summary from /nl_query/viewer.
+  const [viewerEntities, setViewerEntities] = useState<EntityRef[]>([]);
+  const [viewerSummary, setViewerSummary] = useState<string>('');
+  const [viewerNavCard, setViewerNavCard] = useState<ActionCard | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const msaRef = useRef<MSAHandle>(null);
@@ -652,9 +659,26 @@ function StructureProfilePageInner() {
         }
         const data = (await resp.json()) as ViewerResponse;
         if (data.kind === 'clarify') {
+          // Backend may also attach a nav card alongside the clarification —
+          // surface it in the panel so the user has a concrete next step.
+          setViewerEntities([]);
+          setViewerSummary('');
+          setViewerNavCard(data.card ?? null);
           return { clarification: data.clarification };
         }
+        if (data.kind === 'nav_card') {
+          // Navigation intent — show the card, skip viewer actions entirely.
+          setViewerEntities([]);
+          setViewerSummary(data.summary ?? '');
+          setViewerNavCard(data.card);
+          return { summary: data.summary || 'Suggested action ready.' };
+        }
         const reports = await dispatchViewerActions(instance, data.actions);
+        // Surface entities + summary in the side panel regardless of action
+        // success — partial action failure shouldn't kill the panel.
+        setViewerEntities(data.entities ?? []);
+        setViewerSummary(data.summary ?? '');
+        setViewerNavCard(null);
         const failed = reports.filter(r => !r.ok);
         if (failed.length > 0) {
           const detail = failed
@@ -765,6 +789,21 @@ function StructureProfilePageInner() {
             />
           )}
         </div>
+      )}
+
+      {/* ── In-page assistant panel (entities + summary from /nl_query/viewer) ── */}
+      {(viewerEntities.length > 0 || viewerSummary || viewerNavCard) && (
+        <ViewerAssistantPanel
+          entities={viewerEntities}
+          summary={viewerSummary}
+          navCard={viewerNavCard}
+          instance={instance}
+          onDismiss={() => {
+            setViewerEntities([]);
+            setViewerSummary('');
+            setViewerNavCard(null);
+          }}
+        />
       )}
 
       {/* ── Floating bottom panel (sequence / MSA) ── */}

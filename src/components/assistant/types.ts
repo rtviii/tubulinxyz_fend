@@ -26,9 +26,14 @@ export type ViewerActionType = ViewerAction['type'];
 // Backend response envelopes
 // ---------------------------------------------------------------------------
 
+import type { ActionCard, EntityRef } from './globalTypes';
+
 export interface ViewerResponseActions {
   kind: 'viewer_actions';
   actions: ViewerAction[];
+  // Entities surfaced via the MentionEntities tool; rendered as interactive
+  // pills with bidirectional sync to molstar.
+  entities?: EntityRef[];
   summary: string;
   clarification?: null;
 }
@@ -38,9 +43,22 @@ export interface ViewerResponseClarify {
   actions?: never;
   summary?: string;
   clarification: string;
+  // Optional companion nav card — backend attaches when the LLM emits both
+  // RequestClarification and EmitNavigationCard (e.g. "we can't do that
+  // here, but here's a card to do it elsewhere").
+  card?: ActionCard;
 }
 
-export type ViewerResponse = ViewerResponseActions | ViewerResponseClarify;
+// Emitted via the EmitNavigationCard tool when the user's question is
+// catalogue/navigation intent rather than an in-page operation.
+export interface ViewerResponseNavCard {
+  kind: 'nav_card';
+  card: ActionCard;
+  summary?: string;
+  actions?: never;
+}
+
+export type ViewerResponse = ViewerResponseActions | ViewerResponseClarify | ViewerResponseNavCard;
 
 // Filter response — mirrors the existing /nl_query/filters output, kept here
 // only so the shared panel can discriminate without importing the filter

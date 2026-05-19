@@ -13,8 +13,16 @@ import {
   type AssistantTargetValue,
 } from '@/components/assistant/AssistantTargetContext';
 import { AssistantResultsPanel } from '@/components/assistant/AssistantResultsPanel';
+import { ExampleQueries } from '@/components/assistant/ExampleQueries';
 import type { GlobalNLResponse, NLGlobalResponseBody } from '@/components/assistant/globalTypes';
 import { API_BASE_URL } from '@/config';
+
+const ASSISTANT_EXAMPLES = [
+  'Where does taxol bind?',
+  'What kinds of PTMs are in tubulin?',
+  'Compare GTP site in human vs Toxoplasma α-tubulin',
+  'Find cryo-EM structures under 3 Å',
+];
 
 const STRUCTURES = [
   {
@@ -257,6 +265,13 @@ export default function Page() {
           />
         </AppPill>
       </div>
+
+      {/* ---- Example queries (only when no live response — fades away once user engages) ---- */}
+      {!globalResponse && (
+        <div className="max-w-[1400px] w-full mx-auto px-6 pb-3 -mt-2">
+          <ExampleQueries examples={ASSISTANT_EXAMPLES} />
+        </div>
+      )}
 
       {/* ---- AI assistant results (rendered between pill and viewers when present) ---- */}
       {globalResponse && (

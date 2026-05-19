@@ -2,6 +2,33 @@
 // `tubulinxyz/api/nl_translator/global_actions.py`. Keep manually in sync;
 // the surface is small.
 
+// EntityRef matches the flat Pydantic shape. The discriminator is `kind`; the
+// payload fields the backend interprets per kind. Frontend pill code reads
+// only the fields relevant for the entity's kind.
+export type EntityKind =
+  | 'structure'
+  | 'chain'
+  | 'polymer_entity'
+  | 'family'
+  | 'ligand'
+  | 'variant'
+  | 'residue_range';
+
+export interface EntityRef {
+  kind: EntityKind;
+  rcsb_id?: string;
+  auth_asym_id?: string;
+  entity_id?: string;
+  chemical_id?: string;
+  auth_seq_id?: number;
+  family?: string;
+  master_index?: number;
+  wild_type?: string;
+  observed?: string;
+  start?: number;
+  end?: number;
+}
+
 export type ActionKind =
   | 'open_catalogue'
   | 'open_structure'
@@ -42,11 +69,14 @@ export interface ActionCard {
   chemical_id?: string;
   suggested_chain?: string;
 
-  // view_variants
+  // view_variants (family also reused by open_catalogue)
   family?: string;
   position_min?: number;
   position_max?: number;
   variant_type?: string;
+
+  // open_catalogue direct-filter shortcut (NCBI tax_ids)
+  source_organism_ids?: number[];
 
   // clarify
   question?: string;
