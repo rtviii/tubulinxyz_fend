@@ -96,6 +96,13 @@ export class MolstarInstance {
   // recent Redux-registered subtree).
   private inFlightAlignedLoads: Map<string, Promise<string | null>> = new Map();
 
+  // Entity-hover Loci cache. highlightChains() over a huge structure (dozens of
+  // copies) compiles+runs a MolScript query against the whole structure; cache
+  // the result per chain-id set so repeat hovers are free. Self-invalidates when
+  // the underlying structure object changes (reload).
+  private hoverLociCache: Map<string, StructureElement.Loci | null> = new Map();
+  private hoverLociCacheStructure: Structure | null = null;
+
   constructor(
     public readonly id: MolstarInstanceId,
     public readonly viewer: MolstarViewer,
@@ -1173,7 +1180,17 @@ const color = getMolstarGhostColor(family);
     }
     const structure = this.viewer.getCurrentStructure();
     if (!structure) return;
-    const loci = executeQuery(buildMultiChainQuery(chainIds), structure);
+
+    if (structure !== this.hoverLociCacheStructure) {
+      this.hoverLociCache.clear();
+      this.hoverLociCacheStructure = structure;
+    }
+    const key = chainIds.slice().sort().join('|');
+    let loci = this.hoverLociCache.get(key);
+    if (loci === undefined) {
+      loci = executeQuery(buildMultiChainQuery(chainIds), structure);
+      this.hoverLociCache.set(key, loci);
+    }
     this.viewer.highlightLoci(loci);
   }
 

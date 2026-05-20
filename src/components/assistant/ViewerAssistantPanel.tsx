@@ -19,6 +19,8 @@ import type { MolstarInstance } from '@/components/molstar/services/MolstarInsta
 import type { ActionCard, EntityKind, EntityRef } from './globalTypes';
 import { CardChip } from './AssistantResultsPanel';
 import { cardToHref } from './globalCommandDispatcher';
+import { useAppDispatch } from '@/store/store';
+import { showAssistantToast } from '@/store/slices/assistantToastSlice';
 
 interface PillKindMeta {
   Icon: typeof Eye;
@@ -49,6 +51,7 @@ export interface ViewerAssistantPanelProps {
 
 export function ViewerAssistantPanel({ entities, summary, navCard, instance, onDismiss }: ViewerAssistantPanelProps) {
   const router = useRouter();
+  const dispatch = useAppDispatch();
 
   // Local copy so users can dismiss individual pills without bouncing back.
   const [pills, setPills] = useState<EntityRef[]>(entities);
@@ -77,7 +80,10 @@ export function ViewerAssistantPanel({ entities, summary, navCard, instance, onD
 
   const handleNavClick = (card: ActionCard) => {
     const { href } = cardToHref(card, []);
-    if (href && href !== '#') router.push(href);
+    if (href && href !== '#') {
+      dispatch(showAssistantToast(card));
+      router.push(href);
+    }
   };
 
   if (pills.length === 0 && !summary && !navCard) return null;

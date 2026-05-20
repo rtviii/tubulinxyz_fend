@@ -7,6 +7,7 @@ import './globals.css';
 import { MolstarInstanceManagerProvider } from '@/components/molstar/services/MolstarInstanceManager';
 import { IBM_Plex_Sans } from 'next/font/google';
 import { FloatingNav } from '@/components/ui/FloatingNav';
+import { AssistantToastHost } from '@/components/assistant/AssistantToastHost';
 
 const ibmPlexSans = IBM_Plex_Sans({
   subsets: ['latin'],
@@ -33,6 +34,7 @@ export default function RootLayout({
           <MolstarInstanceManagerProvider>
             {children}
             <FloatingNav />
+            <AssistantToastHost />
           </MolstarInstanceManagerProvider>
         </Provider>
       </body>

@@ -3,7 +3,7 @@
 import { Suspense, useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useAppSelector, useAppDispatch, useAppStore } from '@/store/store';
-import { selectIsChainAligned } from '@/store/slices/sequence_registry';
+import { selectIsChainAligned, selectPositionMapping, clearPdbSequences } from '@/store/slices/sequence_registry';
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
 
 import { useStructureHoverSync } from '@/hooks/useStructureHoverSync';
@@ -93,6 +93,9 @@ function StructureProfilePageInner() {
   const [pendingRange, setPendingRange] = useState<
     { start: number; end: number } | null
   >(null);
+  // One-shot guards so the URL-range focus + MSA jump each fire once per mount.
+  const rangeFocusedRef = useRef(false);
+  const rangeMsaJumpedRef = useRef(false);
 
   // In-page assistant: surfaced entities + last summary from /nl_query/viewer.
   const [viewerEntities, setViewerEntities] = useState<EntityRef[]>([]);
@@ -112,6 +115,10 @@ function StructureProfilePageInner() {
   const activeChainId = useAppSelector(state => selectActiveMonomerChainId(state, 'structure'));
   const alignedStructures = useAppSelector(state =>
     selectAlignedStructuresForActiveChain(state, 'structure')
+  );
+  const activeChainKey = activeChainId ? makeChainKey(pdbIdFromUrl, activeChainId) : null;
+  const activePositionMapping = useAppSelector(state =>
+    activeChainKey ? selectPositionMapping(state, activeChainKey) : null
   );
 
   const [isLoading, setIsLoading] = useState(false);
@@ -409,6 +416,12 @@ function StructureProfilePageInner() {
     const load = async () => {
       setIsLoading(true);
       setError(null);
+      // Start each structure view from a clean slate. The Redux store is
+      // session-long (root layout), so PDB sequences from prior structure views
+      // linger here — showing as stale MSA rows and, worse, making
+      // selectIsChainAligned report the URL's aligned chains as already loaded
+      // so pendingAligns skips re-adding them to the freshly-rebuilt 3D scene.
+      dispatch(clearPdbSequences());
       try {
         const res = await fetch(`${API_BASE_URL}/structures/${pdbIdFromUrl}/profile`);
         if (!res.ok) throw new Error('Failed to fetch profile');
@@ -452,12 +465,37 @@ function StructureProfilePageInner() {
     load();
   }, [isInitialized, instance, pdbIdFromUrl]);
 
-  // Apply URL-pending residue range once active chain is set.
+  // Apply URL-pending residue range. Two independent steps:
+  //  - Molstar 3D focus: fires as soon as the active chain is set.
   useEffect(() => {
-    if (!pendingRange || !activeChainId || !instance) return;
+    if (!pendingRange || !activeChainId || !instance || rangeFocusedRef.current) return;
     instance.focusResidueRange(activeChainId, pendingRange.start, pendingRange.end);
-    setPendingRange(null);
+    rangeFocusedRef.current = true;
   }, [pendingRange, activeChainId, instance]);
+
+  //  - MSA scroll: waits for the active chain's position mapping (registered
+  //    after the MSA mounts), converts the auth_seq_id range to master-index
+  //    columns, and jumps the MSA viewport. Clears pendingRange once it runs.
+  useEffect(() => {
+    if (!pendingRange || rangeMsaJumpedRef.current) return;
+    const msa = msaRef.current;
+    // Wait (without consuming the one-shot flag) until a non-empty mapping and
+    // the MSA handle are both available, so a late-arriving mapping still jumps.
+    if (!msa || !activePositionMapping || Object.keys(activePositionMapping).length === 0) return;
+    const masters: number[] = [];
+    for (const [masterStr, authSeqId] of Object.entries(activePositionMapping)) {
+      if (authSeqId >= pendingRange.start && authSeqId <= pendingRange.end) {
+        masters.push(parseInt(masterStr, 10));
+      }
+    }
+    if (masters.length > 0) {
+      masters.sort((a, b) => a - b);
+      const PAD = 5;
+      msa.jumpToRange(Math.max(1, masters[0] - PAD), masters[masters.length - 1] + PAD);
+    }
+    rangeMsaJumpedRef.current = true;
+    setPendingRange(null);
+  }, [pendingRange, activePositionMapping]);
 
   // Apply URL-pending alignments once masterData is loaded for the active
   // family. This mirrors the handleDirectAlign flow used by residue popups:

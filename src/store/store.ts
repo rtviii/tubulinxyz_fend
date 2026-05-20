@@ -9,6 +9,7 @@ import sequenceRegistryReducer from './slices/sequence_registry';
 import annotationsReducer from './slices/annotationsSlice';
 import chainFocusReducer from './slices/chainFocusSlice';
 import colorOverridesReducer from './slices/colorOverridesSlice';
+import assistantToastReducer from './slices/assistantToastSlice';
 
 export const makeStore = () => {
   return configureStore({
@@ -19,6 +20,7 @@ export const makeStore = () => {
       chainFocus: chainFocusReducer,
       colorOverrides: colorOverridesReducer,
       structures_page: structuresReducer,
+      assistantToast: assistantToastReducer,
       [tubxz_api.reducerPath]: tubxz_api.reducer,
     },
     middleware: getDefaultMiddleware =>

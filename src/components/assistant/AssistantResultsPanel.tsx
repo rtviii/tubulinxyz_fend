@@ -19,6 +19,8 @@ import { API_BASE_URL } from '@/config';
 import type { ActionCard, ActionKind, GlobalNLResponse, QuerySpec } from './globalTypes';
 import { cardToHref } from './globalCommandDispatcher';
 import { PillifiedText, entitiesFromGlobalResponse, inlineEntitiesFromCard } from './PillifiedText';
+import { useAppDispatch } from '@/store/store';
+import { showAssistantToast } from '@/store/slices/assistantToastSlice';
 
 const ACTION_META: Record<ActionKind, { label: string; Icon: typeof LayoutGrid; tone: string }> = {
   open_catalogue: { label: 'Browse', Icon: LayoutGrid, tone: 'text-slate-500 bg-slate-50 border-slate-200' },
@@ -39,6 +41,7 @@ export interface AssistantResultsPanelProps {
 
 export function AssistantResultsPanel({ response, onDismiss, embedded = false }: AssistantResultsPanelProps) {
   const router = useRouter();
+  const dispatch = useAppDispatch();
 
   // Fade-in on mount.
   const [visible, setVisible] = useState(false);
@@ -51,7 +54,10 @@ export function AssistantResultsPanel({ response, onDismiss, embedded = false }:
   const handleCardClick = (card: ActionCard, ok: boolean) => {
     if (!ok || card.action === 'clarify') return;
     const { href } = cardToHref(card, response.queries);
-    if (href && href !== '#') router.push(href);
+    if (href && href !== '#') {
+      dispatch(showAssistantToast(card));
+      router.push(href);
+    }
   };
 
   // Single-clarify shortcut: render just the prompt, no grid.

@@ -2,7 +2,7 @@
 
 import { useAppSelector, useAppDispatch } from '@/store/store';
 import { useRouter } from 'next/navigation';
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { selectComponentState } from '@/components/molstar/state/selectors';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
 import { getHexForFamily, TUBULIN_GHOST_COLORS } from '@/components/molstar/colors/palette';
@@ -47,6 +47,24 @@ function familyDisplayName(family?: string | null): string {
     return mapMatch[1].split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   }
   return family;
+}
+
+// Ordering priority for the entity list: α/β tubulin first, then other tubulins,
+// then MAPs, then any other classified entity, then unclassified last.
+function familyRank(family?: string): number {
+  if (!family) return 99;
+  if (family === 'tubulin_alpha') return 0;
+  if (family === 'tubulin_beta') return 1;
+  if (family.startsWith('tubulin_')) return 2;
+  if (family.startsWith('map_')) return 3;
+  return 4;
+}
+
+function methodLabel(m?: string | null): string {
+  if (!m) return '';
+  if (m === 'ELECTRON MICROSCOPY') return 'cryo-EM';
+  if (m === 'X-RAY DIFFRACTION') return 'X-ray';
+  return m;
 }
 
 function ghostHex(family?: string | null): string {
@@ -128,7 +146,41 @@ function groupChainsByEntity(
       });
     }
   }
-  return Array.from(groups.values());
+  return Array.from(groups.values()).sort((a, b) => {
+    const r = familyRank(a.family) - familyRank(b.family);
+    if (r !== 0) return r;
+    return familyDisplayName(a.family).localeCompare(familyDisplayName(b.family));
+  });
+}
+
+// Debounced hover intent: only fire `onEnter` after the cursor rests for `delay`
+// ms, so skating across dozens of rows doesn't trigger expensive highlights or
+// Redux dispatches. `onLeave` fires immediately and cancels any pending enter.
+function useHoverIntent(onEnter: () => void, onLeave: () => void, delay = 70) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const enterRef = useRef(onEnter);
+  const leaveRef = useRef(onLeave);
+  enterRef.current = onEnter;
+  leaveRef.current = onLeave;
+
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  return useMemo(() => ({
+    onMouseEnter: () => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => {
+        timer.current = null;
+        enterRef.current();
+      }, delay);
+    },
+    onMouseLeave: () => {
+      if (timer.current) {
+        clearTimeout(timer.current);
+        timer.current = null;
+      }
+      leaveRef.current();
+    },
+  }), [delay]);
 }
 
 // ────────────────────────────────────────────
@@ -181,6 +233,13 @@ export function StructureSidebar({
     [polymerComponents, profile]
   );
 
+  const authors = profile?.citation_rcsb_authors ?? [];
+  const authorLine = authors.length === 0 ? null
+    : authors.length <= 2 ? authors.join(', ')
+    : `${authors[0]} et al.`;
+  const doi = profile?.citation_pdbx_doi;
+  const doiHref = doi ? (doi.startsWith('http') ? doi : `https://doi.org/${doi}`) : null;
+
   return (
     <div className="flex flex-col max-h-full">
       {isLandingStructure && (
@@ -197,6 +256,48 @@ export function StructureSidebar({
       {error && (
         <div className="text-red-500 text-xs mx-4 mt-2 p-2 bg-red-50 rounded">
           {error}
+        </div>
+      )}
+
+      {/* Structure citation / metadata */}
+      {profile && (
+        <div className="px-3 pt-2.5 pb-2 border-b border-gray-100">
+          {profile.citation_title && (
+            <p
+              className="text-[11px] text-gray-500 leading-snug line-clamp-2"
+              title={profile.citation_title}
+            >
+              {profile.citation_title}
+            </p>
+          )}
+          {(authorLine || profile.citation_year) && (
+            <p className="text-[9px] text-gray-400 truncate mt-0.5" title={authors.join(', ')}>
+              {authorLine}
+              {authorLine && profile.citation_year ? ' · ' : ''}
+              {profile.citation_year ?? ''}
+            </p>
+          )}
+          <div className="flex items-center gap-1 flex-wrap mt-1.5 text-[9px] text-gray-400">
+            <span className="bg-gray-50 px-1.5 py-0.5 rounded font-mono">{profile.rcsb_id}</span>
+            {profile.resolution ? (
+              <span className="bg-gray-50 px-1.5 py-0.5 rounded">{profile.resolution.toFixed(1)} Å</span>
+            ) : null}
+            {profile.expMethod && (
+              <span className="bg-gray-50 px-1.5 py-0.5 rounded" title={profile.expMethod}>
+                {methodLabel(profile.expMethod)}
+              </span>
+            )}
+            {doiHref && (
+              <a
+                href={doiHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-1.5 py-0.5 rounded text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+              >
+                DOI
+              </a>
+            )}
+          </div>
         </div>
       )}
 
@@ -274,7 +375,7 @@ export function StructureSidebar({
 // EntityGroupSection
 // ────────────────────────────────────────────
 
-function EntityGroupSection({
+const EntityGroupSection = memo(function EntityGroupSection({
   group,
   instance,
   profile,
@@ -294,22 +395,28 @@ function EntityGroupSection({
   // Auto-collapse entities with many chains
   const [collapsed, setCollapsed] = useState(group.chains.length > 10);
 
-  // Check if any chain in this entity is visible
   const chainIds = useMemo(() => group.chains.map(c => c.chainId), [group.chains]);
-  const anyVisible = useAppSelector(state =>
-    chainIds.some(id => selectComponentState(state, 'structure', id).visible)
-  );
+
+  // Single read of componentStates — avoids thrashing the shared per-key selector
+  // once per chain on every store update; yields a stable boolean.
+  const anyVisible = useAppSelector(state => {
+    const cs = state.molstarInstances.instances.structure?.componentStates;
+    return cs ? chainIds.some(id => cs[id]?.visible ?? true) : true;
+  });
 
   const displayName = familyDisplayName(group.family);
-  const borderColor = familyBorderColor(group.family, ghostMode);
+  const nameColor = familyBorderColor(group.family, false);
   const entity = group.entity;
   const uniprotIds = entity.uniprot_accessions;
   const organism = entity.src_organism_names?.[0];
   const seqLen = entity.sequence_length;
+  const isotype = entity.isotype;
+  const description = entity.pdbx_description;
 
-  const highlightAllChains = (on: boolean) => {
-    instance?.highlightChains(chainIds, on);
-  };
+  const headerHover = useHoverIntent(
+    () => instance?.highlightChains(chainIds, true),
+    () => instance?.highlightChains(chainIds, false)
+  );
 
   const toggleAllVisibility = (visible: boolean) => {
     for (const chain of group.chains) {
@@ -322,24 +429,28 @@ function EntityGroupSection({
   };
 
   return (
-    <div style={{ borderLeft: `3px solid ${borderColor}` }} className="rounded-md">
+    <div>
       {/* Entity header */}
       <div
-        className="flex items-center gap-1.5 px-2 py-1.5 cursor-pointer hover:bg-gray-50/60 transition-colors"
-        onMouseEnter={() => highlightAllChains(true)}
-        onMouseLeave={() => highlightAllChains(false)}
+        className="group flex items-center gap-1.5 px-2 py-1.5 rounded cursor-pointer hover:bg-gray-50/60 transition-colors"
+        {...headerHover}
         onClick={() => setCollapsed(!collapsed)}
       >
-        {collapsed ? <ChevronRight size={12} className="text-gray-400" /> : <ChevronDown size={12} className="text-gray-400" />}
+        <span className="flex-shrink-0 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity">
+          {collapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
+        </span>
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-1.5">
-            <span className="text-xs font-semibold text-gray-800">{displayName}</span>
+            <span className="text-xs font-semibold truncate" style={{ color: nameColor }}>{displayName}</span>
+            {isotype && (
+              <span className="px-1 rounded bg-gray-100 text-gray-500 text-[9px] flex-shrink-0">{isotype}</span>
+            )}
             {uniprotIds?.[0] && (
               <a
                 href={`https://www.uniprot.org/uniprot/${uniprotIds[0]}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[9px] text-blue-400 hover:text-blue-600"
+                className="text-[9px] text-blue-400 hover:text-blue-600 flex-shrink-0"
                 onClick={e => e.stopPropagation()}
               >
                 {uniprotIds[0]}
@@ -347,10 +458,13 @@ function EntityGroupSection({
             )}
           </div>
           <div className="text-[10px] text-gray-400 flex items-center gap-1.5">
-            {organism && <span>{organism}</span>}
-            {seqLen ? <span>{seqLen} aa</span> : null}
-            <span>{group.chains.length} chain{group.chains.length !== 1 ? 's' : ''}</span>
+            {organism && <span className="truncate">{organism}</span>}
+            {seqLen ? <span className="flex-shrink-0">{seqLen} aa</span> : null}
+            <span className="flex-shrink-0">{group.chains.length} chain{group.chains.length !== 1 ? 's' : ''}</span>
           </div>
+          {description && description !== displayName && (
+            <div className="text-[10px] text-gray-400 truncate leading-tight">{description}</div>
+          )}
         </div>
         <div className="flex items-center gap-0.5 flex-shrink-0">
           <button
@@ -370,9 +484,9 @@ function EntityGroupSection({
         </div>
       </div>
 
-      {/* Chain rows — indented under entity header */}
+      {/* Chain rows — densely grouped under entity header */}
       {!collapsed && (
-        <div className="ml-2 space-y-px">
+        <div className="ml-4 mt-0.5 space-y-px">
           {group.chains.map(chain => (
             <ChainRow
               key={chain.chainId}
@@ -389,7 +503,7 @@ function EntityGroupSection({
       )}
     </div>
   );
-}
+});
 
 // ────────────────────────────────────────────
 // ChainRow
@@ -417,6 +531,17 @@ const ChainRow = memo(function ChainRow({
   );
   const dispatch = useAppDispatch();
 
+  const rowHover = useHoverIntent(
+    () => {
+      instance?.highlightChain(chain.chainId, true);
+      if (labelsEnabled) instance?.showComponentLabel(chain.chainId);
+    },
+    () => {
+      instance?.highlightChain(chain.chainId, false);
+      instance?.hideComponentLabel();
+    }
+  );
+
   // Hovering either action icon signals the pill's "Expert Mode" button to
   // highlight — makes clear that these row icons are the per-chain expert-mode
   // entry points.
@@ -427,23 +552,16 @@ const ChainRow = memo(function ChainRow({
 
   return (
     <div
-      className={`relative flex items-center justify-between py-1 px-2 rounded cursor-pointer transition-colors
-        ${componentState.hovered ? 'bg-blue-50/60 ring-1 ring-blue-200/60' : 'hover:bg-gray-50'}
+      className={`group flex items-center justify-between py-0.5 px-2 rounded transition-colors
+        ${componentState.hovered ? 'bg-blue-50' : 'hover:bg-gray-50'}
         ${!componentState.visible ? 'opacity-40' : ''}`}
-      onMouseEnter={() => {
-        instance?.highlightChain(chain.chainId, true);
-        if (labelsEnabled) instance?.showComponentLabel(chain.chainId);
-      }}
-      onMouseLeave={() => {
-        instance?.highlightChain(chain.chainId, false);
-        instance?.hideComponentLabel();
-      }}
+      {...rowHover}
     >
-      <div className="min-w-0 flex-1 flex items-center gap-1.5">
-        <span className="w-1 h-1 rounded-full bg-gray-300 flex-shrink-0" />
-        <span className="text-[11px] font-mono text-gray-600">Chain {chain.chainId}</span>
-      </div>
-      <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
+      <span className="text-[11px] font-mono text-gray-500 truncate">Chain {chain.chainId}</span>
+      <div
+        className={`flex items-center gap-0.5 flex-shrink-0 ml-1 transition-opacity
+          ${isSequenceActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+      >
         <button
           onClick={e => {
             e.stopPropagation();
@@ -499,29 +617,28 @@ function LigandRow({
 
   const parentFamily = getFamilyForChain(profile, ligand.authAsymId);
   const parentName = parentFamily ? familyDisplayName(parentFamily) : null;
-  const parentColor = familyBorderColor(parentFamily, ghostMode);
+  const parentColor = familyBorderColor(parentFamily, false);
 
   // Expanded details
   const drugbankDesc = entity?.nonpolymer_comp?.drugbank?.drugbank_info?.description;
   const formulaWeight = entity?.formula_weight;
   const smiles = entity?.SMILES_stereo ?? entity?.SMILES;
 
+  const rowHover = useHoverIntent(
+    () => { if (labelsEnabled) instance?.showComponentLabel(ligand.uniqueKey); },
+    () => { instance?.hideComponentLabel(); }
+  );
+
   return (
     <div
-      className={`rounded-md cursor-pointer transition-colors
+      className={`rounded-md transition-colors
         ${componentState.hovered ? 'bg-stone-50' : 'hover:bg-gray-50'}
         ${!componentState.visible ? 'opacity-40' : ''}`}
-      style={{ borderLeft: `3px solid ${parentColor}` }}
-      onMouseEnter={() => {
-        if (labelsEnabled) instance?.showComponentLabel(ligand.uniqueKey);
-      }}
-      onMouseLeave={() => {
-        instance?.hideComponentLabel();
-      }}
+      {...rowHover}
     >
       {/* Compact row */}
       <div
-        className="flex items-center justify-between py-2 px-2.5"
+        className="flex items-center justify-between py-2 px-2.5 cursor-pointer"
         onClick={() => setExpanded(!expanded)}
       >
         <div className="min-w-0 flex-1">
@@ -538,6 +655,16 @@ function LigandRow({
           )}
         </div>
         <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
+          <button
+            onClick={e => {
+              e.stopPropagation();
+              instance?.setLigandVisibility(ligand.uniqueKey, !componentState.visible);
+            }}
+            className="p-1 text-gray-400 hover:text-gray-700 transition-colors"
+            title={componentState.visible ? 'Hide ligand' : 'Show ligand'}
+          >
+            {componentState.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+          </button>
           <button
             onClick={e => {
               e.stopPropagation();

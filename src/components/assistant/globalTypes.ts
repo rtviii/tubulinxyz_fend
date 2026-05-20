@@ -78,6 +78,12 @@ export interface ActionCard {
   // open_catalogue direct-filter shortcut (NCBI tax_ids)
   source_organism_ids?: number[];
 
+  // DB-resolution selectors (open_structure / open_expert / inspect_ligand).
+  // Backend resolves these to a real (rcsb_id, chain); also kept on the wire so
+  // the client can name organisms (e.g. in the post-navigation toast).
+  primary_organism_id?: number;
+  aligned_organism_ids?: number[];
+
   // clarify
   question?: string;
 }
