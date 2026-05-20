@@ -2,12 +2,12 @@
 
 // Globally mounted in the root layout so it survives the route change a card
 // click triggers (the source panel unmounts on router.push). Reads the last
-// clicked ActionCard from the assistantToast slice, builds a one-line summary,
-// and shows a transient bottom-center toast that auto-dismisses. No LLM call.
+// clicked ActionCard from the assistantToast slice and shows a transient
+// bottom-right panel listing what the assistant did. No LLM call.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { Sparkles, X } from 'lucide-react';
+import { Sparkles, Check, X } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/store/store';
 import {
   dismissAssistantToast,
@@ -15,9 +15,9 @@ import {
   selectAssistantToastNonce,
 } from '@/store/slices/assistantToastSlice';
 import { useGetTaxonomyFlatQuery } from '@/store/tubxz_api';
-import { summarizeCard } from './cardSummary';
+import { summarizeCardLines } from './cardSummary';
 
-const AUTO_DISMISS_MS = 7000;
+const AUTO_DISMISS_MS = 15000;
 
 export function AssistantToastHost() {
   const dispatch = useAppDispatch();
@@ -36,47 +36,74 @@ export function AssistantToastHost() {
     return (id: number) => map.get(id);
   }, [taxa]);
 
-  // Fade-in + auto-dismiss. nonce restarts the timer on a repeat click.
   const [visible, setVisible] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const startTimer = useCallback(() => {
+    stopTimer();
+    timerRef.current = setTimeout(() => dispatch(dismissAssistantToast()), AUTO_DISMISS_MS);
+  }, [dispatch, stopTimer]);
+
   useEffect(() => {
     if (!card) {
       setVisible(false);
+      stopTimer();
       return;
     }
     const showId = requestAnimationFrame(() => setVisible(true));
-    const hideId = setTimeout(() => dispatch(dismissAssistantToast()), AUTO_DISMISS_MS);
+    startTimer();
     return () => {
       cancelAnimationFrame(showId);
-      clearTimeout(hideId);
+      stopTimer();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [card, nonce, pathname, dispatch]);
+  }, [card, nonce, pathname]);
 
   if (!card) return null;
 
-  const summary = summarizeCard(card, taxNameOf);
+  const lines = summarizeCardLines(card, taxNameOf);
 
   return (
-    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-full max-w-[560px] px-4">
+    <div className="fixed bottom-4 right-4 z-50 w-[300px] max-w-[calc(100vw-2rem)] pointer-events-none">
       <div
         role="status"
+        onMouseEnter={stopTimer}
+        onMouseLeave={startTimer}
         className={`
-          pointer-events-auto flex items-start gap-2.5 rounded-xl border border-slate-700/60
-          bg-slate-900/95 text-slate-100 shadow-xl backdrop-blur-sm px-3.5 py-2.5
-          transition-all duration-200 ease-out
+          pointer-events-auto rounded-xl border border-slate-200/80 bg-white/95 backdrop-blur-sm
+          shadow-lg overflow-hidden transition-all duration-200 ease-out
           ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}
         `}
       >
-        <Sparkles size={14} className="flex-shrink-0 mt-0.5 text-violet-300" />
-        <p className="flex-1 text-[12px] leading-snug">{summary}</p>
-        <button
-          type="button"
-          onClick={() => dispatch(dismissAssistantToast())}
-          className="flex-shrink-0 -mt-0.5 -mr-1 p-0.5 rounded text-slate-400 hover:text-slate-100 hover:bg-white/10 transition-colors"
-          aria-label="Dismiss"
-        >
-          <X size={13} />
-        </button>
+        <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-slate-100">
+          <Sparkles size={11} className="text-violet-500" />
+          <span className="flex-1 text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+            Assistant
+          </span>
+          <button
+            type="button"
+            onClick={() => dispatch(dismissAssistantToast())}
+            className="-mr-1 p-0.5 rounded text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            aria-label="Dismiss"
+          >
+            <X size={12} />
+          </button>
+        </div>
+        <ul className="px-3 py-2 space-y-1">
+          {lines.map((line, i) => (
+            <li key={i} className="flex items-start gap-1.5 text-[11px] text-slate-700 leading-snug">
+              <Check size={11} className="flex-shrink-0 mt-[2px] text-emerald-500" />
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );

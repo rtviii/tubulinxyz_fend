@@ -1,8 +1,8 @@
-// Pure summary builder for the post-navigation toast. Turns a clicked
-// ActionCard into a one-line "here's what I did" sentence, entirely from fields
-// the backend already resolved (real rcsb_id/chain + organism selectors). No
-// LLM call. Organism names are an optional enrichment — omitted cleanly when the
-// tax-name lookup can't resolve an id (e.g. user named a specific PDB id).
+// Builds the per-action lines shown in the post-navigation toast — one line per
+// thing the assistant did ("Loaded 6S8L:A", "Aligned 9Y9Z:1A", "Focused residues
+// 140-180"), entirely from fields the backend already resolved (real
+// rcsb_id/chain + organism selectors). No LLM call. Organism names are an
+// optional enrichment, omitted cleanly when the tax-name lookup can't resolve.
 
 import type { ActionCard } from './globalTypes';
 
@@ -19,71 +19,61 @@ function familyLabel(f?: string): string | null {
   return f;
 }
 
-// Compact per-structure annotation: "(Homo sapiens α)", "(α)", or "".
-function annot(orgName: string | undefined, famSym: string | null): string {
-  const parts = [orgName, famSym].filter(Boolean);
-  return parts.length ? ` (${parts.join(' ')})` : '';
+// " — Homo sapiens α" / " — α" / "".
+function tag(org: string | undefined, famSym: string | null): string {
+  const parts = [org, famSym].filter(Boolean);
+  return parts.length ? ` — ${parts.join(' ')}` : '';
 }
 
-function joinList(items: string[]): string {
-  if (items.length <= 1) return items[0] ?? '';
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
-}
-
-export function summarizeCard(card: ActionCard, taxNameOf: TaxNameOf = () => undefined): string {
+export function summarizeCardLines(card: ActionCard, taxNameOf: TaxNameOf = () => undefined): string[] {
   const fam = familyLabel(card.family);
   const famSym = fam && fam.includes('-tubulin') ? fam.split('-')[0] : null;
+  const lines: string[] = [];
 
   switch (card.action) {
     case 'open_expert': {
-      if (!card.rcsb_id) return card.label;
-      const primaryOrg = card.primary_organism_id !== undefined ? taxNameOf(card.primary_organism_id) : undefined;
-      const primary = `${card.rcsb_id}:${card.primary_chain ?? '?'}${annot(primaryOrg, famSym)}`;
-
-      const aligned = card.aligned ?? [];
-      let s: string;
-      if (aligned.length > 0) {
-        const alignedIds = card.aligned_organism_ids ?? [];
-        const alignedStrs = aligned.map((a, i) => {
-          const org = alignedIds.length === aligned.length ? taxNameOf(alignedIds[i]) : undefined;
-          return `${a.rcsb_id}:${a.auth_asym_id}${annot(org, famSym)}`;
-        });
-        s = `Aligned ${primary} with ${joinList(alignedStrs)}`;
-      } else {
-        s = `Opened ${primary} in expert mode`;
+      if (card.rcsb_id) {
+        const org = card.primary_organism_id !== undefined ? taxNameOf(card.primary_organism_id) : undefined;
+        lines.push(`Loaded ${card.rcsb_id}:${card.primary_chain ?? '?'}${tag(org, famSym)}`);
       }
-      if (card.focus_range) s += `; focused residues ${card.focus_range.start}-${card.focus_range.end}`;
-      return s + '.';
+      const aligned = card.aligned ?? [];
+      const ids = card.aligned_organism_ids ?? [];
+      aligned.forEach((a, i) => {
+        const org = ids.length === aligned.length ? taxNameOf(ids[i]) : undefined;
+        lines.push(`Aligned ${a.rcsb_id}:${a.auth_asym_id}${tag(org, famSym)}`);
+      });
+      if (card.focus_range) lines.push(`Focused residues ${card.focus_range.start}–${card.focus_range.end}`);
+      break;
     }
 
     case 'open_structure': {
-      if (!card.rcsb_id) return card.label;
-      const bits: string[] = [];
-      if (card.focus_chains?.length) bits.push(`chain ${card.focus_chains.join(', ')}`);
-      if (card.focus_ligands?.length) bits.push(card.focus_ligands.join(', '));
-      return `Opened ${card.rcsb_id}${bits.length ? ` — ${bits.join('; ')}` : ''}.`;
+      if (card.rcsb_id) lines.push(`Opened ${card.rcsb_id}${famSym ? ` — ${famSym}` : ''}`);
+      if (card.focus_chains?.length) lines.push(`Chain ${card.focus_chains.join(', ')}`);
+      if (card.focus_ligands?.length) lines.push(`Ligand ${card.focus_ligands.join(', ')}`);
+      break;
     }
 
     case 'inspect_ligand': {
-      if (!card.chemical_id) return card.label;
-      let s = `Showing the ${card.chemical_id} binding site`;
-      if (card.rcsb_id) s += ` in ${card.rcsb_id}${card.suggested_chain ? `:${card.suggested_chain}` : ''}`;
-      return s + '.';
+      if (card.rcsb_id) lines.push(`Opened ${card.rcsb_id}${card.suggested_chain ? `:${card.suggested_chain}` : ''}`);
+      if (card.chemical_id) lines.push(`Showing the ${card.chemical_id} binding site`);
+      break;
     }
 
     case 'view_variants': {
-      let s = `Showing ${fam ?? 'tubulin'} variants`;
+      lines.push(`Showing ${fam ?? 'tubulin'} variants`);
       if (card.position_min !== undefined && card.position_max !== undefined) {
-        s += ` at positions ${card.position_min}-${card.position_max}`;
+        lines.push(`Positions ${card.position_min}–${card.position_max}`);
       }
-      return s + '.';
+      break;
     }
 
     case 'open_catalogue':
-      return `Showing structures: ${card.label}`;
+      lines.push(`Filtered catalogue: ${card.label}`);
+      break;
 
     default:
-      return card.label;
+      lines.push(card.label);
   }
+
+  return lines.length ? lines : [card.label];
 }
