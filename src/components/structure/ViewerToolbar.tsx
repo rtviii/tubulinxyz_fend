@@ -3,15 +3,15 @@
 
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { MolstarInstanceId } from '@/components/molstar/core/types';
-import { Home, LayoutGrid, Mail, Focus } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import type { StructureProfile } from '@/lib/profile_utils';
 import {
   AppPill,
   PillDivider,
-  PillNavLink,
   PillAnchor,
   PillChatInput,
 } from '@/components/ui/AppPill';
+import { GlobalNav } from '@/components/ui/GlobalNav';
 import { StructureSlugBlock } from './StructureSlugBlock';
 import { PdbQuickPicker } from './PdbQuickPicker';
 import { useAppSelector } from '@/store/store';
@@ -46,9 +46,19 @@ export function ViewerToolbar({
 
   return (
     <AppPill>
-      {/* ── Left: breadcrumb + catalog search ── */}
-      <PillNavLink href="/" icon={Home} title="Home" />
-      <PillNavLink href="/structures" icon={LayoutGrid} title="Structures" />
+      {/* ── Left: unified nav (Easy/Expert toggle this structure) + breadcrumb ── */}
+      <GlobalNav
+        mode={{
+          active: 'easy',
+          onEasy: () => {},
+          onExpert: enterExpertMode,
+          expertDisabled: !defaultMonomerChainId,
+          expertHint: expertHintActive,
+        }}
+      />
+
+      <PillDivider />
+
       <StructureSlugBlock
         loadedStructure={loadedStructure}
         profile={profile}
@@ -60,22 +70,6 @@ export function ViewerToolbar({
       <PillDivider />
 
       {/* ── Right: tools ── */}
-      <button
-        type="button"
-        onClick={enterExpertMode}
-        title={
-          defaultMonomerChainId
-            ? `Switch to expert mode (chain ${defaultMonomerChainId})`
-            : 'Switch to expert mode'
-        }
-        className={`flex items-center gap-1.5 px-2 py-1 rounded-full transition-colors
-          ${expertHintActive
-            ? 'bg-blue-50 text-blue-600'
-            : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/70'}`}
-      >
-        <Focus size={13} />
-        <span className="text-[11px] font-medium">Expert Mode</span>
-      </button>
       <PillChatInput placeholder="Ask about this structure..." widthClass="w-56" />
 
       <PillDivider />

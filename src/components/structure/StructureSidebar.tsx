@@ -308,9 +308,7 @@ function EntityGroupSection({
   const seqLen = entity.sequence_length;
 
   const highlightAllChains = (on: boolean) => {
-    for (const chain of group.chains) {
-      instance?.highlightChain(chain.chainId, on);
-    }
+    instance?.highlightChains(chainIds, on);
   };
 
   const toggleAllVisibility = (visible: boolean) => {

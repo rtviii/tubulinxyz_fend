@@ -2,15 +2,15 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Eye, ArrowRight, Home, LayoutGrid, Mail } from "lucide-react";
+import { Eye, ArrowRight, Mail } from "lucide-react";
 import {
   AppPill,
   PillDivider,
   PillSection,
-  PillNavLink,
   PillAnchor,
   PillChatInput,
 } from "@/components/ui/AppPill";
+import { GlobalNav } from "@/components/ui/GlobalNav";
 import {
   useGetStructureFacetsQuery,
   useGetTaxonomyTreeQuery,
@@ -492,8 +492,7 @@ function StructureCataloguePageInner() {
               catalogue grid so the chat-input confirm panel isn't covered. */}
           <div className="relative z-50 flex-1 min-w-0 max-w-[720px]">
             <AppPill>
-              <PillNavLink href="/" icon={Home} title="Home" />
-              <PillNavLink href="/structures" icon={LayoutGrid} label="Structures" title="Structures" active />
+              <GlobalNav />
 
               <PillDivider />
 

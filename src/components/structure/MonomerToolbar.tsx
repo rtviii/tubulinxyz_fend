@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { MolstarInstanceId } from '@/components/molstar/core/types';
-import { Home, LayoutGrid, Mail } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import type { StructureProfile } from '@/lib/profile_utils';
 import { getFamilyForChain, getIsotypeForChain } from '@/lib/profile_utils';
 
@@ -17,11 +17,11 @@ const FAMILY_GREEK: Record<string, string> = {
 import {
   AppPill,
   PillDivider,
-  PillNavLink,
   PillAnchor,
   PillChatInput,
   PillCrumb,
 } from '@/components/ui/AppPill';
+import { GlobalNav } from '@/components/ui/GlobalNav';
 import { StructureSlugBlock } from './StructureSlugBlock';
 
 interface MonomerToolbarProps {
@@ -59,9 +59,17 @@ export function MonomerToolbar({
 
   return (
     <AppPill>
-      {/* ── Left: breadcrumb ── */}
-      <PillNavLink href="/" icon={Home} title="Home" />
-      <PillNavLink href="/structures" icon={LayoutGrid} title="Structures" />
+      {/* ── Left: unified nav (Easy returns to structure view) + breadcrumb ── */}
+      <GlobalNav
+        mode={{
+          active: 'expert',
+          onEasy: exitToEasyMode,
+          onExpert: () => {},
+        }}
+      />
+
+      <PillDivider />
+
       <StructureSlugBlock
         loadedStructure={loadedStructure}
         profile={profile}

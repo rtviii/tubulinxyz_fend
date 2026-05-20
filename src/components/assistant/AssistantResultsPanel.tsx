@@ -32,9 +32,12 @@ const ACTION_META: Record<ActionKind, { label: string; Icon: typeof LayoutGrid; 
 export interface AssistantResultsPanelProps {
   response: GlobalNLResponse;
   onDismiss: () => void;
+  // When embedded inside a column (e.g. the landing chat panel) drop the
+  // page-width centering so the panel fills its container instead.
+  embedded?: boolean;
 }
 
-export function AssistantResultsPanel({ response, onDismiss }: AssistantResultsPanelProps) {
+export function AssistantResultsPanel({ response, onDismiss, embedded = false }: AssistantResultsPanelProps) {
   const router = useRouter();
 
   // Fade-in on mount.
@@ -62,7 +65,7 @@ export function AssistantResultsPanel({ response, onDismiss }: AssistantResultsP
   return (
     <div
       className={`
-        relative w-full max-w-[1400px] mx-auto px-6
+        relative w-full ${embedded ? '' : 'max-w-[1400px] mx-auto px-6'}
         transition-all duration-200 ease-out
         ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1'}
       `}

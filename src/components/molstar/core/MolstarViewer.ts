@@ -63,9 +63,15 @@ export class MolstarViewer {
   async loadFromUrl(url: string, isBinary: boolean, label: string) {
     if (!this.ctx) throw new Error('Viewer not initialized');
 
+    // The plugin can be disposed mid-load (deferred dispose on navigation),
+    // which nulls `this.ctx`. Re-check after every await so we throw a clean,
+    // catchable error instead of a TypeError on `this.ctx.builders`.
     const data = await this.ctx.builders.data.download({ url, isBinary, label });
+    if (!this.ctx) throw new Error('Viewer disposed during load');
     const trajectory = await this.ctx.builders.structure.parseTrajectory(data, 'mmcif');
+    if (!this.ctx) throw new Error('Viewer disposed during load');
     const model = await this.ctx.builders.structure.createModel(trajectory);
+    if (!this.ctx) throw new Error('Viewer disposed during load');
     const structure = await this.ctx.builders.structure.createStructure(model);
 
     return structure;
@@ -91,6 +97,10 @@ export class MolstarViewer {
 
   setSubtreeVisibility(ref: string, visible: boolean): void {
     if (!this.ctx) return;
+    // The ref can be stale — e.g. a ligand component from a plugin that was
+    // disposed and recreated on navigation, while Redux still holds the old
+    // keys. Toggling a ref that's no longer in the state tree throws, so bail.
+    if (!this.ctx.state.data.select(StateSelection.Generators.byRef(ref))[0]) return;
     setSubtreeVisibility(this.ctx.state.data, ref, !visible);
   }
 

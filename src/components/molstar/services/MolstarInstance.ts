@@ -24,6 +24,7 @@ import {
   structureToLoci,
   extractObservedSequence,
   buildMultiResidueQuery,
+  buildMultiChainQuery,
 } from '../core/queries';
 import {
   setLoadedStructure,
@@ -1157,6 +1158,23 @@ const color = getMolstarGhostColor(family);
     if (!structure) return;
     this.viewer.highlightLoci(structureToLoci(structure));
     this.dispatch(setComponentHovered({ instanceId: this.id, componentKey: chainId, hovered: true }));
+  }
+
+  /**
+   * Highlight every given chain at once with a single Loci + single GPU mark.
+   * Used for entity-header hover: large structures have dozens of copies of a
+   * chain, and one multi-chain query is dramatically cheaper than one
+   * highlightChain() call per copy.
+   */
+  highlightChains(chainIds: string[], highlight: boolean): void {
+    if (!highlight || chainIds.length === 0) {
+      this.viewer.highlightLoci(null);
+      return;
+    }
+    const structure = this.viewer.getCurrentStructure();
+    if (!structure) return;
+    const loci = executeQuery(buildMultiChainQuery(chainIds), structure);
+    this.viewer.highlightLoci(loci);
   }
 
   highlightLigand(uniqueKey: string, highlight: boolean): void {

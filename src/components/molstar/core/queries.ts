@@ -34,6 +34,14 @@ export const buildMultiResidueQuery = (chainId: string, authSeqIds: number[]) =>
   });
 };
 
+// Select every chain whose auth_asym_id is in the given set, in one query.
+// Used to highlight all copies of an entity at once (large structures have
+// dozens of copies — one query beats one highlight call per chain).
+export const buildMultiChainQuery = (chainIds: string[]) =>
+  MS.struct.generator.atomGroups({
+    'chain-test': MS.core.set.has([MS.set(...chainIds), MS.ammp('auth_asym_id')]),
+  });
+
 export const buildLigandQuery = (ligand: LigandComponent) =>
   MS.struct.generator.atomGroups({
     'residue-test': MS.core.logic.and([
