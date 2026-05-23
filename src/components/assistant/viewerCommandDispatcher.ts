@@ -10,14 +10,22 @@
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { ActionReport, ViewerAction } from './types';
 
+// Extra capabilities the call-site (the structure page) supplies for actions
+// that need more than a MolstarInstance — e.g. AlignChain needs the page's
+// align flow (active chain, master alignment, sequence registration).
+export interface ViewerDispatchContext {
+  alignChain?: (rcsbId: string, authAsymId: string) => Promise<void> | void;
+}
+
 export async function dispatchViewerActions(
   instance: MolstarInstance,
   actions: ViewerAction[],
+  ctx: ViewerDispatchContext = {},
 ): Promise<ActionReport[]> {
   const reports: ActionReport[] = [];
   for (const action of actions) {
     try {
-      await dispatchOne(instance, action);
+      await dispatchOne(instance, action, ctx);
       reports.push({ action, ok: true });
     } catch (e) {
       reports.push({
@@ -31,7 +39,11 @@ export async function dispatchViewerActions(
   return reports;
 }
 
-async function dispatchOne(instance: MolstarInstance, a: ViewerAction): Promise<void> {
+async function dispatchOne(
+  instance: MolstarInstance,
+  a: ViewerAction,
+  ctx: ViewerDispatchContext,
+): Promise<void> {
   switch (a.type) {
     case 'FocusChain':
       instance.focusChain(a.args.auth_asym_id);
@@ -59,6 +71,12 @@ async function dispatchOne(instance: MolstarInstance, a: ViewerAction): Promise<
       return;
     case 'ClearHighlight':
       instance.clearHighlight();
+      return;
+    case 'AlignChain':
+      if (!ctx.alignChain) {
+        throw new Error('Alignment is only available in expert mode');
+      }
+      await ctx.alignChain(a.args.rcsb_id, a.args.auth_asym_id);
       return;
     default: {
       // Exhaustiveness check — if a new action type is added to the union

@@ -18,7 +18,11 @@ export type ViewerAction =
   | { type: 'IsolateChain'; args: { auth_asym_id: string; keep_ligands: boolean } }
   | { type: 'HighlightChain'; args: { auth_asym_id: string } }
   | { type: 'HighlightResidueRange'; args: { auth_asym_id: string; start: number; end: number } }
-  | { type: 'ClearHighlight'; args: Record<string, never> };
+  | { type: 'ClearHighlight'; args: Record<string, never> }
+  // Add another organism's chain to the current expert-mode alignment. The
+  // backend resolves organism_id -> a real (rcsb_id, auth_asym_id); the
+  // dispatcher reads those two and runs the in-place align flow.
+  | { type: 'AlignChain'; args: { rcsb_id: string; auth_asym_id: string; organism_id?: number | null; family?: string | null } };
 
 export type ViewerActionType = ViewerAction['type'];
 

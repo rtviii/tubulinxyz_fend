@@ -281,6 +281,33 @@ function StructureProfilePageInner() {
     finally { result.unsubscribe(); }
   }, [instance, activeChainId, activeFamily, masterData, dispatch, alignChainFromProfile, store]);
 
+  // Add an already-resolved (rcsb_id, auth_asym_id) chain to the current
+  // alignment in place — used by the assistant's AlignChain action. Mirrors
+  // handleDirectAlign but takes a resolved auth_asym_id and stays silent (no
+  // alert); no-op if the chain is already aligned.
+  const alignChainById = useCallback(async (pdbId: string, authAsymId: string) => {
+    if (!instance || !activeChainId) return;
+    const masterLen = masterData?.alignment_length ?? 0;
+    if (!masterLen) return;
+    const family = activeFamily;
+    // No-op if the resolver picked the primary chain itself (e.g. "add bovine"
+    // while already viewing the bovine structure) or a chain already aligned.
+    if (pdbId.toUpperCase() === (loadedStructure ?? '').toUpperCase() && authAsymId === activeChainId) return;
+    if (selectIsChainAligned(store.getState(), pdbId, authAsymId)) return;
+    const result = dispatch(tubxz_api.endpoints.getStructureProfile.initiate({ rcsbId: pdbId }));
+    try {
+      const sourceProfile = await result.unwrap();
+      const ok = await instance.loadAlignedStructure(activeChainId, pdbId, authAsymId, family);
+      if (!ok) return;
+      const alignResult = alignChainFromProfile(sourceProfile, authAsymId, masterLen);
+      if (alignResult && family) {
+        const alignedId = `${pdbId}_${authAsymId}_on_${activeChainId}`;
+        instance.styleAlignedChainAsGhost(activeChainId, alignedId, family);
+      }
+    } catch { /* profile fetch / align failed */ }
+    finally { result.unsubscribe(); }
+  }, [instance, activeChainId, activeFamily, masterData, dispatch, alignChainFromProfile, store, loadedStructure]);
+
   // ── Residue popups (multi-popup, unified for MSA + Molstar) ──
   const [popups, setPopups] = useState<ResiduePopupTarget[]>([]);
 
@@ -691,6 +718,7 @@ function StructureProfilePageInner() {
             ligand_keys: ligandComponents.map(l => l.uniqueKey),
             view_mode: viewMode,
             active_monomer_chain: activeChainId,
+            active_family: activeFamily,
           },
         };
         const resp = await fetch(`${API_BASE_URL}/nl_query/viewer`, {
@@ -719,7 +747,7 @@ function StructureProfilePageInner() {
           setViewerNavCard(data.card);
           return { summary: data.summary || 'Suggested action ready.' };
         }
-        const reports = await dispatchViewerActions(instance, data.actions);
+        const reports = await dispatchViewerActions(instance, data.actions, { alignChain: alignChainById });
         // Surface entities + summary in the side panel regardless of action
         // success — partial action failure shouldn't kill the panel.
         setViewerEntities(data.entities ?? []);
@@ -742,6 +770,8 @@ function StructureProfilePageInner() {
     ligandComponents,
     viewMode,
     activeChainId,
+    activeFamily,
+    alignChainById,
   ]);
 
   return (
