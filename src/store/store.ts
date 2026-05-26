@@ -7,6 +7,7 @@ import molstarInstancesReducer from '@/components/molstar/state/molstarInstances
 import structuresReducer from './slices/slice_structures';
 import sequenceRegistryReducer from './slices/sequence_registry';
 import annotationsReducer from './slices/annotationsSlice';
+import annotationTracksReducer from './slices/annotationTracksSlice';
 import chainFocusReducer from './slices/chainFocusSlice';
 import colorOverridesReducer from './slices/colorOverridesSlice';
 import assistantToastReducer from './slices/assistantToastSlice';
@@ -16,6 +17,7 @@ export const makeStore = () => {
     reducer: {
       molstarInstances: molstarInstancesReducer,
       annotations: annotationsReducer,
+      annotationTracks: annotationTracksReducer,
       sequenceRegistry: sequenceRegistryReducer,
       chainFocus: chainFocusReducer,
       colorOverrides: colorOverridesReducer,

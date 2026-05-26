@@ -20,6 +20,7 @@ import { setPrimaryChain, hideAllVisibility } from '@/store/slices/annotationsSl
 import { useGetMasterProfileQuery, tubxz_api } from '@/store/tubxz_api';
 import { useChainAlignment } from '@/hooks/useChainAlignment';
 import { useViewerSync } from '@/hooks/useViewerSync';
+import { useResolveTracks } from '@/hooks/useResolveTracks';
 import { useMultiChainAnnotations, ChainAnnotationFetcher } from '@/hooks/useMultiChainAnnotations';
 import { createClassificationFromProfile } from '@/services/profile_service';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
@@ -222,6 +223,9 @@ function StructureProfilePageInner() {
   const handleMolstarResidueSelect = useCallback((ck: string, masterIdx: number, authSeqId: number) => {
     msaRef.current?.selectResidueByChainKey(ck, masterIdx, authSeqId);
   }, [msaRef]);
+
+  // Auto-resolve any annotation tracks that haven't been fetched yet.
+  useResolveTracks();
 
   const { handleMSAHover, handleMSAHoverEnd, handleDisplayRangeChange, clearWindowMask, lastHoveredMolstarResidueRef } = useViewerSync({
     chainKey,

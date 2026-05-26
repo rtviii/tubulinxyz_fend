@@ -12,7 +12,8 @@ import {
   type ModificationOverrideMap,
 } from '@/lib/colors/annotationPaletteResolve';
 import { parseLayerType } from '@/components/msa/auxiliary/layerKind';
-import { AUX_COLOR_PROVIDERS, isAuxLayerActive } from '@/components/msa/auxiliary/colorProviders';
+import { AUX_COLOR_PROVIDERS, isAuxLayerActive, computeTrackCells } from '@/components/msa/auxiliary/colorProviders';
+import type { TrackEntry } from './annotationTracksSlice';
 
 export interface ColorRule {
   id: string;
@@ -121,6 +122,12 @@ export const makeSelectActiveColorRulesForSequenceIds = () =>
 /**
  * Compute cell colors for auxiliary (annotation layer) rows.
  * Called from useViewerSync alongside the primary color rules.
+ *
+ * Two code paths:
+ *  1. Chain-scoped rows ('variants', 'ligand', 'ptm') -- need parentSequenceId,
+ *     read from annotationChains keyed by chain.
+ *  2. Global track rows ('track:<id>') -- no parent, read from annotationTracks
+ *     by parsing the track id out of the layerType.
  */
 export function computeAuxiliaryCellColors(
   displaySequences: Array<Pick<MsaSequence, 'id' | 'originType' | 'parentSequenceId' | 'layerType'>>,
@@ -130,6 +137,7 @@ export function computeAuxiliaryCellColors(
     variant: VariantOverrideMap;
     modification: ModificationOverrideMap;
   },
+  trackEntries?: Record<string, TrackEntry>,
 ): Record<string, string> {
   const cellColors: Record<string, string> = {};
 
@@ -144,10 +152,29 @@ export function computeAuxiliaryCellColors(
 
   for (let rowIdx = 0; rowIdx < displaySequences.length; rowIdx++) {
     const seq = displaySequences[rowIdx];
-    if (seq.originType !== 'auxiliary' || !seq.parentSequenceId || !seq.layerType) continue;
+    if (seq.originType !== 'auxiliary' || !seq.layerType) continue;
 
     const desc = parseLayerType(seq.layerType);
     if (!desc) continue;
+
+    // ---- Global track row: no parent, paint from tracks slice ----
+    if (desc.kind === 'track') {
+      if (!desc.id || !trackEntries) continue;
+      const trackId = `track_${desc.id}`.startsWith('track_')
+        ? (desc.id.startsWith('track_') ? desc.id : `track_${desc.id}`)
+        : desc.id;
+      // The layerType encodes the id after 'track:'; track ids in the slice are
+      // prefixed with 'track_'. We accept either form for robustness.
+      const entry = trackEntries[trackId] ?? trackEntries[desc.id];
+      if (!entry) continue;
+      for (const { masterIndex, color } of computeTrackCells(entry)) {
+        cellColors[`${rowIdx}-${masterIndex - 1}`] = color;
+      }
+      continue;
+    }
+
+    // ---- Chain-scoped row: needs parent + annotation data ----
+    if (!seq.parentSequenceId) continue;
 
     const chainKey = parentToChainKey[seq.parentSequenceId];
     if (!chainKey) continue;
@@ -159,7 +186,10 @@ export function computeAuxiliaryCellColors(
     // (eye icon on). Inactive layers keep the row but leave its cells blank.
     if (!isAuxLayerActive(desc, entry.visibility)) continue;
 
-    for (const { masterIndex, color } of AUX_COLOR_PROVIDERS[desc.kind](desc, entry.data, overrides, entry.visibility)) {
+    // desc.kind is 'variants' | 'ligand' | 'ptm' here (the 'track' branch returns above)
+    const provider = AUX_COLOR_PROVIDERS[desc.kind as keyof typeof AUX_COLOR_PROVIDERS];
+    if (!provider) continue;
+    for (const { masterIndex, color } of provider(desc, entry.data, overrides, entry.visibility)) {
       cellColors[`${rowIdx}-${masterIndex - 1}`] = color;
     }
   }

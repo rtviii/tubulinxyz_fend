@@ -45,6 +45,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
     const colorRules = useAppSelector(state => selectRulesForVisible(state, visibleSequenceIds));
     const positionMapping = useAppSelector(state => selectPositionMapping(state, chainKey));
     const annotationChains = useAppSelector(state => state.annotations.chains);
+    const annotationTracks = useAppSelector(state => state.annotationTracks.tracks);
     const ligandOverrides = useAppSelector(state => state.colorOverrides.ligand);
     const variantOverrides = useAppSelector(state => state.colorOverrides.variant);
     const modificationOverrides = useAppSelector(state => state.colorOverrides.modification);
@@ -309,7 +310,7 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
                 ligand: ligandOverrides,
                 variant: variantOverrides,
                 modification: modificationOverrides,
-            });
+            }, annotationTracks);
             Object.assign(cellColors, auxColors);
         }
 
@@ -352,8 +353,8 @@ export function useViewerSync({ chainKey, molstarInstance, msaRef, visibleSequen
             msaRef.current.clearPositionColors();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [msaReady, colorRules, msaRef, displaySequences, annotationChains, expandedChainKeysKey,
-        hiddenChainKeysKey, ligandOverrides, variantOverrides, modificationOverrides]);
+    }, [msaReady, colorRules, msaRef, displaySequences, annotationChains, annotationTracks,
+        expandedChainKeysKey, hiddenChainKeysKey, ligandOverrides, variantOverrides, modificationOverrides]);
 
     // --- Molstar color-sync effect (expensive; DO NOT fire on visibility toggles) ---
     // Visibility is enforced via setSubtreeVisibility, so hiding a chain doesn't need

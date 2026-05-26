@@ -27,6 +27,7 @@ import { ResizableMSAContainer, type ResizableMSAContainerHandle } from './Resiz
 import { MSAToolbar } from './MSAToolbar';
 import type { MSAHandle } from './types';
 import { toLayerType } from './auxiliary/layerKind';
+import { selectAllTracks, type TrackEntry } from '@/store/slices/annotationTracksSlice';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { PolymerComponent, AlignedStructure } from '@/components/molstar/core/types';
 import type { TubulinStructure, PolypeptideEntity, TubulinFamily } from '@/store/tubxz_api';
@@ -187,7 +188,56 @@ function buildModificationSequences(
   return tracks;
 }
 
-/** Interleave auxiliary sequences (variants, ligands, PTMs) under their parent chain.
+/** Build global annotation-track rows. These are not chain-scoped: each track
+ *  paints master columns of its own family.
+ *
+ *  Tracks ALWAYS appear in the panel regardless of which families are currently
+ *  displayed -- this is the user's mental model "I added a track, I should see it".
+ *  Cells naturally don't paint when the track's family doesn't match a displayed
+ *  MSA (the master_index refers to columns in the other family's master). The
+ *  label carries a family tag (α/β) plus a "(family not loaded)" suffix when
+ *  appropriate so the user can tell the difference between "loaded but empty"
+ *  and "loaded and painted".
+ *
+ *  parentSequenceId is intentionally undefined -- this is what marks the row as
+ *  global in the painting pipeline (see colorRulesSelector.computeAuxiliaryCellColors). */
+function buildTrackSequences(
+  tracks: TrackEntry[],
+  displayedFamilies: Set<string>,
+  maxLength: number,
+): MsaSequence[] {
+  if (tracks.length === 0) return [];
+  const gapSequence = ' '.repeat(maxLength);
+  return tracks.map(t => {
+    const count = t.resolved?.length;
+    const familyTag =
+      t.spec.family === 'tubulin_alpha' ? 'α'
+      : t.spec.family === 'tubulin_beta' ? 'β'
+      : t.spec.family === 'tubulin_gamma' ? 'γ'
+      : '?';
+    const familyMatch = displayedFamilies.has(t.spec.family);
+    const statusSuffix =
+      t.isLoading ? ' loading…'
+      : t.error ? ' error'
+      : count == null ? ''
+      : ` (${count})`;
+    const mismatchSuffix = familyMatch ? '' : ' — family not loaded';
+    return {
+      id: `aux__track__${t.spec.id}`,
+      name: t.spec.label,
+      sequence: gapSequence,
+      rowIndex: -1,
+      originType: 'auxiliary' as const,
+      family: t.spec.family,
+      // parentSequenceId left undefined: global row
+      layerType: toLayerType({ kind: 'track', id: t.spec.id }),
+      layerLabel: `${familyTag} ${t.spec.label}${statusSuffix}${mismatchSuffix}`,
+    };
+  });
+}
+
+/** Interleave auxiliary sequences (variants, ligands, PTMs) under their parent chain,
+ *  then append global annotation-track rows in a fixed band at the bottom.
  *  Order inside each chain group: [primary] -> [variants] -> [ligands] -> [PTM types ...].
  *  PTM rows render whenever any types are enabled for that chain (independent of
  *  the expand toggle, since they are explicitly opted in via the PTMs dropdown).
@@ -197,6 +247,7 @@ function interleaveAuxiliaries(
   primaries: MsaSequence[],
   expandedSet: Set<string>,
   annotationChains: Record<string, ChainAnnotationEntry>,
+  tracks: TrackEntry[],
   maxLength: number,
 ): MsaSequence[] {
   const result: MsaSequence[] = [];
@@ -241,6 +292,15 @@ function interleaveAuxiliaries(
         result.push(ptm);
       }
     }
+  }
+
+  // Append global annotation-track rows, filtered to families present in the panel.
+  const displayedFamilies = new Set<string>();
+  for (const seq of primaries) {
+    if (seq.family) displayedFamilies.add(seq.family);
+  }
+  for (const trackRow of buildTrackSequences(tracks, displayedFamilies, maxLength)) {
+    result.push(trackRow);
   }
 
   return result;
@@ -415,12 +475,14 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       state => state.annotations.chains
     );
 
+    const tracks = useAppSelector(selectAllTracks);
+
     const displaySequences = useMemo(() => {
       const primaries = showMasters
         ? [...masterSequences, ...pdbSequences]
         : [...pdbSequences];
-      return interleaveAuxiliaries(primaries, expandedSequences, annotationChains, maxLength);
-    }, [masterSequences, pdbSequences, showMasters, expandedSequences, annotationChains, maxLength]);
+      return interleaveAuxiliaries(primaries, expandedSequences, annotationChains, tracks, maxLength);
+    }, [masterSequences, pdbSequences, showMasters, expandedSequences, annotationChains, tracks, maxLength]);
 
     // Emit chain-to-row mapping for Molstar hover crosshair
     useEffect(() => {
