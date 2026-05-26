@@ -1,0 +1,67 @@
+% Application architecture: ingest -> ETL -> Neo4j -> API -> frontend.
+% Embedded inside a \block in poster.tex.
+
+\begin{tikzpicture}[
+    every node/.style={font=\footnotesize\sffamily, align=center, rounded corners=3pt, inner sep=5pt},
+    src/.style ={draw=gray!60, fill=gray!10,        line width=0.7pt, minimum height=8mm, minimum width=22mm},
+    etl/.style ={draw=tubBeta, fill=tubBeta!12,     line width=0.7pt, minimum height=8mm, minimum width=30mm},
+    store/.style={draw=tubAccent, fill=tubAccent!12, line width=0.7pt, minimum height=10mm, minimum width=30mm},
+    api/.style ={draw=tubDelta, fill=tubDelta!12,   line width=0.7pt, minimum height=8mm, minimum width=30mm},
+    ui/.style  ={draw=tubGamma, fill=tubGamma!12,   line width=0.7pt, minimum height=8mm, minimum width=30mm},
+    arr/.style ={->, >=Stealth, gray!70, line width=0.6pt},
+    note/.style={font=\scriptsize\sffamily\itshape, text=tubMuted, align=left},
+  ]
+
+  % --- Sources (left lane)
+  \node[src] (rcsb)  at (0,5.6)   {RCSB Search\\\scriptsize InterPro IPR000217};
+  \node[src] (gql)   at (0,4.4)   {RCSB GraphQL\\\scriptsize metadata};
+  \node[src] (cif)   at (0,3.2)   {CIF coords\\\scriptsize Mol* (headless)};
+  \node[src] (tax)   at (0,2.0)   {NCBI taxonomy};
+  \node[src] (db23)  at (0,0.8)   {TubulinDB CSVs};
+
+  % --- ETL pipeline (middle)
+  \node[etl] (etl1) at (5.0,5.6) {1.\ Acquire};
+  \node[etl] (etl2) at (5.0,4.4) {2.\ HMM classify};
+  \node[etl] (etl3) at (5.0,3.2) {3.\ Isotype call};
+  \node[etl] (etl4) at (5.0,2.0) {4.\ MUSCLE align\\\scriptsize $\to$ master coords};
+  \node[etl] (etl5) at (5.0,0.8) {5.\ Lift contacts\\\scriptsize + literature};
+
+  % --- Neo4j store
+  \node[store, drop shadow={shadow xshift=1pt, shadow yshift=-1pt, fill=black, opacity=0.2}]
+    (neo) at (10.0,3.2) {\textbf{Neo4j graph}\\\scriptsize Structure / Entity / Variant\\\scriptsize Modification / Chemical};
+
+  % --- API
+  \node[api] (api1) at (10.0,1.4) {FastAPI\\\scriptsize /structures /polymers /ligands\\\scriptsize /msa /annotations /nl\_query};
+
+  % --- Frontend
+  \node[ui] (ui1) at (10.0,-0.4) {Next.js client\\\scriptsize Mol* $+$ Nightingale $+$ Chatbot};
+
+  % --- Arrows: sources -> ETL
+  \foreach \s/\d in {rcsb/etl1, gql/etl1, cif/etl1, tax/etl2, db23/etl5}
+    \draw[arr] (\s.east) -- (\d.west);
+
+  % --- ETL chain
+  \foreach \a/\b in {etl1/etl2, etl2/etl3, etl3/etl4, etl4/etl5}
+    \draw[arr] (\a) -- (\b);
+
+  % --- ETL -> Neo4j
+  \draw[arr] (etl4.east) -- ([yshift=4mm]neo.west);
+  \draw[arr] (etl5.east) -- ([yshift=-4mm]neo.west);
+
+  % --- Neo4j -> API -> UI
+  \draw[arr] (neo) -- (api1);
+  \draw[arr] (api1) -- (ui1);
+
+  % --- Chatbot resolver loopback note
+  \draw[arr, dashed, tubBeta]
+    (ui1.east) to[bend left=40]
+    node[right, font=\scriptsize\sffamily, text=tubBeta]
+      {chatbot $\to$ Cypher resolver}
+    (neo.east);
+
+  % --- Lane labels
+  \node[note, anchor=west] at (-1.6, 6.4) {\textbf{INGEST}};
+  \node[note, anchor=west] at ( 3.6, 6.4) {\textbf{ETL}};
+  \node[note, anchor=west] at ( 8.4, 6.4) {\textbf{STORE \& SERVE}};
+
+\end{tikzpicture}
