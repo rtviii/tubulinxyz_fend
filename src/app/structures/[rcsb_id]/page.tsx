@@ -24,10 +24,14 @@ import { useResolveTracks } from '@/hooks/useResolveTracks';
 import { useMultiChainAnnotations, ChainAnnotationFetcher } from '@/hooks/useMultiChainAnnotations';
 import { createClassificationFromProfile } from '@/services/profile_service';
 import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
-import { StructureSidebar } from '@/components/structure/StructureSidebar';
 import { ViewerToolbar } from '@/components/structure/ViewerToolbar';
 import { MonomerToolbar } from '@/components/structure/MonomerToolbar';
-import { MonomerSidebar } from '@/components/monomer/MonomerSidebar';
+import { ChainAnchorPill } from '@/components/structure/ChainAnchorPill';
+import { ViewerLayoutBar, type LayoutState } from '@/components/structure/ViewerLayoutBar';
+import { AlignmentDialog } from '@/components/monomer/AlignmentDialog';
+import { BindingSiteCard, type ActiveBindingSite } from '@/components/structure/BindingSiteCard';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import type { ImperativePanelHandle } from 'react-resizable-panels';
 import { SequenceAlignmentPanel, type MSAContextMenuEvent } from '@/components/msa/SequenceAlignmentPanel';
 import { ResiduePopupLayer } from '@/components/residue_popup/ResiduePopup';
 import type { ResiduePopupTarget } from '@/components/residue_popup/types';
@@ -196,10 +200,20 @@ function StructureProfilePageInner() {
     setDisplaySequenceIds(seqs.map(s => s.id));
   }, []);
 
-  // Annotation fetchers
+  // Annotation fetchers.
+  // In easy mode the page has no "primary" monomer chain — without seeding
+  // the fetcher with the structure's polymer chain ids the ligand pills
+  // stay empty until the user opens the MSA panel. Preload every polymer
+  // chain when in easy mode so ligands surface as soon as the structure
+  // is loaded.
+  const preloadChainIds = useMemo(
+    () => (isMonomerView ? [] : polymerComponents.map(p => p.chainId)),
+    [isMonomerView, polymerComponents]
+  );
   const { chainsToFetch, primaryChainKey } = useMultiChainAnnotations(
     loadedStructure,
-    activeChainId
+    activeChainId,
+    preloadChainIds,
   );
   useChainFocusSync({
     instance,
@@ -241,6 +255,29 @@ function StructureProfilePageInner() {
   // ── Alignment dialog state (lifted so MSA labels and popups can trigger it) ──
   const [alignDialogOpen, setAlignDialogOpen] = useState(false);
   const handleOpenAlignDialog = useCallback(() => setAlignDialogOpen(true), []);
+
+  // ── Active binding-site state (lifted so toolbox + card can stay in sync) ──
+  const [activeBindingSite, setActiveBindingSite] = useState<ActiveBindingSite | null>(null);
+
+  const handleActivateBindingSite = useCallback(async (
+    target: Omit<ActiveBindingSite, 'contacts'>
+  ) => {
+    if (!instance) return;
+    const contacts = await instance.focusLigandBindingSite(target.uniqueKey);
+    if (contacts === null) return;
+    setActiveBindingSite({ ...target, contacts });
+  }, [instance]);
+
+  const handleDeactivateBindingSite = useCallback(async () => {
+    await instance?.clearBindingSite();
+    setActiveBindingSite(null);
+  }, [instance]);
+
+  // Wipe binding-site state if we navigate to a different structure — the
+  // Molstar component refs we hold would be stale after reload.
+  useEffect(() => {
+    setActiveBindingSite(null);
+  }, [loadedStructure]);
 
   // ── Direct alignment from popup "+" buttons ──
   const { alignChainFromProfile } = useChainAlignment();
@@ -629,83 +666,46 @@ function StructureProfilePageInner() {
   const showMonomerPanel = isMonomerView && !!activeChainId;
   const showBottomPanel = showStructureSeqPanel || showMonomerPanel;
 
-  // ── Panel dimensions (independent, capped to avoid overlap) ──
-  const EDGE = 12; // margin from viewport edges
+  // ── Resizable panel refs + layout state ──
+  const molstarPanelRef = useRef<ImperativePanelHandle>(null);
+  const msaPanelRef = useRef<ImperativePanelHandle>(null);
+  const DEFAULT_MOLSTAR_SIZE = 66;
+  const DEFAULT_MSA_SIZE = 34;
+  const [layoutState, setLayoutState] = useState<LayoutState>('split');
 
-  const [sidebarWidth, setSidebarWidth] = useState(280);
-  const [seqPanelHeight, setSeqPanelHeight] = useState(200);
-  const [seqPanelLeft, setSeqPanelLeft] = useState(12); // independent left edge
+  const handlePanelLayout = useCallback((sizes: number[]) => {
+    const [molstarSize, msaSize] = sizes;
+    if (molstarSize === 0 || (msaSize ?? 0) > 99.9) setLayoutState('msa-only');
+    else if ((msaSize ?? 0) === 0) setLayoutState('molstar-only');
+    else setLayoutState('split');
+  }, []);
 
-  const seqPanelLeftRef = useRef(seqPanelLeft);
+  // Auto expand/collapse MSA panel based on whether the bottom panel should be visible.
+  // In structure (easy) mode, it starts collapsed until a chain is clicked; in monomer
+  // mode it follows activeChainId. We keep the molstar panel expanded across the toggle.
+  useEffect(() => {
+    const msa = msaPanelRef.current;
+    if (!msa) return;
+    if (showBottomPanel) {
+      if (msa.isCollapsed()) {
+        msa.expand(DEFAULT_MSA_SIZE);
+        msa.resize(DEFAULT_MSA_SIZE);
+      }
+    } else {
+      if (!msa.isCollapsed()) msa.collapse();
+    }
+    // showBottomPanel is derived above; refs are stable
+  }, [showBottomPanel]);
 
-  // Refs for drag closures (avoid stale captures)
-  const sidebarWidthRef = useRef(sidebarWidth);
-  useEffect(() => { sidebarWidthRef.current = sidebarWidth; }, [sidebarWidth]);
-
-  // Sidebar width drag
-  const sidebarDragRef = useRef<{ startX: number; startW: number } | null>(null);
-  const onSidebarDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    sidebarDragRef.current = { startX: e.clientX, startW: sidebarWidth };
-    const onMove = (ev: MouseEvent) => {
-      if (!sidebarDragRef.current) return;
-      const newW = sidebarDragRef.current.startW + (ev.clientX - sidebarDragRef.current.startX);
-      // Free resize, just keep sane bounds
-      setSidebarWidth(Math.max(220, Math.min(window.innerWidth * 0.5, newW)));
-    };
-    const onUp = () => {
-      sidebarDragRef.current = null;
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }, [sidebarWidth]);
-
-  // Sequence panel height drag (top edge)
-  const seqDragRef = useRef<{ startY: number; startH: number } | null>(null);
-  const onSeqDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    seqDragRef.current = { startY: e.clientY, startH: seqPanelHeight };
-    const onMove = (ev: MouseEvent) => {
-      if (!seqDragRef.current) return;
-      const newH = seqDragRef.current.startH + (seqDragRef.current.startY - ev.clientY);
-      setSeqPanelHeight(Math.max(100, Math.min(window.innerHeight - 80, newH)));
-    };
-    const onUp = () => {
-      seqDragRef.current = null;
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }, [seqPanelHeight]);
-
-  // Sequence panel left-edge drag (width from left)
-  const seqLeftDragRef = useRef<{ startX: number; startL: number } | null>(null);
-  const onSeqLeftDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    seqLeftDragRef.current = { startX: e.clientX, startL: seqPanelLeft };
-    const onMove = (ev: MouseEvent) => {
-      if (!seqLeftDragRef.current) return;
-      const newL = seqLeftDragRef.current.startL + (ev.clientX - seqLeftDragRef.current.startX);
-      // Min: just enough to not go off-screen left. No coupling to sidebar.
-      const minL = EDGE;
-      const maxL = window.innerWidth - 200;
-      const clamped = Math.max(minL, Math.min(maxL, newL));
-      setSeqPanelLeft(clamped);
-      seqPanelLeftRef.current = clamped;
-    };
-    const onUp = () => {
-      seqLeftDragRef.current = null;
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }, [seqPanelLeft]);
-
-  const [sidebarTab, setSidebarTab] = useState<'chains' | 'ligands'>('chains');
+  // Easy mode: when the user opens MSA via the layout bar (no chain selected yet),
+  // default to the first polymer chain so the panel has content to render.
+  useEffect(() => {
+    if (isMonomerView) return;
+    if (layoutState === 'molstar-only') return;
+    if (structureSequenceChainId) return;
+    if (polymerComponents.length === 0) return;
+    setStructureSequenceChainId(polymerComponents[0].chainId);
+  }, [layoutState, isMonomerView, structureSequenceChainId, polymerComponents]);
 
   // ── Assistant target: enables the cross-page PillChatInput to drive this viewer ──
   const assistantValue = useMemo<AssistantTargetValue | null>(() => {
@@ -780,13 +780,79 @@ function StructureProfilePageInner() {
 
   return (
     <AssistantTargetProvider value={assistantValue}>
-    <div className="h-screen w-screen overflow-hidden bg-gray-200">
+    <div className="h-screen w-screen overflow-hidden bg-gray-200 relative">
       {chainsToFetch.map(chain => (
         <ChainAnnotationFetcher key={chain.chainKey} {...chain} />
       ))}
 
-      {/* ── Full-viewport Molstar viewer (base layer) ── */}
-      <div ref={containerRef} className="absolute inset-0 w-full h-full" onMouseDown={handleContainerMouseDown} onMouseUp={handleContainerMouseUp} onContextMenu={handleSuppressContextMenu} />
+      {/* ── Resizable split: Molstar (top) | MSA (bottom) ── */}
+      <ResizablePanelGroup
+        direction="vertical"
+        className="h-screen w-screen"
+        onLayout={handlePanelLayout}
+      >
+        <ResizablePanel
+          ref={molstarPanelRef}
+          defaultSize={DEFAULT_MOLSTAR_SIZE}
+          minSize={20}
+          collapsible
+          collapsedSize={0}
+        >
+          <div
+            ref={containerRef}
+            className="w-full h-full relative"
+            onMouseDown={handleContainerMouseDown}
+            onMouseUp={handleContainerMouseUp}
+            onContextMenu={handleSuppressContextMenu}
+          />
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel
+          ref={msaPanelRef}
+          defaultSize={isMonomerView ? DEFAULT_MSA_SIZE : 0}
+          minSize={15}
+          collapsible
+          collapsedSize={0}
+        >
+          <div className="h-full w-full bg-white border-t border-slate-200/60 overflow-hidden">
+            {showBottomPanel && sequencePanelChainId && (
+              <SequenceAlignmentPanel
+                ref={msaRef}
+                chainId={sequencePanelChainId}
+                onChainChange={chainId => {
+                  if (isMonomerView) {
+                    instance?.enterMonomerView(chainId);
+                  } else {
+                    setStructureSequenceChainId(chainId);
+                  }
+                }}
+                profile={profile}
+                instance={instance}
+                polymerComponents={polymerComponents}
+                pdbId={loadedStructure}
+                onClose={() => {
+                  if (isMonomerView) {
+                    instance?.exitMonomerView();
+                  } else {
+                    setStructureSequenceChainId(null);
+                  }
+                }}
+                alignedStructures={isMonomerView ? alignedStructures : undefined}
+                onResidueHover={handleMSAHover}
+                onResidueLeave={handleMSAHoverEnd}
+                onChainRowMapChange={(map) => { chainRowMapRef.current = map; }}
+                onClearColors={handleClearAllAnnotations}
+                onWindowMaskChange={handleDisplayRangeChange}
+                onWindowMaskClear={clearWindowMask}
+                onResidueContextMenu={handleMSAContextMenu}
+                onDisplaySequencesChange={handleDisplaySequencesChange}
+                onExpandedChainKeysChange={setExpandedChainKeys}
+                onAddAlignment={isMonomerView ? handleOpenAlignDialog : undefined}
+              />
+            )}
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
 
       {(!isInitialized || isLoading) && (
         <LoadingOverlay
@@ -794,80 +860,77 @@ function StructureProfilePageInner() {
         />
       )}
 
-      {/* ── Floating sidebar overlay ── */}
-      <div
-        className="absolute top-3 left-3 z-10 pointer-events-none"
-        style={{ width: sidebarWidth, maxHeight: 'calc(100vh - 24px)' }}
-      >
-        <div className="pointer-events-auto flex" style={{ maxHeight: 'calc(100vh - 24px)' }}>
-          <div className="relative overflow-hidden flex-1 bg-white/95 backdrop-blur-sm shadow-lg rounded-xl border border-slate-200/60">
-            <div
-              className="flex transition-transform duration-300 ease-in-out"
-              style={{ transform: isMonomerView ? 'translateX(-100%)' : 'translateX(0)' }}
-            >
-              <div className="w-full flex-shrink-0 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 24px)' }}>
-                <StructureSidebar
-                  loadedStructure={loadedStructure}
-                  polymerComponents={polymerComponents}
-                  ligandComponents={ligandComponents}
-                  instance={instance}
-                  error={error}
-                  profile={profile}
-                  onShowSequence={setStructureSequenceChainId}
-                  activeSequenceChainId={structureSequenceChainId}
-                  activeTab={sidebarTab}
-                  onTabChange={setSidebarTab}
-                />
-              </div>
-              <div className="w-full h-full flex-shrink-0 overflow-y-auto">
-                <MonomerSidebar
-                  activeChainId={activeChainId}
-                  polymerComponents={polymerComponents}
-                  alignedStructures={alignedStructures}
-                  instance={instance}
-                  pdbId={loadedStructure}
-                  profile={profile}
-                  masterLength={masterData?.alignment_length ?? 0}
-                  msaRef={msaRef}
-                  alignDialogOpen={alignDialogOpen}
-                  onAlignDialogOpenChange={setAlignDialogOpen}
-                />
-              </div>
-            </div>
-          </div>
-          {/* Sidebar resize handle */}
-          <div
-            className="pointer-events-auto w-1.5 cursor-col-resize bg-transparent hover:bg-blue-400/30 transition-colors"
-            onMouseDown={onSidebarDragStart}
-          />
-        </div>
-      </div>
-
-      {/* ── Floating toolbar (centered in viewer area) ── */}
+      {/* ── Top-left column: ChainAnchorPill + BindingSiteCard (when active).
+              ChainAnchorPill gets a higher z-index so its hover popovers
+              escape the backdrop-blur stacking context and paint above the
+              BindingSiteCard sibling below. ── */}
       {!isLoading && isInitialized && (
-        <div
-          className="absolute top-3 z-20 pointer-events-auto flex justify-center"
-          style={{ left: sidebarWidth + 12, right: 0 }}
-        >
-          {isMonomerView ? (
-            <MonomerToolbar
-              instanceId="structure"
-              instance={instance}
+        <div className="absolute top-3 left-3 z-20 pointer-events-auto flex flex-col gap-2 items-start">
+          <div className="relative z-30">
+            <ChainAnchorPill
               loadedStructure={loadedStructure}
               profile={profile}
+              polymerComponents={polymerComponents}
+              instance={instance}
               activeChainId={activeChainId}
+              isMonomerView={isMonomerView}
+              msaRef={msaRef}
+              activeBindingSite={activeBindingSite}
+              onActivateBindingSite={handleActivateBindingSite}
+              onDeactivateBindingSite={handleDeactivateBindingSite}
             />
-          ) : (
-            <ViewerToolbar
-              instanceId="structure"
-              instance={instance}
-              loadedStructure={loadedStructure}
-              profile={profile}
-              defaultMonomerChainId={
-                structureSequenceChainId ?? polymerComponents[0]?.chainId ?? null
-              }
-            />
+          </div>
+          {activeBindingSite && (
+            <div className="relative z-10">
+              <BindingSiteCard
+                site={activeBindingSite}
+                instance={instance}
+                onClose={handleDeactivateBindingSite}
+              />
+            </div>
           )}
+        </div>
+      )}
+
+      {/* ── Top-center: stripped global nav pill ── */}
+      {!isLoading && isInitialized && (
+        <div className="absolute top-3 left-0 right-0 z-20 pointer-events-none flex justify-center">
+          <div className="pointer-events-auto">
+            {isMonomerView ? (
+              <MonomerToolbar
+                instanceId="structure"
+                instance={instance}
+                loadedStructure={loadedStructure}
+                profile={profile}
+                activeChainId={activeChainId}
+              />
+            ) : (
+              <ViewerToolbar
+                instanceId="structure"
+                instance={instance}
+                loadedStructure={loadedStructure}
+                profile={profile}
+                defaultMonomerChainId={
+                  structureSequenceChainId ?? polymerComponents[0]?.chainId ?? null
+                }
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Top-right: ViewerLayoutBar (segmented Molstar / Split / MSA) ──
+          In easy mode the bar is always visible so the user can expand the
+          MSA on demand even before clicking a chain. */}
+      {!isLoading && isInitialized && (
+        <div className="absolute top-3 right-3 z-20 pointer-events-auto">
+          <ViewerLayoutBar
+            molstarPanelRef={molstarPanelRef}
+            msaPanelRef={msaPanelRef}
+            layoutState={layoutState}
+            defaultMolstarSize={DEFAULT_MOLSTAR_SIZE}
+            defaultMsaSize={DEFAULT_MSA_SIZE}
+          />
         </div>
       )}
 
@@ -886,65 +949,19 @@ function StructureProfilePageInner() {
         />
       )}
 
-      {/* ── Floating bottom panel (sequence / MSA) ── */}
-      {showBottomPanel && (
-        <div
-          className="absolute bottom-3 right-3 z-10 pointer-events-none"
-          style={{ left: seqPanelLeft, height: seqPanelHeight }}
-        >
-          <div className="pointer-events-auto h-full flex bg-white/95 backdrop-blur-sm shadow-lg rounded-xl border border-slate-200/60 overflow-hidden">
-            {/* Left-edge resize handle (width) */}
-            <div
-              className="w-1.5 cursor-col-resize bg-transparent hover:bg-blue-400/30 transition-colors flex-shrink-0"
-              onMouseDown={onSeqLeftDragStart}
-            />
-            <div className="flex-1 min-w-0 flex flex-col">
-            {/* Top-edge resize handle (height) */}
-            <div
-              className="h-1.5 cursor-row-resize bg-transparent hover:bg-blue-400/30 transition-colors flex-shrink-0"
-              onMouseDown={onSeqDragStart}
-            />
-            <div className="flex-1 min-h-0 overflow-hidden">
-              {showBottomPanel && sequencePanelChainId && (
-                <SequenceAlignmentPanel
-                  ref={msaRef}
-                  chainId={sequencePanelChainId}
-                  onChainChange={chainId => {
-                    if (isMonomerView) {
-                      instance?.enterMonomerView(chainId);
-                    } else {
-                      setStructureSequenceChainId(chainId);
-                    }
-                  }}
-                  profile={profile}
-                  instance={instance}
-                  polymerComponents={polymerComponents}
-                  pdbId={loadedStructure}
-                  onClose={() => {
-                    if (isMonomerView) {
-                      instance?.exitMonomerView();
-                    } else {
-                      setStructureSequenceChainId(null);
-                    }
-                  }}
-                  alignedStructures={isMonomerView ? alignedStructures : undefined}
-                  onResidueHover={handleMSAHover}
-                  onResidueLeave={handleMSAHoverEnd}
-                  onChainRowMapChange={(map) => { chainRowMapRef.current = map; }}
-                  onClearColors={handleClearAllAnnotations}
-                  onWindowMaskChange={handleDisplayRangeChange}
-                  onWindowMaskClear={clearWindowMask}
-                  onResidueContextMenu={handleMSAContextMenu}
-                  onDisplaySequencesChange={handleDisplaySequencesChange}
-                  onExpandedChainKeysChange={setExpandedChainKeys}
-                  onAddAlignment={isMonomerView ? handleOpenAlignDialog : undefined}
-                />
-              )}
-            </div>
-            </div>{/* close flex-col wrapper */}
-          </div>
-        </div>
+      {/* ── AlignmentDialog (lifted from MonomerSidebar) ── */}
+      {alignDialogOpen && activeChainId && isMonomerView && (
+        <AlignmentDialog
+          targetChainId={activeChainId}
+          targetFamily={activeFamily}
+          instance={instance}
+          masterLength={masterData?.alignment_length ?? 0}
+          alignedStructures={alignedStructures}
+          primaryPdbId={loadedStructure}
+          onClose={() => setAlignDialogOpen(false)}
+        />
       )}
+
       <ResiduePopupLayer popups={popups} instance={instance} onClose={removePopup} onCloseAll={clearPopups} onFocusResidue={handleFocusResidue} onAlignChain={isMonomerView ? handleDirectAlign : undefined} />
     </div>
     </AssistantTargetProvider>

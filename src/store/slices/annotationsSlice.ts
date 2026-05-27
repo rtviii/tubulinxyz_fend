@@ -1,6 +1,7 @@
 import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
 import { RootState } from '../store';
-import { getHexForLigand } from '@/lib/colors/annotationPalette';
+import { resolveLigandColor } from '@/lib/colors/annotationPaletteResolve';
+import { selectLigandOverrides } from '@/store/slices/colorOverridesSlice';
 
 // ============================================================
 // Types
@@ -152,9 +153,11 @@ export const annotationsSlice = createSlice({
         visibility: hadData && existing?.visibility
           ? existing.visibility
           : {
-              showVariants: true,
+              // All annotations OFF by default — user opts in via the
+              // ligand-chip toolbox / aux-row controls.
+              showVariants: false,
               showModifications: false,
-              visibleLigandIds: data.ligandSites.map(s => s.id),
+              visibleLigandIds: [],
               visibleModificationTypes: existing?.visibility?.visibleModificationTypes ?? [],
               mutedModificationTypes: existing?.visibility?.mutedModificationTypes ?? [],
               // First data load ALWAYS seeds with the chain's own species. NOT
@@ -388,8 +391,8 @@ export interface GlobalLigandInfo {
 }
 
 export const selectAllUniqueLigandIds = createSelector(
-  [selectAnnotationsState],
-  (annotations): GlobalLigandInfo[] => {
+  [selectAnnotationsState, selectLigandOverrides],
+  (annotations, overrides): GlobalLigandInfo[] => {
     const map = new Map<string, { count: number; anyVisible: boolean }>();
     for (const entry of Object.values(annotations.chains)) {
       if (!entry.data) continue;
@@ -405,8 +408,92 @@ export const selectAllUniqueLigandIds = createSelector(
       }
     }
     return Array.from(map.entries())
-      .map(([chemId, info]) => ({ chemId, color: getHexForLigand(chemId), ...info }))
+      .map(([chemId, info]) => ({ chemId, color: resolveLigandColor(overrides, chemId), ...info }))
       .sort((a, b) => b.count - a.count);
+  }
+);
+
+// ── Detailed ligand info (per-chain or global), used by the ChainAnchorPill
+//    toolbox: includes the actual sites + name + drugbank id so the popover
+//    can show metadata and the focus button can pick which site to anchor on.
+
+export interface DetailedLigandSite {
+  /** The ChainKey this site belongs to. */
+  chainKey: string;
+  /** Site object verbatim from ChainAnnotationData.ligandSites. */
+  site: LigandSite;
+  /** Whether the binding-site annotation is currently visible on this chain. */
+  annotationVisible: boolean;
+}
+
+export interface DetailedLigandInfo {
+  chemId: string;
+  color: string;
+  count: number;
+  ligandName: string;
+  drugbankId: string | null;
+  /** True when any chain has the binding-site annotation on for any site. */
+  anyAnnotationVisible: boolean;
+  sites: DetailedLigandSite[];
+}
+
+function aggregateLigands(
+  entries: Array<{ chainKey: string; entry: ChainAnnotationEntry }>,
+  ligandOverrides: Record<string, string>,
+): DetailedLigandInfo[] {
+  const map = new Map<string, DetailedLigandInfo>();
+  for (const { chainKey, entry } of entries) {
+    if (!entry.data) continue;
+    for (const site of entry.data.ligandSites) {
+      const visible = entry.visibility.visibleLigandIds.includes(site.id);
+      const detailed: DetailedLigandSite = { chainKey, site, annotationVisible: visible };
+      const existing = map.get(site.ligandId);
+      if (existing) {
+        existing.count += 1;
+        if (visible) existing.anyAnnotationVisible = true;
+        // Backfill name/drugbank from later sites if the first one didn't have them.
+        if (!existing.ligandName && site.ligandName) existing.ligandName = site.ligandName;
+        if (existing.drugbankId == null && site.drugbankId) existing.drugbankId = site.drugbankId;
+        existing.sites.push(detailed);
+      } else {
+        map.set(site.ligandId, {
+          chemId: site.ligandId,
+          color: resolveLigandColor(ligandOverrides, site.ligandId),
+          count: 1,
+          ligandName: site.ligandName ?? '',
+          drugbankId: site.drugbankId ?? null,
+          anyAnnotationVisible: visible,
+          sites: [detailed],
+        });
+      }
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => b.count - a.count);
+}
+
+/** Detailed ligands for ONE chain (used in expert mode where ligands are scoped to the active chain). */
+export const selectLigandsForChain = createSelector(
+  [
+    (state: RootState, chainKey: string) =>
+      state.annotations.chains[chainKey] ?? null,
+    selectLigandOverrides,
+    (_state: RootState, chainKey: string) => chainKey,
+  ],
+  (entry, overrides, chainKey): DetailedLigandInfo[] => {
+    if (!entry) return [];
+    return aggregateLigands([{ chainKey, entry }], overrides);
+  }
+);
+
+/** Detailed ligands across all chains (used in easy mode for the whole structure). */
+export const selectAllLigandsDetailed = createSelector(
+  [selectAnnotationsState, selectLigandOverrides],
+  (annotations, overrides): DetailedLigandInfo[] => {
+    const entries = Object.entries(annotations.chains).map(([chainKey, entry]) => ({
+      chainKey,
+      entry,
+    }));
+    return aggregateLigands(entries, overrides);
   }
 );
 export interface ExportableLigandSite {

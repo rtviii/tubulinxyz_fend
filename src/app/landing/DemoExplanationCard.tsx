@@ -2,7 +2,8 @@
 
 import { useCallback, useState } from 'react';
 import { X } from 'lucide-react';
-import type { BondPairInfo, LigandBondInfo } from './demos';
+import type { BondPairInfo } from './demos';
+import type { LigandBondInfo } from '@/components/molstar/core/bindingSite';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder';
 import { executeQuery, buildMultiResidueQuery } from '@/components/molstar/core/queries';

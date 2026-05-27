@@ -70,9 +70,10 @@ const _L = (hex: number): Color => Color(hex);
 // built from the same literals so they are guaranteed identical.
 
 export const LIGAND_HEX: Record<string, string> = {
-  // Nucleotides
-  GTP: '#2979FF',  // vivid blue
-  GDP: '#FF9100',  // amber
+  // Nucleotides — keep cool tones, but avoid the variant palette's
+  // orange (substitution), green (insertion), red (deletion).
+  GTP: '#06B6D4',  // cyan/teal
+  GDP: '#8B5CF6',  // violet
   GCP: '#82B1FF',  // light blue
   GSP: '#448AFF',  // mid blue
   G2P: '#40C4FF',  // sky blue
@@ -119,8 +120,8 @@ export const LIGAND_HEX: Record<string, string> = {
 };
 
 export const LIGAND_COLORS: Record<string, Color> = {
-  GTP: _L(0x2979FF),
-  GDP: _L(0xFF9100),
+  GTP: _L(0x06B6D4),
+  GDP: _L(0x8B5CF6),
   GCP: _L(0x82B1FF),
   GSP: _L(0x448AFF),
   G2P: _L(0x40C4FF),

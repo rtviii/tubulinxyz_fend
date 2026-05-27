@@ -1,10 +1,13 @@
 % Database counts table. Embedded inside a \block in poster.tex.
-\footnotesize
-\setlength{\tabcolsep}{4pt}
-\renewcommand{\arraystretch}{1.05}
+% Light-touch hairline table matching the UI aesthetic.
+{\setlength{\tabcolsep}{4pt}%
+\renewcommand{\arraystretch}{1.20}%
+\arrayrulecolor{tubHairline}%
 \begin{tabularx}{\linewidth}{@{}l X r@{}}
   \toprule
-  \textbf{Layer} & \textbf{Source} & \textbf{Count} \\
+  {\color{tubMuted}\fontsize{9}{11}\selectfont\bfseries LAYER} &
+  {\color{tubMuted}\fontsize{9}{11}\selectfont\bfseries SOURCE} &
+  {\color{tubMuted}\fontsize{9}{11}\selectfont\bfseries COUNT} \\
   \midrule
   Structures            & RCSB PDB (IPR000217)             & $\sim$1000      \\
   Tubulin families      & HMM ($\alpha,\beta,\gamma,\delta,\varepsilon$) & 5 \\
@@ -12,7 +15,7 @@
   $\alpha/\beta$ isotypes & UniProt (TUBA1A--TUBB8)        & 16              \\
   Lit.\ mutations       & \tubulindb (Abbaali 2023)        & $\sim$5{,}200   \\
   Lit.\ modifications   & \tubulindb + Janke 2020          & $\sim$1{,}950   \\
-  Binding sites         & Mol* $\to$ master coords         & per-structure   \\
+  Binding sites         & Mol* $\to$ master coords         & varies          \\
   Taxonomy              & NCBI / ete3 lineages             & hundreds        \\
   \bottomrule
-\end{tabularx}
+\end{tabularx}}

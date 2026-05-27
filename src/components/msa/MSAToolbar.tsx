@@ -71,9 +71,6 @@ interface MSAToolbarProps {
   onReset       ?: () => void;
   compact       ?: boolean;
 
-  showMasters       ?: boolean;
-  masterCount       ?: number;
-  onShowMastersChange?: (checked: boolean) => void;
   inRangeOnly       ?: boolean;
   onInRangeOnlyChange?: (checked: boolean) => void;
 }
@@ -85,9 +82,6 @@ export function MSAToolbar({
   onJumpToRange,
   onReset,
   compact = false,
-  showMasters,
-  masterCount,
-  onShowMastersChange,
   inRangeOnly,
   onInRangeOnlyChange,
 }: MSAToolbarProps) {
@@ -122,7 +116,7 @@ export function MSAToolbar({
   };
 
   return (
-    <div className="flex items-center gap-2 w-full text-[11px] text-gray-600">
+    <div className="flex items-center gap-2 w-full justify-end text-[11px] text-gray-600">
       {/* ── Color group ── */}
       <div className="relative flex items-center gap-1">
         <span className="text-gray-500">Color:</span>
@@ -215,20 +209,6 @@ export function MSAToolbar({
           </label>
         )}
       </div>
-
-      {/* ── Reference toggle (far right) ── */}
-      {onShowMastersChange != null && (
-        <label className="ml-auto flex items-center gap-1 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={showMasters ?? true}
-            onChange={e => onShowMastersChange(e.target.checked)}
-            className="rounded"
-          />
-          Reference
-          {masterCount != null && <span className="text-gray-400">({masterCount})</span>}
-        </label>
-      )}
     </div>
   );
 }

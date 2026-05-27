@@ -25,35 +25,40 @@ export interface ChainToFetch {
     chainKey: string;
 }
 
-export function useMultiChainAnnotations(primaryRcsbId: string | null, primaryAuthAsymId: string | null) {
+export function useMultiChainAnnotations(
+    primaryRcsbId: string | null,
+    primaryAuthAsymId: string | null,
+    /** Extra chain ids on `primaryRcsbId` to preload (e.g. all polymer chains
+     *  in easy mode, so the ligand pills surface immediately). */
+    preloadChainIds: string[] = [],
+) {
     const pdbSequences = useAppSelector(selectPdbSequences);
 
     const chainsToFetch = useMemo((): ChainToFetch[] => {
         const chains: ChainToFetch[] = [];
+        const seen = new Set<string>();
+
+        const add = (rcsb: string, chain: string) => {
+            const key = makeChainKey(rcsb, chain);
+            if (seen.has(key)) return;
+            seen.add(key);
+            chains.push({ rcsbId: rcsb.toUpperCase(), authAsymId: chain, chainKey: key });
+        };
 
         if (primaryRcsbId && primaryAuthAsymId) {
-            chains.push({
-                rcsbId: primaryRcsbId.toUpperCase(),
-                authAsymId: primaryAuthAsymId,
-                chainKey: makeChainKey(primaryRcsbId, primaryAuthAsymId),
-            });
+            add(primaryRcsbId, primaryAuthAsymId);
+        }
+
+        if (primaryRcsbId) {
+            for (const chainId of preloadChainIds) add(primaryRcsbId, chainId);
         }
 
         for (const seq of pdbSequences) {
-            if (seq.chainRef) {
-                const chainKey = makeChainKey(seq.chainRef.pdbId, seq.chainRef.chainId);
-                if (!chains.some(c => c.chainKey === chainKey)) {
-                    chains.push({
-                        rcsbId: seq.chainRef.pdbId,
-                        authAsymId: seq.chainRef.chainId,
-                        chainKey,
-                    });
-                }
-            }
+            if (seq.chainRef) add(seq.chainRef.pdbId, seq.chainRef.chainId);
         }
 
         return chains;
-    }, [primaryRcsbId, primaryAuthAsymId, pdbSequences]);
+    }, [primaryRcsbId, primaryAuthAsymId, preloadChainIds, pdbSequences]);
 
     return {
         chainsToFetch,

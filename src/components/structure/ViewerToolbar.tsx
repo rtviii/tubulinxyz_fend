@@ -9,11 +9,8 @@ import {
   AppPill,
   PillDivider,
   PillAnchor,
-  PillChatInput,
 } from '@/components/ui/AppPill';
 import { GlobalNav } from '@/components/ui/GlobalNav';
-import { StructureSlugBlock } from './StructureSlugBlock';
-import { PdbQuickPicker } from './PdbQuickPicker';
 import { useAppSelector } from '@/store/store';
 import { selectExpertHintActive } from '@/store/slices/chainFocusSlice';
 
@@ -27,16 +24,11 @@ interface ViewerToolbarProps {
 }
 
 /**
- * Easy-mode pill (viewMode === 'structure', whole-structure view).
- *
- * Layout:
- *   [ Home · Structures · ( PDB + species, highlighted = current ) ]
- *   |  Focus(→expert) · PdbQuickPicker · chat · feedback
+ * Easy-mode pill: navigation only.
+ * Structure slug + ligand chips now live in the top-left ChainAnchorPill.
  */
 export function ViewerToolbar({
   instance,
-  loadedStructure,
-  profile,
   defaultMonomerChainId,
 }: ViewerToolbarProps) {
   const enterExpertMode = () => {
@@ -46,7 +38,6 @@ export function ViewerToolbar({
 
   return (
     <AppPill>
-      {/* ── Left: unified nav (Easy/Expert toggle this structure) + breadcrumb ── */}
       <GlobalNav
         mode={{
           active: 'easy',
@@ -56,24 +47,7 @@ export function ViewerToolbar({
           expertHint: expertHintActive,
         }}
       />
-
       <PillDivider />
-
-      <StructureSlugBlock
-        loadedStructure={loadedStructure}
-        profile={profile}
-        highlighted
-        title="Currently viewing"
-      />
-      <PdbQuickPicker currentPdbId={loadedStructure} />
-
-      <PillDivider />
-
-      {/* ── Right: tools ── */}
-      <PillChatInput placeholder="Ask about this structure..." widthClass="w-56" />
-
-      <PillDivider />
-
       <PillAnchor
         href="mailto:feedback@tube.xyz?subject=tube.xyz%20feedback"
         icon={Mail}

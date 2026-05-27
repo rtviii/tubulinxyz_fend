@@ -46,6 +46,11 @@ interface ResizableMSAContainerProps {
   primaryPdbId?: string | null;
   primaryChainId?: string | null;
   onRemoveAlignedChain?: (chainKey: string) => void;
+
+  /** Reference (master sequences) toggle — mounted in the top-left gutter. */
+  showMasters?: boolean;
+  masterCount?: number;
+  onShowMastersChange?: (checked: boolean) => void;
 }
 
 export interface ResizableMSAContainerHandle {
@@ -99,6 +104,9 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       primaryPdbId,
       primaryChainId,
       onRemoveAlignedChain,
+      showMasters,
+      masterCount,
+      onShowMastersChange,
     } = props;
 
 
@@ -569,7 +577,28 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
         {showLabels && (
           <>
             <div className="flex-shrink-0 flex flex-col" style={{ width: effectiveLabelWidth }}>
-              <div style={{ height: navHeight }} className="flex-shrink-0" />
+              <div
+                style={{ height: navHeight }}
+                className="flex-shrink-0 flex items-end justify-end pr-2 pb-1"
+              >
+                {onShowMastersChange != null && (
+                  <label
+                    className="flex items-center gap-1 cursor-pointer select-none
+                               text-[10px] text-gray-500 hover:text-gray-700
+                               px-1.5 py-0.5 rounded border border-slate-200/60 bg-white/80 backdrop-blur"
+                    title="Toggle reference master sequences"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={showMasters ?? true}
+                      onChange={e => onShowMastersChange(e.target.checked)}
+                      className="rounded h-3 w-3 accent-slate-700"
+                    />
+                    <span>Reference</span>
+                    {masterCount != null && <span className="text-gray-400">({masterCount})</span>}
+                  </label>
+                )}
+              </div>
               <div className="flex-1 overflow-hidden">
                 <MSALabels
                   sequences={sequences}

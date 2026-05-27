@@ -1,43 +1,36 @@
 % !TEX program = xelatex
 % =====================================================================
 % tube.xyz EMBL course poster -- A1 portrait
-%
-% Local build: xelatex poster.tex   (twice for refs / TikZ positions)
-%
-% Overleaf:
-%   1. Upload this folder (or the zip) to a new Overleaf project.
-%   2. Menu -> Settings -> Compiler: XeLaTeX (or LuaLaTeX).
-%   3. Menu -> Settings -> Main document: poster.tex.
-%   4. Compile twice (Overleaf does this automatically on first build).
-%
-% File map:
-%   poster.tex                       <- main document (this file)
-%   references.tex                   <- footer reference list
-%   tikz/counts_table.tex            <- database counts table
-%   tikz/architecture_diagram.tex    <- ingest -> store -> serve diagram
-%   tikz/schema_diagram.tex          <- Neo4j schema (optional inset)
-%   tikz/showcase_tiles.tex          <- three small chatbot showcase tiles
-%   figures/                         <- drop the rendered images here
-%     showcase_3d.png   - TUBB3 disease-map cartoon + residue chip
-%     showcase_msa.png  - full-width MSA across beta isotypes
-%     chatbot.png       - optional small chatbot screenshot
 % =====================================================================
+\documentclass[a1paper, portrait, 12pt,
+  margin=10mm, innermargin=4mm, blockverticalspace=4mm, colspace=6mm
+]{tikzposter}
 
-\documentclass[a1paper, portrait, 15pt, margin=10mm, innermargin=8mm, blockverticalspace=4mm, colspace=8mm]{tikzposter}
-
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
-\usepackage{lmodern}
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{booktabs}
 \usepackage{tabularx}
 \usepackage{xcolor}
 \usepackage{tikz}
-\usetikzlibrary{arrows.meta, positioning, shapes.geometric, shapes.misc, fit, calc, backgrounds, decorations.pathmorphing, shadows}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, shapes.misc, fit, calc, backgrounds, decorations.pathmorphing, shadows.blur}
 \usepackage{qrcode}
 \usepackage{graphicx}
 \usepackage{xspace}
+
+% --- Typography: match the web UI's neutral sans-serif look.
+\usepackage{fontspec}
+\setmainfont{Helvetica Neue}[
+  UprightFont   = * Light,
+  BoldFont      = * Medium,
+  ItalicFont    = * Light Italic,
+  BoldItalicFont= * Medium Italic,
+]
+\newfontfamily\headingfont{Helvetica Neue}[
+  UprightFont = * Medium, BoldFont = * Bold, Scale=1.0
+]
+\newfontfamily\condensedfont{Helvetica Neue}[
+  UprightFont = * Condensed Bold, Scale=1.0
+]
 
 % --- Tubulin family palette (mirrors src/components/molstar/colors/palette.ts)
 \definecolor{tubAlpha}{HTML}{4F92E8}
@@ -45,217 +38,324 @@
 \definecolor{tubGamma}{HTML}{A07CC0}
 \definecolor{tubDelta}{HTML}{5EAB70}
 \definecolor{tubEpsilon}{HTML}{D4C060}
-\definecolor{tubInk}{HTML}{1F2937}
-\definecolor{tubMuted}{HTML}{6B7280}
-\definecolor{tubAccent}{HTML}{1677ff}
 
-% --- Phenotype palette (for the TUBB3 disease showcase)
-\definecolor{phCfeom}{HTML}{F39C12}     % orange -- CFEOM / extraocular fibrosis
-\definecolor{phMcd}{HTML}{E74C3C}       % red    -- cortical dysplasia / brain malformation
-\definecolor{phBiochem}{HTML}{8E44AD}   % purple -- biochemical / in-vitro phenotype
+% --- Neutral palette (mirrors the web UI -- soft greys, hairlines)
+\definecolor{tubInk}{HTML}{1F2937}        % primary text
+\definecolor{tubInk2}{HTML}{374151}       % heading text
+\definecolor{tubMuted}{HTML}{6B7280}      % secondary text
+\definecolor{tubMuted2}{HTML}{9CA3AF}     % tertiary text / placeholders
+\definecolor{tubHairline}{HTML}{E5E7EB}   % 1px borders
+\definecolor{tubHairline2}{HTML}{D1D5DB}  % stronger hairline
+\definecolor{tubSurface}{HTML}{FFFFFF}    % cards
+\definecolor{tubSurface2}{HTML}{F9FAFB}   % subtle tint
+\definecolor{tubSurface3}{HTML}{F3F4F6}   % stronger tint
+\definecolor{tubAccent}{HTML}{1677ff}     % brand blue
+\definecolor{tubAccentSoft}{HTML}{E8F0FF} % brand wash
 
-% --- Theme overrides
+% --- Phenotype palette (TUBB3 disease showcase)
+\definecolor{phCfeom}{HTML}{F39C12}
+\definecolor{phMcd}{HTML}{E74C3C}
+\definecolor{phBiochem}{HTML}{8E44AD}
+
+% =====================================================================
+% Theme: austere, mostly-white, hairline-driven
+% =====================================================================
 \usetheme{Default}
-\usecolorstyle[colorOne=tubAlpha, colorTwo=tubBeta, colorThree=tubInk]{Germany}
+\usecolorstyle{Default}
+\colorlet{titlefgcolor}{tubInk}
+\colorlet{titlebgcolor}{tubSurface}
+\colorlet{blocktitlefgcolor}{tubInk2}
+\colorlet{blocktitlebgcolor}{tubSurface}
+\colorlet{blockbodyfgcolor}{tubInk}
+\colorlet{blockbodybgcolor}{tubSurface}
+\colorlet{innerblocktitlefgcolor}{tubInk2}
+\colorlet{innerblocktitlebgcolor}{tubSurface}
+\colorlet{innerblockbodyfgcolor}{tubInk}
+\colorlet{innerblockbodybgcolor}{tubSurface}
+\colorlet{backgroundcolor}{tubSurface}
+\colorlet{framecolor}{tubSurface}
+\colorlet{notefgcolor}{tubInk}
+\colorlet{notebgcolor}{tubSurface}
+\colorlet{notefrcolor}{tubHairline}
+
 \usebackgroundstyle{Empty}
-\usetitlestyle{Default}
-\useblockstyle{Default}
-\useinnerblockstyle{Default}
-\usenotestyle{Default}
+\usetitlestyle{Empty}
+
+% --- Custom block style: white body, hairline above title, no frame.
+% Title sits in its own row above a thin rule; body has no border.
+\defineblockstyle{tubeBlock}{
+  titlewidthscale=1, bodywidthscale=1, titleleft,
+  titleoffsetx=0pt, titleoffsety=0pt,
+  bodyoffsetx=0pt, bodyoffsety=4pt,
+  bodyverticalshift=0pt, roundedcorners=0,
+  linewidth=0pt, titleinnersep=2pt, bodyinnersep=4pt
+}{
+  \draw[draw=none, fill=blockbodybgcolor]
+    (blockbody.south west) rectangle (blockbody.north east);
+  \ifBlockHasTitle
+    \draw[color=tubHairline2, line width=0.6pt]
+      ($(blocktitle.south west) + (0pt, 1pt)$) --
+      ($(blocktitle.south east) + (0pt, 1pt)$);
+  \fi
+}
+\useblockstyle{tubeBlock}
+
+\defineblockstyle{tubeCard}{
+  titlewidthscale=1, bodywidthscale=1, titleleft,
+  titleoffsetx=0pt, titleoffsety=0pt,
+  bodyoffsetx=0pt, bodyoffsety=2pt,
+  bodyverticalshift=0pt, roundedcorners=4,
+  linewidth=0.4pt, titleinnersep=4pt, bodyinnersep=6pt
+}{
+  \draw[color=tubHairline, fill=blockbodybgcolor, line width=0.4pt, rounded corners=4pt]
+    (blockbody.south west) rectangle (blockbody.north east);
+}
+
+\useinnerblockstyle{Minimal}
 
 % Suppress the "LaTeX TikZposter" watermark
 \tikzposterlatexaffectionproofoff
 
-% Custom title block: A1 fits a fuller title font (but not too fat)
+% --- Custom title block: tighter, sans-serif, austere.
 \settitle{%
-  \begin{minipage}{0.95\linewidth}
-    \centering\color{titlefgcolor}%
-    {\fontsize{44}{50}\selectfont\bfseries \@title} \par\vspace{0.3em}
-    {\fontsize{24}{28}\selectfont \@author} \par\vspace{0.2em}
-    {\fontsize{18}{22}\selectfont\itshape \@institute}
+  \begin{minipage}{0.98\linewidth}
+    \centering
+    \color{tubInk}{\fontsize{42}{46}\selectfont\headingfont\bfseries \@title} \par
+    \vspace{0.25em}
+    \color{tubInk2}{\fontsize{16}{20}\selectfont\headingfont \@author} \par
+    \vspace{0.1em}
+    \color{tubMuted}{\fontsize{11}{14}\selectfont\itshape \@institute}
+    \vspace{0.4em}
+    {\color{tubHairline2}\hrule height 0.5pt}
   \end{minipage}
+}
+
+% --- Showcase title helper: "N. one-sentence description"
+% Renders a numbered, descriptive title styled like the EMBL example.
+\newcommand{\showcasetitle}[2]{%
+  {\color{tubAccent}\headingfont\bfseries\fontsize{18}{22}\selectfont #1.~}%
+  {\color{tubInk2}\headingfont\bfseries\fontsize{18}{22}\selectfont #2}%
+}
+
+% --- Section-eyebrow helper: small caps tracked label (like the UI's SUBSTITUTIONS)
+\newcommand{\eyebrow}[1]{%
+  {\condensedfont\fontsize{9}{11}\selectfont\color{tubMuted}\MakeUppercase{#1}}%
 }
 
 % --- Shortcuts
 \newcommand{\tubexyz}{\textbf{tube.xyz}\xspace}
 \newcommand{\tubulindb}{TubulinDB\xspace}
 
-% =====================================================================
+% --- Placeholder helper: a hairline-bordered card with a label + caption,
+% so the layout reads cleanly until figures are dropped in.
+\newcommand{\figplaceholder}[3]{%
+  % #1 = height in cm, #2 = filename, #3 = caption
+  \begin{tikzpicture}
+    \node[draw=tubHairline, line width=0.4pt, rounded corners=2pt,
+          fill=tubSurface2, minimum width=\linewidth, minimum height=#1,
+          inner sep=8pt, text width=\linewidth - 16pt, align=center,
+          text=tubMuted]
+      {\itshape\fontsize{11}{13}\selectfont #2 \\[4pt]
+       \fontsize{9}{11}\selectfont #3};
+  \end{tikzpicture}%
+}
+
 \title{tube.xyz: an interactive structural atlas of the tubulin code}
 \author{A.\,Kushner \quad M.\,Igaev \quad C.\,Janke \quad M.\,O.\,Steinmetz}
-\institute{\textit{Final affiliations TBC}}
+\institute{Final affiliations TBC}
 
 \begin{document}
 \maketitle
 
 % =====================================================================
-% ROW 1: Motivation (wide) | Counts table + Architecture (right column)
+% ROW 1: Motivation (wide) + Database overview (counts + catalogue)
 % =====================================================================
 \begin{columns}
 
-  \column{0.55}
+  \column{0.58}
   \block{Motivation}{
+    \fontsize{12}{16}\selectfont
     The \emph{tubulin code} --- combinations of \(\alpha/\beta\) isotypes
-    and post-translational modifications (PTMs) --- modulates
-    microtubule composition and the interactions of tubulin with motors,
-    MAPs and small molecules. The PDB now holds $\sim$1000
-    tubulin-containing structures and curated compendia such as the
-    \tubulindb (Abbaali \emph{et al.} 2023) catalogue thousands of
-    disease-linked mutations and PTMs --- but these structural and
+    and post-translational modifications --- modulates microtubule
+    composition and the interactions of tubulin with motors, MAPs and
+    small molecules. The PDB now holds approximately one thousand
+    tubulin-containing structures, capturing distinct conformational
+    states and dozens of drug- and protein-binding pockets, while curated
+    compendia such as the \tubulindb (Abbaali \emph{et al.} 2023)
+    catalogue thousands of disease-linked mutations and tubulin-specific
+    PTMs. Despite the wealth on both sides, the structural and
     annotation layers live in separate resources and resist
     co-exploration.
 
-    \medskip
-    \tubexyz places every tubulin residue from every deposited
-    structure into a single \emph{coordinate system} per family
+    \smallskip
+    \tubexyz is a structural atlas that places every tubulin residue
+    from every deposited structure into a single \emph{coordinate
+    system} per family
     (\textcolor{tubAlpha}{$\alpha$},
     \textcolor{tubBeta}{$\beta$},
     \textcolor{tubGamma}{$\gamma$},
     \textcolor{tubDelta}{$\delta$},
     \textcolor{tubEpsilon}{$\varepsilon$}).
-    Sequence variants, ligand-binding contacts, literature mutations
-    and PTMs are programmatically lifted onto the common residue index.
-    The substrate is deliberately \textbf{pluggable}: new sources ---
-    clinical variants, fragment screens, new structures --- join via a
-    simple mapping with no schema changes. A 2D MSA coupled to a
-    Mol*-based 3D viewer plus an LLM-driven chatbot facilitate
-    navigation.
+    Sequence variants, ligand-binding contacts, literature mutations and
+    PTMs are programmatically lifted onto the common residue index. The
+    substrate is deliberately \textbf{pluggable}: clinical variant
+    catalogues, fragment screens and newly deposited structures join via
+    a simple mapping with no schema changes. A 2D MSA is bidirectionally
+    coupled to a Mol*-based 3D viewer; an LLM-driven chatbot translates
+    plain-language questions about binding sites, cross-species residue
+    comparisons, disease-linked mutations and PTMs into deep links into
+    the integrated data.
   }
 
-  \column{0.45}
+  \column{0.42}
   \block{Database overview}{
+    \fontsize{11}{14}\selectfont
     \input{tikz/counts_table.tex}
 
-    \vspace{0.3em}
-    {\footnotesize\textbf{Pipeline} ---
-    every PDB structure is HMM-classified into a tubulin or MAP family,
-    isotype-called against the human reference set, MUSCLE-aligned to a
-    per-family master MSA, and persisted in Neo4j. Literature variants
-    and PTMs from \tubulindb are mapped onto the same residue index via
-    Universal Tubulin Numbering. New annotation sources plug in as soon
-    as they carry a residue position.}
+    \vspace{0.6em}
+    \figplaceholder{7.0cm}{figures/catalogue.png}{Catalogue browse: filter sidebar (isotype, organism, ligand, year, resolution, variant) plus structure cards over the $\sim$1000 indexed tubulin PDB entries.}
   }
 
 \end{columns}
 
 % =====================================================================
-% ROW 2: CENTRAL SHOWCASE -- TUBB3 disease-mutation map (full width)
-% =====================================================================
-\block{Showcase: TUBB3 disease mutations on the structured face of $\beta$-tubulin}{
-  \begin{minipage}[t]{0.62\linewidth}
-    \centering
-    % --- The big 3D render. Replace fbox with \includegraphics when figures/showcase_3d.png exists.
-    \fbox{\parbox{0.97\linewidth}{
-      \vspace{5.5cm}
-      \centering\textcolor{tubMuted}{\textit{figures/showcase\_3d.png}\\[6pt]
-        \footnotesize Cartoon of TUBB3 (chain B of 6S8L, 1.80\,\AA{} X-ray),\\
-        5 disease-mutation positions coloured by phenotype,\\
-        GTP \& plinabulin shown for context.}
-      \vspace{5.5cm}
-    }}\\[4pt]
-
-    {\footnotesize
-      \tikz[baseline=-0.5ex]\fill[phCfeom] (0,0) circle (3pt); \,CFEOM\,(eye) \quad
-      \tikz[baseline=-0.5ex]\fill[phMcd] (0,0) circle (3pt); \,cortical dysplasia\,/\,MCD \quad
-      \tikz[baseline=-0.5ex]\fill[phBiochem] (0,0) circle (3pt); \,biochemical (in vitro)
-    }
-  \end{minipage}\hfill
-  \begin{minipage}[t]{0.34\linewidth}
-    % --- Residue chip (R262 TUBB3): the visual atom from expert-mode UI.
-    \fbox{\parbox{0.97\linewidth}{
-      \vspace{0.3em}
-      {\large\bfseries R262} \hfill \textcolor{tubMuted}{\small 6S8L:B\,$\cdot$\,master 262}
-      \vspace{0.4em}\hrule\vspace{0.4em}
-
-      {\footnotesize\textbf{Substitutions reported}}\\[1pt]
-      {\scriptsize
-        \begin{tabular}{@{}ll@{}}
-          R\,$\to$\,C & \textcolor{phCfeom}{$\bullet$} CFEOM\\
-          R\,$\to$\,H & \textcolor{phCfeom}{$\bullet$} CFEOM\\
-          R\,$\to$\,A & \textcolor{phBiochem}{$\bullet$} kinesin defect\\
-        \end{tabular}
-      }
-      \vspace{0.4em}
-
-      {\footnotesize\textbf{Conservation}} \,
-      {\scriptsize R conserved in all 9 human $\beta$-isotypes.}
-      \vspace{0.3em}
-
-      {\footnotesize\textbf{Ref.}} \,
-      {\scriptsize Tischfield \emph{et al.} (2010) \emph{Cell}.}
-      \vspace{0.2em}
-    }}
-  \end{minipage}
-
-  \vspace{0.8em}
-  % --- MSA strip, nested into the same block to save vertical space ---
-  \begin{center}
-    \fbox{\parbox{0.99\linewidth}{
-      \vspace{2.2cm}
-      \centering\textcolor{tubMuted}{\textit{figures/showcase\_msa.png}\\[4pt]
-        \footnotesize Nightingale MSA: TUBB1, TUBB2A, TUBB2B, \textbf{TUBB3}, TUBB4A, TUBB4B, TUBB5, TUBB6, TUBB8 (top to bottom),\\
-        master positions $\sim$200--420 visible, mutation columns 205 / 262 / 401 / 410 / 417 boxed.}
-      \vspace{2.2cm}
-    }}
-  \end{center}
-
-  \vspace{0.2em}
-  {\small\textit{All five TUBB3 disease positions above are identical
-  across every human $\beta$-isotype --- pathogenic precisely because
-  they sit at residues the protein cannot afford to vary. The aux row
-  above the MSA shows literature-variant density per column from
-  \tubulindb.}}
-}
-
-% (MSA strip is now nested inside the central showcase block above ----
-%  see the additional \fbox in the Showcase block below.)
-
-% =====================================================================
-% ROW 4: Other queries the chatbot handles -- compact one-line tiles
-% =====================================================================
-\block{Other queries the chatbot handles}{
-  \footnotesize
-  \begin{tabular}{@{}p{0.27\linewidth}@{\hspace{1em}}p{0.69\linewidth}@{}}
-    \textbf{\#1 Filter + binding site} &
-    \textit{``Where does taxol bind in a human tubulin structure resolved at or below 3.5\,\AA{}?''} ---
-    faceted catalogue of human $\beta$-tubulin with TA1/TXL bound, sorted by resolution; taxane-site contact residues lifted onto the master alignment.
-    \\[0.4em]
-
-    \textbf{\#2 Cross-species pocket comparison} &
-    \textit{``Compare the GTP binding site in human and \emph{Toxoplasma gondii} $\alpha$-tubulin.''} ---
-    resolves to \texttt{6S8L:A} (human, 1.80\,\AA{}) and \texttt{9Y9Z:1A} (\emph{T.\,gondii}, 3.14\,\AA{}); 25 of $\sim$32 GTP-contact positions shared in master coords.
-    \\[0.4em]
-
-    \textbf{\#3 Annotation transfer} &
-    \textit{``I'm interested in phosphorylation of \emph{T.\,gondii} tubulin, but there is data only for human --- compare sequences and highlight phosphorylation sites.''} ---
-    aligns the \emph{T.\,gondii} chain to the human master, then overlays human-derived phosphorylation as a PTM track on the alignment.
-    \\
-  \end{tabular}
-}
-
-% =====================================================================
-% FOOTER: refs + QR + acks
+% ROW 2: CENTRAL SHOWCASE -- TUBB3 disease-mutation map
 % =====================================================================
 \block{}{
-  \begin{columns}
-    \column{0.84}
-    \scriptsize
+  \showcasetitle{1}{Disease mutations in TUBB3 cluster at conserved positions of the structured face of $\beta$-tubulin}
+  \vspace{0.6em}
+
+  % --- The big 3D render (replace placeholder with \includegraphics).
+  \figplaceholder{18.5cm}{figures/showcase\_3d.png}{Mol* render of TUBB3 (chain B of PDB 6S8L, 1.80\,\AA{} X-ray). Five master positions --- 205, 262, 401, 410, 417 --- highlighted as sticks and coloured by phenotype: red for cortical dysplasia / malformations of cortical development, orange for CFEOM (extraocular fibrosis), purple for in-vitro biochemical defects. GTP and plinabulin are shown desaturated for spatial context. The R262 residue-chip overlay is captured directly inside the screenshot from expert mode.}
+
+  \vspace{0.6em}
+  % --- MSA strip
+  \figplaceholder{5.0cm}{figures/showcase\_msa.png}{Nightingale MSA strip across all nine human $\beta$-isotypes (TUBB1, TUBB2A, TUBB2B, \textbf{TUBB3}, TUBB4A, TUBB4B, TUBB5, TUBB6, TUBB8). Viewport on master columns $\sim$200--420; the five disease columns are boxed. The variants aux row above the alignment shows literature-variant density per column, sourced from \tubulindb.}
+
+  \vspace{0.8em}
+  \fontsize{13}{17}\selectfont
+  \textbf{What the chatbot does.} Asked \emph{``which TUBB3 mutations
+  cause CFEOM and where are they on the structure?''}, the chatbot
+  resolves the five master positions, opens 6S8L:B in expert mode, paints
+  the residues by phenotype, and aligns the nine human $\beta$-isotype
+  references in the MSA panel so the conservation pattern is obvious at a
+  glance.
+
+  \smallskip
+  \textbf{What the figure shows.} All five disease columns are identical
+  across every human $\beta$-isotype --- pathogenic precisely because they
+  sit at residues the protein cannot afford to vary. The R$\to$C/H
+  substitutions at master 262 cause congenital fibrosis of the
+  extraocular muscles (CFEOM); R$\to$A at the same position is a
+  biochemical kinesin-binding defect described in cell-free assays.
+  Curation chain: Tischfield \emph{et al.} 2010 \emph{Cell} + Poirier
+  \emph{et al.} 2010 \emph{Hum. Mol. Genet.} $\to$ TubulinDB (Abbaali
+  2023) $\to$ Neo4j via Universal Tubulin Numbering.
+
+  \smallskip
+  {\fontsize{11}{14}\selectfont\color{tubMuted}
+  \tikz[baseline=-0.5ex]\fill[phCfeom] (0,0) circle (3.5pt);\, CFEOM (extraocular fibrosis) \quad
+  \tikz[baseline=-0.5ex]\fill[phMcd]   (0,0) circle (3.5pt);\, cortical dysplasia / MCD \quad
+  \tikz[baseline=-0.5ex]\fill[phBiochem](0,0) circle (3.5pt);\, biochemical / in-vitro phenotype}
+}
+
+% =====================================================================
+% ROW 3: Side showcases (ligand + PTM)
+% =====================================================================
+\begin{columns}
+
+  \column{0.5}
+  \block{}{
+    \showcasetitle{2}{Taxane (TA1) contacts cluster on the M-loop of $\beta$-tubulin and project as an aux row onto the master alignment}
+    \vspace{0.6em}
+
+    \figplaceholder{10.5cm}{figures/ligand\_3d.png}{TA1 bound at the M-loop (S7--H9) pocket of human $\beta$-tubulin in PDB \texttt{<PDB:CHAIN>}; contact residues are coloured on the master index.}
+
+    \vspace{0.6em}
+    \figplaceholder{4.0cm}{figures/ligand\_msa.png}{Taxane contact positions painted as an aux row above the $\beta$ master alignment (TUBB1--TUBB8).}
+
+    \vspace{0.7em}
+    \fontsize{12}{15}\selectfont
+    \textbf{What the chatbot does.} \emph{``Where does taxol bind in a
+    human tubulin structure resolved at or below 3.5\,\AA?''} resolves
+    to a faceted catalogue page filtered to human $\beta$-tubulin with
+    TA1 bound, sorted by resolution; the top hit is opened in expert
+    mode and the binding-site aux row is auto-toggled.
+
+    \smallskip
+    \textbf{Why this matters.} Taxane is the canonical
+    microtubule-stabilising anti-cancer drug (Steinmetz \& Prota 2018);
+    its contacts span H6--H7, the M-loop (S7--H9) and S9--S10. Painting
+    them as an aux row exposes the contact residues across every human
+    $\beta$-isotype simultaneously --- useful for predicting isotype
+    selectivity and resistance-conferring positions.
+  }
+
+  \column{0.5}
+  \block{}{
+    \showcasetitle{3}{Phosphorylation tracks on TUBB3 reveal surface-accessible regulatory sites including $\beta$-S172}
+    \vspace{0.6em}
+
+    \figplaceholder{10.5cm}{figures/ptm\_3d.png}{Phosphorylation sites annotated on TUBB3 (6S8L:B). Surface-accessible $\beta$-S172 (CDK1 substrate; modulates GTP affinity) is highlighted.}
+
+    \vspace{0.6em}
+    \figplaceholder{4.0cm}{figures/ptm\_msa.png}{Phosphorylation aux row painted on the $\beta$ master alignment.}
+
+    \vspace{0.7em}
+    \fontsize{12}{15}\selectfont
+    \textbf{What the chatbot does.} \emph{``Show me phosphorylation sites
+    on human $\beta$-tubulin.''} stays on the central showcase chain
+    (6S8L:B) and creates a custom aux row filtered to phosphorylation.
+
+    \smallskip
+    \textbf{Cross-species transfer.} The same paradigm carries human
+    annotations onto sequences with no curated data: \emph{``... in
+    \emph{T.\,gondii} tubulin --- compare sequences and highlight
+    phosphorylation sites.''} aligns the host chain onto the human master
+    and overlays the human-derived PTM track on top of the
+    \emph{T.\,gondii} sequence in the MSA panel.
+  }
+
+\end{columns}
+
+% =====================================================================
+% ROW 4: Pipeline (small, left) + Footer (refs + acks + QRs, right)
+% =====================================================================
+\begin{columns}
+
+  \column{0.50}
+  \block{Pipeline}{
+    \centering
+    \input{tikz/architecture_diagram.tex}
+  }
+
+  \column{0.50}
+  \block{References \& links}{
+    \fontsize{9}{12}\selectfont
     \input{references.tex}
 
-    \vspace{0.2em}
-    \textbf{Acknowledgements} \textit{(funding / institutional TBC)}.
-    Live at \textbf{tube.xyz} \,$\cdot$\, code at github.com/rtviii/tubulinxyz.
+    \vspace{0.4em}
+    \eyebrow{Acknowledgements}\\[2pt]
+    \textit{Funding / institutional affiliations TBC.}
+    Live at \textbf{tube.xyz} \,$\cdot$\, code at
+    \texttt{github.com/rtviii/tubulinxyz}.
 
-    \column{0.08}
-    \centering
-    \qrcode[height=2.0cm]{https://tube.xyz}\\[-1pt]
-    {\scriptsize tube.xyz}
+    \vspace{0.6em}
+    \noindent
+    \begin{tabular}{@{}c@{\hspace{12pt}}c@{\hspace{12pt}}l@{}}
+      \qrcode[height=1.8cm]{https://tube.xyz} &
+      \qrcode[height=1.8cm]{https://github.com/rtviii/tubulinxyz} &
+      \begin{minipage}[c]{0.45\linewidth}
+        \fontsize{9}{11}\selectfont
+        \eyebrow{tube.xyz}\\[1pt]
+        the live atlas.\\[5pt]
+        \eyebrow{GitHub}\\[1pt]
+        backend + frontend repos.
+      \end{minipage}
+      \\
+    \end{tabular}
+  }
 
-    \column{0.08}
-    \centering
-    \qrcode[height=2.0cm]{https://github.com/rtviii/tubulinxyz}\\[-1pt]
-    {\scriptsize GitHub}
-  \end{columns}
-}
+\end{columns}
 
 \end{document}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ExternalLink, Crosshair, Plus } from 'lucide-react';
 import { useGetVariantsAtPositionQuery, useGetModificationsAtPositionQuery } from '@/store/tubxz_api';
@@ -9,6 +9,8 @@ import { MODIFICATION_COLORS, VARIANT_COLORS } from '@/lib/colors/annotationPale
 import { useOrganismMap } from '@/services/organism_map';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { ResiduePopupTarget } from './types';
+import { useAppSelector } from '@/store/store';
+import { selectAllTracks, type TrackEntry } from '@/store/slices/annotationTracksSlice';
 
 // ── Drag hook ────────────────────────────────────────────────
 
@@ -85,10 +87,40 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
     modsByType[m.modification_type].push(m);
   }
 
+  // Aux annotation tracks: surface any track whose family matches and whose
+  // resolved positions include this masterIndex. The popup shows ALL such
+  // tracks regardless of the row's eye-toggle state -- this is an inspection
+  // panel, not a paint panel.
+  const allTracks = useAppSelector(selectAllTracks);
+  const trackHits = useMemo(() => {
+    type Hit = { entry: TrackEntry; position: NonNullable<TrackEntry['resolved']>[number]; color: string };
+    const hits: Hit[] = [];
+    for (const entry of allTracks) {
+      if (entry.spec.family !== target.family) continue;
+      if (!entry.resolved) continue;
+      const position = entry.resolved.find(p => p.master_index === target.masterIndex);
+      if (!position) continue;
+      // Inline color resolve (bypasses the visibility gate in computeTrackCells:
+      // popup is for inspection, not paint).
+      let color = '#9ca3af';
+      const paint = entry.spec.paint;
+      if (paint.kind === 'flat') {
+        color = paint.color;
+      } else if (paint.kind === 'byField') {
+        const rec = position.matched_records[0];
+        const val = rec ? rec[paint.field] : null;
+        if (val != null && paint.palette[String(val)]) color = paint.palette[String(val)];
+      }
+      hits.push({ entry, position, color });
+    }
+    return hits;
+  }, [allTracks, target.family, target.masterIndex]);
+
   // Section-level collapsible state — default: all expanded
   const [subsOpen, setSubsOpen] = useState(true);
   const [delInsOpen, setDelInsOpen] = useState(true);
   const [modsOpen, setModsOpen] = useState(true);
+  const [tracksOpen, setTracksOpen] = useState(true);
 
   // Stop drag from being initiated when interacting with header buttons
   const stopDrag = (e: React.MouseEvent) => e.stopPropagation();
@@ -97,15 +129,15 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
     <>
       {/* Title bar: the whole header is the drag handle (OS-window style) */}
       <div
-        className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-200 bg-gray-50/80 rounded-t-lg cursor-grab active:cursor-grabbing select-none"
+        className="flex items-center gap-1 px-1.5 py-1 border-b border-gray-200 bg-gray-50/80 rounded-t-lg cursor-grab active:cursor-grabbing select-none"
         onMouseDown={onMouseDownHeader}
       >
-        <span className="font-mono font-bold text-gray-900 text-sm">
+        <span className="font-mono font-bold text-gray-900 text-xs">
           {target.residueLetter}
           {target.authSeqId !== undefined ? target.authSeqId : ''}
         </span>
-        <span className="text-[10px] text-gray-500">{target.label}</span>
-        <span className="text-[9px] text-gray-400">col {target.masterIndex}</span>
+        <span className="text-[9px] text-gray-500">{target.label}</span>
+        <span className="text-[8px] text-gray-400">col {target.masterIndex}</span>
         <div className="flex-1" />
         <div className="flex items-center gap-0.5" onMouseDown={stopDrag}>
           {onFocus && (
@@ -115,7 +147,7 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
               className="p-0.5 rounded hover:bg-gray-200 text-gray-400 hover:text-blue-500 transition-colors"
               title="Focus residue"
             >
-              <Crosshair size={13} />
+              <Crosshair size={11} />
             </button>
           )}
           {onToggleBallStick && target.authSeqId !== undefined && (
@@ -125,7 +157,7 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
               className={`p-0.5 rounded transition-colors ${ballStickActive ? 'bg-amber-100 text-amber-600' : 'hover:bg-gray-200 text-gray-400 hover:text-amber-500'}`}
               title={ballStickActive ? 'Hide ball-and-stick' : 'Show ball-and-stick'}
             >
-              <img src="/landing/ligand_icon.svg" alt="ligand" className={`w-[13px] h-[13px] ${ballStickActive ? 'opacity-80' : 'opacity-40 hover:opacity-80'}`} />
+              <img src="/landing/ligand_icon.svg" alt="ligand" className={`w-[11px] h-[11px] ${ballStickActive ? 'opacity-80' : 'opacity-40 hover:opacity-80'}`} />
             </button>
           )}
           <button
@@ -133,20 +165,20 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
             onMouseDown={stopDrag}
             className="p-0.5 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
           >
-            <X size={13} />
+            <X size={11} />
           </button>
         </div>
       </div>
 
-      <div className="px-2 py-1 max-h-[400px] overflow-y-auto" style={{ minWidth: 280 }}>
+      <div className="px-1.5 py-0.5 max-h-[340px] overflow-y-auto" style={{ minWidth: 240 }}>
         {!hasFamily && (
-          <div className="text-[10px] text-gray-400 italic">No family data available</div>
+          <div className="text-[9px] text-gray-400 italic">No family data available</div>
         )}
 
         {isLoading && (
-          <div className="flex items-center gap-2 py-2">
-            <div className="animate-spin h-3 w-3 border border-gray-300 border-t-transparent rounded-full" />
-            <span className="text-[10px] text-gray-400">Loading...</span>
+          <div className="flex items-center gap-1.5 py-1.5">
+            <div className="animate-spin h-2.5 w-2.5 border border-gray-300 border-t-transparent rounded-full" />
+            <span className="text-[9px] text-gray-400">Loading...</span>
           </div>
         )}
 
@@ -154,7 +186,7 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
           <>
             {/* Unified substitutions -- all sources merged by path */}
             {subPathGroups.length > 0 && (
-              <div className="mb-1">
+              <div className="mb-0.5">
                 <SectionHeader
                   label="Substitutions"
                   count={allSubs.length}
@@ -173,7 +205,7 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
 
             {/* Non-substitution variants (del/ins) */}
             {nonSubs.length > 0 && (
-              <div className="mb-1">
+              <div className="mb-0.5">
                 <SectionHeader
                   label="Del/Ins"
                   count={nonSubs.length}
@@ -187,8 +219,8 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
                       const org = v.source === 'structural' && v.rcsb_id && organismMap
                         ? organismMap[v.rcsb_id]?.[0] : v.species;
                       return (
-                        <div key={i} className="flex items-center gap-1.5 px-1.5 py-0.5 text-[10px] border-b border-gray-50 last:border-b-0">
-                          <span className="text-[8px] px-1 py-px rounded font-semibold text-white" style={{ backgroundColor: color }}>
+                        <div key={i} className="flex items-center gap-1 px-1 py-0.5 text-[9px] border-b border-gray-50 last:border-b-0">
+                          <span className="text-[7px] px-1 py-px rounded font-semibold text-white" style={{ backgroundColor: color }}>
                             {v.type.slice(0, 3).toUpperCase()}
                           </span>
                           {v.rcsb_id && <span className="font-mono text-gray-600">{v.rcsb_id}:{v.entity_id ?? '?'}</span>}
@@ -203,7 +235,7 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
 
             {/* Modifications grouped by type */}
             {Object.keys(modsByType).length > 0 && (
-              <div className="mb-1">
+              <div className="mb-0.5">
                 <SectionHeader
                   label="Modifications"
                   count={modifications.length}
@@ -222,9 +254,28 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
               </div>
             )}
 
+            {/* User-added annotation tracks matching this position */}
+            {trackHits.length > 0 && (
+              <div className="mb-0.5">
+                <SectionHeader
+                  label="Tracks"
+                  count={trackHits.length}
+                  open={tracksOpen}
+                  onToggle={() => setTracksOpen(o => !o)}
+                />
+                {tracksOpen && (
+                  <div>
+                    {trackHits.map(hit => (
+                      <TrackHitRow key={hit.entry.spec.id} hit={hit} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Empty state */}
-            {allVariants.length === 0 && modifications.length === 0 && (
-              <div className="text-[10px] text-gray-400 py-1">No annotations at this position</div>
+            {allVariants.length === 0 && modifications.length === 0 && trackHits.length === 0 && (
+              <div className="text-[9px] text-gray-400 py-1">No annotations at this position</div>
             )}
           </>
         )}
@@ -245,11 +296,11 @@ function SectionHeader({
 }) {
   return (
     <div
-      className="flex items-center gap-1 px-0.5 py-0.5 mb-0.5 cursor-pointer rounded hover:bg-gray-100 select-none"
+      className="flex items-center gap-1 px-0.5 py-px mb-px cursor-pointer rounded hover:bg-gray-100 select-none"
       onClick={onToggle}
     >
-      <span className="text-[9px] text-gray-500 w-2 text-center leading-none">{open ? '▾' : '▸'}</span>
-      <span className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider">
+      <span className="text-[8px] text-gray-500 w-2 text-center leading-none">{open ? '▾' : '▸'}</span>
+      <span className="text-[8px] font-semibold text-gray-500 uppercase tracking-wider">
         {label} <span className="text-gray-400">({count})</span>
       </span>
     </div>
@@ -298,24 +349,24 @@ function SubstitutionPathRow({
   return (
     <div>
       <div
-        className="flex items-center gap-1 text-[10px] cursor-pointer hover:bg-gray-50 rounded px-0.5 py-0.5"
+        className="flex items-center gap-1 text-[9px] cursor-pointer hover:bg-gray-50 rounded px-0.5 py-px"
         onClick={() => setExpanded(e => !e)}
       >
         <span className="text-gray-400 w-2 text-center flex-shrink-0">{expanded ? '▾' : '▸'}</span>
-        <span className="font-mono font-semibold text-gray-700 w-9 flex-shrink-0">{path}</span>
-        <div className="flex-1 h-2 bg-gray-100 rounded-sm overflow-hidden" title={`${variants.length} / ${total}`}>
+        <span className="font-mono font-semibold text-gray-700 w-8 flex-shrink-0">{path}</span>
+        <div className="flex-1 h-1.5 bg-gray-100 rounded-sm overflow-hidden" title={`${variants.length} / ${total}`}>
           <div className="h-full rounded-sm" style={{ width: `${Math.max(fraction * 100, 4)}%`, backgroundColor: barColor }} />
         </div>
-        <span className="text-[9px] text-gray-500 tabular-nums w-5 text-right">{variants.length}</span>
+        <span className="text-[8px] text-gray-500 tabular-nums w-4 text-right">{variants.length}</span>
       </div>
       {expanded && (
-        <div className="ml-3 pl-2 border-l border-gray-200 mt-0.5 mb-1 max-h-52 overflow-y-auto">
-          {/* Literature entries -- amber left border, breathing room */}
+        <div className="ml-3 pl-1.5 border-l border-gray-200 mt-0.5 mb-0.5 max-h-44 overflow-y-auto">
+          {/* Literature entries -- amber left border */}
           {litEntries.map((v, i) => {
             const detail = [v.species, v.tubulin_type].filter(Boolean).join(' / ');
             return (
-              <div key={`lit-${i}`} className="pl-2 py-1 my-0.5 border-l-2 border-amber-300 bg-amber-50/40 rounded-r text-[9px]">
-                <div className="flex items-center gap-1.5">
+              <div key={`lit-${i}`} className="pl-1.5 py-0.5 my-px border-l-2 border-amber-300 bg-amber-50/40 rounded-r text-[8px]">
+                <div className="flex items-center gap-1">
                   <span className="text-amber-800 font-medium">{detail || 'Literature'}</span>
                   {v.reference_link && (
                     <a href={v.reference_link} target="_blank" rel="noopener noreferrer"
@@ -325,10 +376,10 @@ function SubstitutionPathRow({
                   )}
                 </div>
                 {v.phenotype && (
-                  <div className="text-[8px] text-amber-600/70 mt-0.5 leading-snug">{v.phenotype}</div>
+                  <div className="text-[7px] text-amber-600/70 mt-px leading-snug">{v.phenotype}</div>
                 )}
                 {v.reference && (
-                  <div className="text-[8px] text-gray-400 italic mt-0.5 leading-snug">{v.reference}</div>
+                  <div className="text-[7px] text-gray-400 italic mt-px leading-snug">{v.reference}</div>
                 )}
               </div>
             );
@@ -337,16 +388,16 @@ function SubstitutionPathRow({
           {structEntries.map((v, i) => {
             const org = v.rcsb_id && organismMap ? organismMap[v.rcsb_id]?.[0] ?? null : null;
             return (
-              <div key={`str-${i}`} className="flex items-center gap-1.5 text-[9px] text-gray-500 py-0.5">
+              <div key={`str-${i}`} className="flex items-center gap-1 text-[8px] text-gray-500 py-px">
                 <span className="font-mono text-gray-600">{v.rcsb_id ?? '?'}:{v.entity_id ?? '?'}</span>
                 {org && <span className="text-gray-400 italic flex-1">{org}</span>}
                 {onAlignChain && v.rcsb_id && v.entity_id && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onAlignChain(v.rcsb_id!, v.entity_id!); }}
-                    className="ml-auto inline-flex items-center gap-0.5 px-2 py-0 rounded border border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 hover:border-blue-400 transition-colors text-[9px] font-medium leading-[1.35]"
+                    className="ml-auto inline-flex items-center gap-0.5 px-1.5 py-0 rounded border border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 hover:border-blue-400 transition-colors text-[8px] font-medium leading-[1.35]"
                     title={`Align ${v.rcsb_id}:${v.entity_id} as a new polymer`}
                   >
-                    <Plus size={9} strokeWidth={2.5} />
+                    <Plus size={8} strokeWidth={2.5} />
                     <span>Align</span>
                   </button>
                 )}
@@ -386,46 +437,46 @@ function ModificationTypeRow({
   return (
     <div>
       <div
-        className="flex items-center gap-1 text-[10px] cursor-pointer hover:bg-gray-50 rounded px-0.5 py-0.5"
+        className="flex items-center gap-1 text-[9px] cursor-pointer hover:bg-gray-50 rounded px-0.5 py-px"
         onClick={() => setExpanded(e => !e)}
       >
         <span className="text-gray-400 w-2 text-center flex-shrink-0">{expanded ? '▾' : '▸'}</span>
-        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
         <span className="text-gray-700 font-medium">
           {type.charAt(0).toUpperCase() + type.slice(1)}
         </span>
-        <div className="flex-1 h-2 bg-gray-100 rounded-sm overflow-hidden" title={`${mods.length} / ${total}`}>
+        <div className="flex-1 h-1.5 bg-gray-100 rounded-sm overflow-hidden" title={`${mods.length} / ${total}`}>
           <div className="h-full rounded-sm" style={{ width: `${Math.max(fraction * 100, 4)}%`, backgroundColor: color }} />
         </div>
-        <span className="text-[9px] text-gray-500 tabular-nums w-5 text-right">{mods.length}</span>
+        <span className="text-[8px] text-gray-500 tabular-nums w-4 text-right">{mods.length}</span>
       </div>
 
       {expanded && (
-        <div className="ml-3 pl-2 border-l border-gray-200 mt-0.5 mb-1">
+        <div className="ml-3 pl-1.5 border-l border-gray-200 mt-0.5 mb-0.5">
           {orderedSpecies.map(([species, records]) => {
             const isOpen = !!openSpecies[species];
             return (
               <div key={species}>
                 <div
-                  className="flex items-center gap-1 text-[10px] cursor-pointer hover:bg-gray-50 rounded px-0.5 py-0.5"
+                  className="flex items-center gap-1 text-[9px] cursor-pointer hover:bg-gray-50 rounded px-0.5 py-px"
                   onClick={() => setOpenSpecies(prev => ({ ...prev, [species]: !prev[species] }))}
                 >
                   <span className="text-gray-400 w-2 text-center">{isOpen ? '▾' : '▸'}</span>
                   <span className="italic text-gray-700">{species}</span>
-                  <span className="text-[9px] text-gray-400 tabular-nums">×{records.length}</span>
+                  <span className="text-[8px] text-gray-400 tabular-nums">×{records.length}</span>
                 </div>
 
                 {isOpen && (
-                  <div className="mt-0.5 mb-1 overflow-x-auto">
-                    <table className="text-[9px] border-collapse">
+                  <div className="mt-0.5 mb-0.5 overflow-x-auto">
+                    <table className="text-[8px] border-collapse">
                       <thead>
                         <tr className="text-gray-400">
-                          <th className="text-left font-medium px-1 py-0.5 border-b border-gray-100 whitespace-nowrap">Isotype</th>
-                          <th className="text-left font-medium px-1 py-0.5 border-b border-gray-100 whitespace-nowrap">Phenotype</th>
-                          <th className="text-left font-medium px-1 py-0.5 border-b border-gray-100 whitespace-nowrap">UniProt</th>
-                          <th className="text-left font-medium px-1 py-0.5 border-b border-gray-100 whitespace-nowrap">Source</th>
-                          <th className="text-left font-medium px-1 py-0.5 border-b border-gray-100 whitespace-nowrap">Keywords</th>
-                          <th className="text-left font-medium px-1 py-0.5 border-b border-gray-100 whitespace-nowrap">Notes</th>
+                          <th className="text-left font-medium px-0.5 py-px border-b border-gray-100 whitespace-nowrap">Isotype</th>
+                          <th className="text-left font-medium px-0.5 py-px border-b border-gray-100 whitespace-nowrap">Phenotype</th>
+                          <th className="text-left font-medium px-0.5 py-px border-b border-gray-100 whitespace-nowrap">UniProt</th>
+                          <th className="text-left font-medium px-0.5 py-px border-b border-gray-100 whitespace-nowrap">Source</th>
+                          <th className="text-left font-medium px-0.5 py-px border-b border-gray-100 whitespace-nowrap">Keywords</th>
+                          <th className="text-left font-medium px-0.5 py-px border-b border-gray-100 whitespace-nowrap">Notes</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -433,10 +484,10 @@ function ModificationTypeRow({
                           const sourceLabel = r.database_source || r.database_link;
                           return (
                             <tr key={i} className="text-gray-600 hover:bg-gray-50 align-top">
-                              <td className="px-1 py-0.5 border-b border-gray-50 font-mono whitespace-nowrap">{r.tubulin_type || <span className="text-gray-300">—</span>}</td>
-                              <td className="px-1 py-0.5 border-b border-gray-50 whitespace-nowrap">{r.phenotype || <span className="text-gray-300">—</span>}</td>
-                              <td className="px-1 py-0.5 border-b border-gray-50 font-mono whitespace-nowrap">{r.uniprot_id || <span className="text-gray-300">—</span>}</td>
-                              <td className="px-1 py-0.5 border-b border-gray-50 whitespace-nowrap">
+                              <td className="px-0.5 py-px border-b border-gray-50 font-mono whitespace-nowrap">{r.tubulin_type || <span className="text-gray-300">—</span>}</td>
+                              <td className="px-0.5 py-px border-b border-gray-50 whitespace-nowrap">{r.phenotype || <span className="text-gray-300">—</span>}</td>
+                              <td className="px-0.5 py-px border-b border-gray-50 font-mono whitespace-nowrap">{r.uniprot_id || <span className="text-gray-300">—</span>}</td>
+                              <td className="px-0.5 py-px border-b border-gray-50 whitespace-nowrap">
                                 {r.database_link ? (
                                   <a
                                     href={r.database_link}
@@ -446,14 +497,14 @@ function ModificationTypeRow({
                                     className="text-blue-600 hover:text-blue-800 underline inline-flex items-center gap-0.5"
                                   >
                                     <span>{sourceLabel}</span>
-                                    <ExternalLink size={8} className="flex-shrink-0" />
+                                    <ExternalLink size={7} className="flex-shrink-0" />
                                   </a>
                                 ) : (
                                   sourceLabel || <span className="text-gray-300">—</span>
                                 )}
                               </td>
-                              <td className="px-1 py-0.5 border-b border-gray-50 whitespace-nowrap">{r.keywords || <span className="text-gray-300">—</span>}</td>
-                              <td className="px-1 py-0.5 border-b border-gray-50 whitespace-nowrap">{r.notes || <span className="text-gray-300">—</span>}</td>
+                              <td className="px-0.5 py-px border-b border-gray-50 whitespace-nowrap">{r.keywords || <span className="text-gray-300">—</span>}</td>
+                              <td className="px-0.5 py-px border-b border-gray-50 whitespace-nowrap">{r.notes || <span className="text-gray-300">—</span>}</td>
                             </tr>
                           );
                         })}
@@ -464,6 +515,55 @@ function ModificationTypeRow({
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Track hit row: surfaces user-added annotation tracks matching this position ──
+
+function TrackHitRow({
+  hit,
+}: {
+  hit: { entry: TrackEntry; position: NonNullable<TrackEntry['resolved']>[number]; color: string };
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const { entry, position, color } = hit;
+  const recordCount = position.matched_records.length;
+
+  // Pull a few common keys for terse one-line display. matched_records may be
+  // variants, modifications, or binding contacts depending on track kind, so
+  // we read whichever fields are present rather than assuming a schema.
+  const summarize = (rec: Record<string, any>): string => {
+    const path = rec.wild_type && rec.observed ? `${rec.wild_type}→${rec.observed}` : null;
+    const mod = rec.modification_type;
+    const phen = rec.phenotype;
+    const src = rec.source;
+    const sp = rec.species;
+    return [path, mod, sp, phen, src].filter(Boolean).join(' / ') || JSON.stringify(rec).slice(0, 80);
+  };
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-1 text-[9px] cursor-pointer hover:bg-gray-50 rounded px-0.5 py-px"
+        onClick={() => setExpanded(e => !e)}
+      >
+        <span className="text-gray-400 w-2 text-center flex-shrink-0">{expanded ? '▾' : '▸'}</span>
+        <span className="w-1.5 h-1.5 rounded-sm flex-shrink-0" style={{ backgroundColor: color }} />
+        <span className="text-gray-700 font-medium truncate" title={entry.spec.label}>
+          {entry.spec.label}
+        </span>
+        <span className="text-[8px] text-gray-400 tabular-nums ml-auto">×{recordCount}</span>
+      </div>
+      {expanded && (
+        <div className="ml-3 pl-1.5 border-l border-gray-200 mt-0.5 mb-0.5 max-h-32 overflow-y-auto">
+          {position.matched_records.map((rec, i) => (
+            <div key={i} className="text-[8px] text-gray-500 py-px leading-snug break-all">
+              {summarize(rec)}
+            </div>
+          ))}
         </div>
       )}
     </div>

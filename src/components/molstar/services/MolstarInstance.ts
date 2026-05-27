@@ -3,6 +3,11 @@ import { MolstarViewer } from '../core/MolstarViewer';
 import { setStructureTransparency } from 'molstar/lib/mol-plugin-state/helpers/structure-transparency';
 import {  getMolstarLigandColor } from '../colors/palette';
 import {
+  computeStructureInteractions,
+  extractLigandBonds,
+  type LigandBondInfo,
+} from '../core/bindingSite';
+import {
   MolstarInstanceId,
   ViewMode,
   Component,
@@ -102,6 +107,14 @@ export class MolstarInstance {
   // the underlying structure object changes (reload).
   private hoverLociCache: Map<string, StructureElement.Loci | null> = new Map();
   private hoverLociCacheStructure: Structure | null = null;
+
+  // Active binding-site representation refs. focusLigandBindingSite() builds
+  // up to three Molstar components (ligand B&S, pocket B&S per chain,
+  // interactions layer) and we track their refs so the next call (or an
+  // explicit clear) can remove them.
+  private bindingSiteRefs: string[] = [];
+  private bindingSiteLabelKey: string | null = null;
+  private activeBindingSiteKey: string | null = null;
 
   constructor(
     public readonly id: MolstarInstanceId,
@@ -912,13 +925,14 @@ const color = getMolstarGhostColor(family);
       }
     }
 
-    // Aligned structures
-    if (currentChainId) {
-      const oldState = this.getMonomerChainState(currentChainId);
-      if (oldState) {
-        for (const aligned of Object.values(oldState.alignedStructures)) {
-          this.viewer.setSubtreeVisibility(aligned.parentRef, false);
-        }
+    // Aligned structures: hide every aligned chain belonging to any *other*
+    // monomer chain (not just the previous one) — otherwise navigating through
+    // multiple chains can leave phantom subtrees from intermediate chains
+    // floating in 3D. Then re-show the visible ones for the new chain.
+    for (const [chId, chainState] of Object.entries(this.instanceState.monomerChainStates)) {
+      if (chId === newChainId) continue;
+      for (const aligned of Object.values(chainState.alignedStructures)) {
+        this.viewer.setSubtreeVisibility(aligned.parentRef, false);
       }
     }
     const newState = this.getMonomerChainState(newChainId);
@@ -1271,6 +1285,156 @@ const color = getMolstarGhostColor(family);
     const loci = structureToLoci(structure);
     this.viewer.focusLoci(loci);
     this.viewer.setFocusFromLoci(loci);
+  }
+
+  /**
+   * Clear any binding-site representation built by focusLigandBindingSite().
+   * Safe to call when no representation is active.
+   */
+  async clearBindingSite(): Promise<void> {
+    const plugin = this.viewer?.ctx;
+    if (plugin) {
+      for (const ref of this.bindingSiteRefs) {
+        try { await plugin.build().delete(ref).commit(); } catch { /* gone */ }
+      }
+    }
+    this.bindingSiteRefs = [];
+    if (this.bindingSiteLabelKey) {
+      this.removeExplorerLabel(this.bindingSiteLabelKey);
+      this.bindingSiteLabelKey = null;
+    }
+    this.activeBindingSiteKey = null;
+  }
+
+  getActiveBindingSiteKey(): string | null {
+    return this.activeBindingSiteKey;
+  }
+
+  /**
+   * Build a binding-site representation for the ligand identified by
+   * uniqueKey: contacting polymer residues as small ball-and-stick (ghost
+   * colours by chain family), and a Molstar 'interactions' layer showing
+   * the non-covalent bonds between the ligand and those residues. The
+   * ligand itself is rendered by the default component already loaded
+   * with the structure -- this method ensures that component is visible
+   * but does not duplicate it. Camera focuses on the ligand. Calling
+   * again with a different ligand replaces the previous representation.
+   *
+   * Returns the contact list so callers can surface a bond-pill UI.
+   */
+  async focusLigandBindingSite(uniqueKey: string): Promise<LigandBondInfo[] | null> {
+    const component = this.getComponent(uniqueKey);
+    if (!component || !isLigandComponent(component)) return null;
+
+    const plugin = this.viewer?.ctx;
+    const structure = this.viewer.getCurrentStructure();
+    if (!plugin || !structure) return null;
+
+    const hierarchy = plugin.managers.structure.hierarchy.current;
+    if (hierarchy.structures.length === 0) return null;
+    const structureCell = hierarchy.structures[0].cell;
+
+    // Wipe any previous binding-site representation first.
+    await this.clearBindingSite();
+
+    // Make sure the default ligand component is visible, since this is the
+    // ball-and-stick the user actually sees for the molecule.
+    this.setLigandVisibility(uniqueKey, true);
+
+    // Run interaction computation. This can be slow for huge structures;
+    // suppress failures so a stale interaction graph never crashes the UI.
+    let interactions: any = null;
+    try {
+      interactions = await computeStructureInteractions(plugin, structure);
+    } catch (err) {
+      console.warn('[binding-site] interaction computation failed:', err);
+    }
+
+    const bondData = interactions
+      ? extractLigandBonds(structure, interactions, component.compId, component.authAsymId, component.authSeqId)
+      : { residues: new Set<number>(), bondCount: 0, contacts: [] };
+
+    // Group contacting residues by their chain (a ligand may sit at an interface
+    // and touch residues on multiple chains).
+    const residuesByChain = new Map<string, Set<number>>();
+    for (const c of bondData.contacts) {
+      let set = residuesByChain.get(c.residue.chainId);
+      if (!set) { set = new Set(); residuesByChain.set(c.residue.chainId, set); }
+      set.add(c.residue.authSeqId);
+    }
+
+    // Ligand-residue selection expression — used in the iface merge below.
+    const ligandExpr = MS.struct.generator.atomGroups({
+      'residue-test': MS.core.logic.and([
+        MS.core.rel.eq([MS.ammp('auth_comp_id'), component.compId]),
+        MS.core.rel.eq([MS.ammp('auth_asym_id'), component.authAsymId]),
+        MS.core.rel.eq([MS.ammp('auth_seq_id'), component.authSeqId]),
+      ]),
+    });
+
+    // Per-chain pocket ball-and-stick (smaller spheres, ghost-colored by family).
+    const classification = this.instanceState?.tubulinClassification ?? {};
+    const pocketExprs: any[] = [];
+    for (const [chainId, residueSet] of residuesByChain) {
+      const residueArr = Array.from(residueSet);
+      const pocketQuery = buildMultiResidueQuery(chainId, residueArr);
+      pocketExprs.push(pocketQuery);
+      const ghostColor = getMolstarGhostColor(classification[chainId]);
+      const pocketComp = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structureCell,
+        pocketQuery,
+        `binding-site-pocket-${uniqueKey}-${chainId}`,
+        { label: `${component.compId} pocket (${chainId})` },
+      );
+      if (pocketComp) {
+        this.bindingSiteRefs.push(pocketComp.ref);
+        await plugin.builders.structure.representation.addRepresentation(pocketComp, {
+          type: 'ball-and-stick',
+          color: 'uniform',
+          colorParams: { value: ghostColor },
+          typeParams: { sizeFactor: 0.15 },
+        });
+      }
+    }
+
+    // Interaction lines (auto-colored by bond type). Skip if no contacts found.
+    if (pocketExprs.length > 0) {
+      const ifaceExpr = MS.struct.combinator.merge([ligandExpr, ...pocketExprs]);
+      const ifaceComp = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structureCell,
+        ifaceExpr,
+        `binding-site-iface-${uniqueKey}`,
+        { label: `${component.compId} interactions` },
+      );
+      if (ifaceComp) {
+        this.bindingSiteRefs.push(ifaceComp.ref);
+        try {
+          await plugin.builders.structure.representation.addRepresentation(ifaceComp, {
+            type: 'interactions',
+            color: 'interaction-type',
+          });
+        } catch { /* interactions repr unavailable; skip */ }
+      }
+    }
+
+    // Stylized rendering (outline + AO) for the demo-like look.
+    if (plugin.canvas3d) {
+      plugin.canvas3d.setProps({
+        postprocessing: STYLIZED_POSTPROCESSING,
+        renderer: { pickingAlphaThreshold: 0.1 },
+      });
+    }
+
+    // Camera on the ligand (no persistent label — the bond-pill card UI
+    // takes that role now).
+    const ligandLoci = executeQuery(ligandExpr, structure);
+    if (ligandLoci) {
+      this.viewer.clearFocus();
+      this.viewer.focusLoci(ligandLoci);
+    }
+
+    this.activeBindingSiteKey = uniqueKey;
+    return bondData.contacts;
   }
 
   focusResidue(chainId: string, authSeqId: number): void {

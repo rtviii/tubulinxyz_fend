@@ -1,28 +1,15 @@
 'use client';
 
-import { useMemo } from 'react';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { MolstarInstanceId } from '@/components/molstar/core/types';
 import { Mail } from 'lucide-react';
 import type { StructureProfile } from '@/lib/profile_utils';
-import { getFamilyForChain, getIsotypeForChain } from '@/lib/profile_utils';
-
-const FAMILY_GREEK: Record<string, string> = {
-  tubulin_alpha: '\u03B1',
-  tubulin_beta: '\u03B2',
-  tubulin_gamma: '\u03B3',
-  tubulin_delta: '\u03B4',
-  tubulin_epsilon: '\u03B5',
-};
 import {
   AppPill,
   PillDivider,
   PillAnchor,
-  PillChatInput,
-  PillCrumb,
 } from '@/components/ui/AppPill';
 import { GlobalNav } from '@/components/ui/GlobalNav';
-import { StructureSlugBlock } from './StructureSlugBlock';
 
 interface MonomerToolbarProps {
   instanceId: MolstarInstanceId;
@@ -33,33 +20,16 @@ interface MonomerToolbarProps {
 }
 
 /**
- * Expert-mode pill (viewMode === 'monomer', chain-focused view).
- *
- * Layout:
- *   [ Home · Structures · ( PDB+species, clickable back to easy ) · ( Chain / isotype, highlighted = current ) ]
- *   |  chat · feedback
+ * Expert-mode pill: navigation only.
+ * Structure/chain/chat now live in the top-left ChainAnchorPill.
  */
 export function MonomerToolbar({
   instance,
-  loadedStructure,
-  profile,
-  activeChainId,
 }: MonomerToolbarProps) {
   const exitToEasyMode = () => instance?.exitMonomerView();
 
-  const chainLabel = useMemo(() => {
-    if (!activeChainId) return null;
-    const isotype = getIsotypeForChain(profile, activeChainId);
-    if (isotype) return isotype;
-    const family = getFamilyForChain(profile, activeChainId);
-    const greek = family ? FAMILY_GREEK[family] : undefined;
-    if (greek) return `${greek}-tubulin · ${activeChainId}`;
-    return `Chain ${activeChainId}`;
-  }, [profile, activeChainId]);
-
   return (
     <AppPill>
-      {/* ── Left: unified nav (Easy returns to structure view) + breadcrumb ── */}
       <GlobalNav
         mode={{
           active: 'expert',
@@ -67,28 +37,7 @@ export function MonomerToolbar({
           onExpert: () => {},
         }}
       />
-
       <PillDivider />
-
-      <StructureSlugBlock
-        loadedStructure={loadedStructure}
-        profile={profile}
-        onClick={exitToEasyMode}
-        title="Back to structure (easy mode)"
-      />
-      {chainLabel && (
-        <PillCrumb highlighted title={`Chain ${activeChainId ?? ''}`}>
-          <span className="font-mono font-semibold text-[11px]">{chainLabel}</span>
-        </PillCrumb>
-      )}
-
-      <PillDivider />
-
-      {/* ── Right: tools ── */}
-      <PillChatInput placeholder="Ask about this chain..." widthClass="w-56" />
-
-      <PillDivider />
-
       <PillAnchor
         href="mailto:feedback@tube.xyz?subject=tube.xyz%20feedback"
         icon={Mail}

@@ -1,67 +1,107 @@
-% Application architecture: ingest -> ETL -> Neo4j -> API -> frontend.
+% Pipeline architecture: compact, layered, "industrial software" style.
+% Four grouped containers (Sources, Process, Store, Serve), each holding
+% small white sub-cards with hairline borders. Subtle background tint per
+% group; flow arrows are thin, dark grey, no shadows. Designed to live
+% inside a half-width \block.
+%
 % Embedded inside a \block in poster.tex.
 
 \begin{tikzpicture}[
-    every node/.style={font=\footnotesize\sffamily, align=center, rounded corners=3pt, inner sep=5pt},
-    src/.style ={draw=gray!60, fill=gray!10,        line width=0.7pt, minimum height=8mm, minimum width=22mm},
-    etl/.style ={draw=tubBeta, fill=tubBeta!12,     line width=0.7pt, minimum height=8mm, minimum width=30mm},
-    store/.style={draw=tubAccent, fill=tubAccent!12, line width=0.7pt, minimum height=10mm, minimum width=30mm},
-    api/.style ={draw=tubDelta, fill=tubDelta!12,   line width=0.7pt, minimum height=8mm, minimum width=30mm},
-    ui/.style  ={draw=tubGamma, fill=tubGamma!12,   line width=0.7pt, minimum height=8mm, minimum width=30mm},
-    arr/.style ={->, >=Stealth, gray!70, line width=0.6pt},
-    note/.style={font=\scriptsize\sffamily\itshape, text=tubMuted, align=left},
+    every node/.style={font=\sffamily, inner sep=0pt},
+    grp/.style={
+      draw=tubHairline2, line width=0.4pt, rounded corners=3pt,
+      fill=tubSurface2, minimum height=42mm
+    },
+    grphead/.style={
+      font=\condensedfont\fontsize{8}{10}\selectfont,
+      text=tubMuted, anchor=south west
+    },
+    card/.style={
+      draw=tubHairline, line width=0.3pt, rounded corners=2pt,
+      fill=tubSurface, inner xsep=4pt, inner ysep=3pt,
+      font=\fontsize{8}{10}\selectfont\sffamily,
+      text=tubInk2, align=left, anchor=west
+    },
+    cardbold/.style={card, font=\fontsize{8}{10}\selectfont\sffamily\bfseries},
+    sub/.style={
+      font=\fontsize{7}{8}\selectfont\sffamily, text=tubMuted,
+      align=left, anchor=west
+    },
+    flow/.style={
+      ->, >=Stealth, draw=tubMuted2, line width=0.6pt
+    },
   ]
 
-  % --- Sources (left lane)
-  \node[src] (rcsb)  at (0,5.6)   {RCSB Search\\\scriptsize InterPro IPR000217};
-  \node[src] (gql)   at (0,4.4)   {RCSB GraphQL\\\scriptsize metadata};
-  \node[src] (cif)   at (0,3.2)   {CIF coords\\\scriptsize Mol* (headless)};
-  \node[src] (tax)   at (0,2.0)   {NCBI taxonomy};
-  \node[src] (db23)  at (0,0.8)   {TubulinDB CSVs};
+  % --- Lane geometry. 4 group containers stacked side-by-side.
+  \def\gh{4.2}     % group container height (cm)
+  \def\gw{4.0}     % default group width (cm)
+  \def\gwwide{5.2} % wider for Serve
+  \def\xa{0}
+  \def\xb{4.6}
+  \def\xc{9.2}
+  \def\xd{13.0}
 
-  % --- ETL pipeline (middle)
-  \node[etl] (etl1) at (5.0,5.6) {1.\ Acquire};
-  \node[etl] (etl2) at (5.0,4.4) {2.\ HMM classify};
-  \node[etl] (etl3) at (5.0,3.2) {3.\ Isotype call};
-  \node[etl] (etl4) at (5.0,2.0) {4.\ MUSCLE align\\\scriptsize $\to$ master coords};
-  \node[etl] (etl5) at (5.0,0.8) {5.\ Lift contacts\\\scriptsize + literature};
+  % ---------------- SOURCES ----------------
+  \node[grp, minimum width=\gw cm] (gA) at (\xa, 0) {};
+  \node[grphead] at ($(gA.north west) + (3pt, 2pt)$) {SOURCES};
 
-  % --- Neo4j store
-  \node[store, drop shadow={shadow xshift=1pt, shadow yshift=-1pt, fill=black, opacity=0.2}]
-    (neo) at (10.0,3.2) {\textbf{Neo4j graph}\\\scriptsize Structure / Entity / Variant\\\scriptsize Modification / Chemical};
+  \node[card, text width=\gw cm - 8pt]
+    (s1) at ($(gA.north west) + (4pt, -8pt)$)
+    {RCSB PDB \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont InterPro IPR000217}};
+  \node[card, text width=\gw cm - 8pt, anchor=north west]
+    (s2) at ($(s1.south west) + (0, -4pt)$)
+    {TubulinDB \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont Abbaali \emph{et al.} 2023}};
+  \node[card, text width=\gw cm - 8pt, anchor=north west]
+    (s3) at ($(s2.south west) + (0, -4pt)$)
+    {NCBI taxonomy \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont ete3 lineages}};
 
-  % --- API
-  \node[api] (api1) at (10.0,1.4) {FastAPI\\\scriptsize /structures /polymers /ligands\\\scriptsize /msa /annotations /nl\_query};
+  % ---------------- PROCESS ----------------
+  \node[grp, minimum width=\gw cm] (gB) at (\xb, 0) {};
+  \node[grphead] at ($(gB.north west) + (3pt, 2pt)$) {PROCESS};
 
-  % --- Frontend
-  \node[ui] (ui1) at (10.0,-0.4) {Next.js client\\\scriptsize Mol* $+$ Nightingale $+$ Chatbot};
+  \node[card, text width=\gw cm - 8pt]
+    (p1) at ($(gB.north west) + (4pt, -8pt)$)
+    {HMM classify \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont $\alpha,\beta,\gamma,\delta,\varepsilon$ + MAPs}};
+  \node[card, text width=\gw cm - 8pt, anchor=north west]
+    (p2) at ($(p1.south west) + (0, -4pt)$)
+    {Isotype call \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont UniProt $\to$ HGNC}};
+  \node[card, text width=\gw cm - 8pt, anchor=north west]
+    (p3) at ($(p2.south west) + (0, -4pt)$)
+    {MUSCLE align \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont per-family master MSA}};
 
-  % --- Arrows: sources -> ETL
-  \foreach \s/\d in {rcsb/etl1, gql/etl1, cif/etl1, tax/etl2, db23/etl5}
-    \draw[arr] (\s.east) -- (\d.west);
+  % ---------------- STORE ----------------
+  \node[grp, minimum width=3.4cm] (gC) at (\xc, 0) {};
+  \node[grphead] at ($(gC.north west) + (3pt, 2pt)$) {STORE};
 
-  % --- ETL chain
-  \foreach \a/\b in {etl1/etl2, etl2/etl3, etl3/etl4, etl4/etl5}
-    \draw[arr] (\a) -- (\b);
+  \node[cardbold, text width=3.4cm - 8pt, anchor=north west,
+        draw=tubAccent, fill=tubAccentSoft]
+    (st1) at ($(gC.north west) + (4pt, -8pt)$)
+    {Neo4j graph};
+  \node[sub, text width=3.4cm - 8pt, anchor=north west]
+    at ($(st1.south west) + (0, -3pt)$)
+    {Structure, Entity,\\ Variant, Modification,\\ Chemical};
+  \node[sub, text width=3.4cm - 8pt, anchor=south west, text=tubMuted]
+    at ($(gC.south west) + (4pt, 6pt)$)
+    {join key:\\ \texttt{\fontsize{7}{8}\selectfont Variant.master\_index}};
 
-  % --- ETL -> Neo4j
-  \draw[arr] (etl4.east) -- ([yshift=4mm]neo.west);
-  \draw[arr] (etl5.east) -- ([yshift=-4mm]neo.west);
+  % ---------------- SERVE ----------------
+  \node[grp, minimum width=\gwwide cm] (gD) at (\xd, 0) {};
+  \node[grphead] at ($(gD.north west) + (3pt, 2pt)$) {SERVE};
 
-  % --- Neo4j -> API -> UI
-  \draw[arr] (neo) -- (api1);
-  \draw[arr] (api1) -- (ui1);
+  \node[card, text width=\gwwide cm - 8pt]
+    (sv1) at ($(gD.north west) + (4pt, -8pt)$)
+    {FastAPI \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont /structures /polymers /ligands /msa}};
+  \node[card, text width=\gwwide cm - 8pt, anchor=north west]
+    (sv2) at ($(sv1.south west) + (0, -4pt)$)
+    {Next.js client \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont Mol* + Nightingale}};
+  \node[card, text width=\gwwide cm - 8pt, anchor=north west,
+        draw=tubAccent, fill=tubAccentSoft]
+    (sv3) at ($(sv2.south west) + (0, -4pt)$)
+    {LLM chatbot \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont natural-language $\to$ Cypher}};
 
-  % --- Chatbot resolver loopback note
-  \draw[arr, dashed, tubBeta]
-    (ui1.east) to[bend left=40]
-    node[right, font=\scriptsize\sffamily, text=tubBeta]
-      {chatbot $\to$ Cypher resolver}
-    (neo.east);
-
-  % --- Lane labels
-  \node[note, anchor=west] at (-1.6, 6.4) {\textbf{INGEST}};
-  \node[note, anchor=west] at ( 3.6, 6.4) {\textbf{ETL}};
-  \node[note, anchor=west] at ( 8.4, 6.4) {\textbf{STORE \& SERVE}};
+  % ---------------- Flow arrows ----------------
+  \draw[flow] (gA.east) -- (gB.west);
+  \draw[flow] (gB.east) -- (gC.west);
+  \draw[flow] (gC.east) -- (gD.west);
 
 \end{tikzpicture}

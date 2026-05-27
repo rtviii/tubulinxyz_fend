@@ -20,6 +20,8 @@ import {
   toggleLigandSite,
   toggleModificationType,
   toggleModificationMuted,
+  type ChainAnnotationData,
+  type ChainVisibility,
 } from '@/store/slices/annotationsSlice';
 import { makeChainKey } from '@/lib/chain_key';
 import { parseLayerType } from './auxiliary/layerKind';
@@ -44,12 +46,9 @@ import {
 import type { VariantType } from '@/store/slices/annotationsSlice';
 import { PerChainPtmDropdown } from './PerChainPtmDropdown';
 import {
-  addTrack,
   removeTrack,
   toggleTrackVisibility,
-  clearAllTracks,
   selectAllTracks,
-  type FilterSpec,
   type Family,
   type TrackEntry,
 } from '@/store/slices/annotationTracksSlice';
@@ -156,6 +155,10 @@ export function MSALabels({
   // Track-info popover state: which track row's info card is currently open
   // and the screen-space rect of its anchor button (for positioning).
   const [openTrackInfo, setOpenTrackInfo] = useState<{ id: string; rect: DOMRect } | null>(null);
+  // Info popover for chain-scoped aux rows (variants / ligand / PTM). Track
+  // rows use openTrackInfo above; this one is keyed by the aux row's sequence
+  // id so it stays unique across chains.
+  const [openChainAuxInfo, setOpenChainAuxInfo] = useState<{ seqId: string; rect: DOMRect } | null>(null);
 
   const lastMasterIndex = sequences.reduce(
     (acc, seq, idx) => (seq.originType === 'master' ? idx : acc),
@@ -438,16 +441,26 @@ export function MSALabels({
                 <span className={layerActive ? 'text-gray-400' : 'text-gray-300'}>
                   {seq.layerLabel ?? seq.name}
                 </span>
-                {isTrackRow && trackEntry && (
+                {/* Info popover trigger: tracks open TrackInfoPopover (FilterSpec
+                    builder details); chain-scoped aux rows open ChainAuxInfoPopover
+                    (species selection, source breakdown, etc.) so PTM/ligand/variants
+                    rows get parity with the global track info chip. */}
+                {(isTrackRow ? Boolean(trackEntry) : Boolean(desc)) && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      setOpenTrackInfo(prev =>
-                        prev?.id === trackEntry.spec.id ? null : { id: trackEntry.spec.id, rect }
-                      );
+                      if (isTrackRow && trackEntry) {
+                        setOpenTrackInfo(prev =>
+                          prev?.id === trackEntry.spec.id ? null : { id: trackEntry.spec.id, rect }
+                        );
+                      } else {
+                        setOpenChainAuxInfo(prev =>
+                          prev?.seqId === seq.id ? null : { seqId: seq.id, rect }
+                        );
+                      }
                     }}
-                    title="Show how this track was built"
+                    title={isTrackRow ? 'Show how this track was built' : 'Show details'}
                     className="ml-auto flex-shrink-0 p-0 text-gray-300 hover:text-blue-500"
                   >
                     <Info size={9} />
@@ -457,7 +470,7 @@ export function MSALabels({
                   <button
                     onClick={handleDeleteLayer}
                     title={isTrackRow ? 'Remove this track' : 'Remove this PTM track'}
-                    className={`${isTrackRow ? '' : 'ml-auto'} flex-shrink-0 p-0 text-gray-300 hover:text-red-500`}
+                    className="flex-shrink-0 p-0 text-gray-300 hover:text-red-500"
                   >
                     <X size={9} />
                   </button>
@@ -612,6 +625,28 @@ export function MSALabels({
           />
         );
       })()}
+
+      {/* Chain-scoped aux info popover: same role as TrackInfoPopover but for
+          variants / ligand / PTM rows that aren't global tracks. */}
+      {openChainAuxInfo && (() => {
+        const seq = sequences.find(s => s.id === openChainAuxInfo.seqId);
+        if (!seq || !seq.layerType) return null;
+        const desc = parseLayerType(seq.layerType);
+        if (!desc || desc.kind === 'track') return null;
+        const chainKey = seq.parentSequenceId ?? '';
+        const entry = annotationChains[chainKey];
+        if (!entry?.data) return null;
+        return (
+          <ChainAuxInfoPopover
+            desc={desc}
+            chainKey={chainKey}
+            data={entry.data}
+            visibility={entry.visibility}
+            anchorRect={openChainAuxInfo.rect}
+            onClose={() => setOpenChainAuxInfo(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -654,7 +689,6 @@ function TrackPanelFooter({ rowHeight, sequences }: { rowHeight: number; sequenc
         <Plus size={10} />
         <span>add variants track</span>
       </button>
-      <TrackPresetButtons rowHeight={rowHeight} />
       {dialogOpen && activeFamily && (
         <AddTrackDialog
           family={activeFamily}
@@ -662,132 +696,6 @@ function TrackPanelFooter({ rowHeight, sequences }: { rowHeight: number; sequenc
         />
       )}
     </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Track preset buttons (smoke-test surface, kept alongside the modal)
-// ---------------------------------------------------------------------------
-
-interface PresetTrack {
-  label: string;
-  family: 'tubulin_alpha' | 'tubulin_beta';
-  color: string;
-  filters: FilterSpec;
-}
-
-const TRACK_PRESETS: PresetTrack[] = [
-  {
-    label: 'TUBB3 CFEOM',
-    family: 'tubulin_beta',
-    color: '#F39C12',
-    filters: {
-      kind: 'variants',
-      family: 'tubulin_beta',
-      sources: ['literature'],
-      uniprot_ids: ['Q13509'],
-      phenotype_contains: ['fibrosis of the extraocular'],
-    },
-  },
-  {
-    label: 'Tubulinopathies (beta)',
-    family: 'tubulin_beta',
-    color: '#E74C3C',
-    filters: {
-      kind: 'variants',
-      family: 'tubulin_beta',
-      sources: ['literature'],
-      phenotype_contains: ['fibrosis', 'Cortical dysplasia', 'lissencephaly', 'microcephaly'],
-    },
-  },
-  {
-    label: 'K + acetylation (alpha)',
-    family: 'tubulin_alpha',
-    color: '#8E44AD',
-    filters: {
-      kind: 'variants',
-      family: 'tubulin_alpha',
-      sources: ['structural'],
-      wild_type_aas: ['K'],
-      co_occurs_with_mod_type: ['acetylation'],
-    },
-  },
-  {
-    label: 'Phospho human (alpha)',
-    family: 'tubulin_alpha',
-    color: '#3498DB',
-    filters: {
-      kind: 'modifications',
-      family: 'tubulin_alpha',
-      modification_types: ['phosphorylation'],
-      species_tax_ids: [9606],
-    },
-  },
-  {
-    label: 'GTP contacts (beta)',
-    family: 'tubulin_beta',
-    color: '#1ABC9C',
-    filters: {
-      kind: 'binding_contacts',
-      family: 'tubulin_beta',
-      chemical_ids: ['GTP'],
-    },
-  },
-];
-
-function TrackPresetButtons({ rowHeight }: { rowHeight: number }) {
-  const dispatch = useAppDispatch();
-  const allTracks = useAppSelector(selectAllTracks);
-
-  const handleAdd = (p: PresetTrack) => {
-    dispatch(addTrack({
-      label: p.label,
-      family: p.family,
-      filters: p.filters,
-      paint: { kind: 'flat', color: p.color },
-    }));
-  };
-
-  return (
-    <details className="text-[9px]">
-      <summary
-        className="flex items-center gap-1 px-1.5 w-full text-gray-400 hover:text-emerald-600 hover:bg-emerald-50/50 cursor-pointer list-none transition-colors"
-        style={{ height: rowHeight, lineHeight: `${rowHeight}px` }}
-      >
-        <Plus size={10} />
-        <span>add track (presets)</span>
-        {allTracks.length > 0 && (
-          <span className="ml-auto text-emerald-600">{allTracks.length}</span>
-        )}
-      </summary>
-      <div className="flex flex-col">
-        {TRACK_PRESETS.map(p => (
-          <button
-            key={p.label}
-            onClick={() => handleAdd(p)}
-            className="flex items-center gap-1.5 pl-4 pr-1.5 w-full text-left text-gray-500 hover:bg-gray-100"
-            style={{ height: rowHeight, lineHeight: `${rowHeight}px` }}
-            title={`Add: ${p.label}`}
-          >
-            <span
-              className="inline-block w-2 h-2 rounded-sm flex-shrink-0"
-              style={{ backgroundColor: p.color }}
-            />
-            <span className="truncate">{p.label}</span>
-          </button>
-        ))}
-        {allTracks.length > 0 && (
-          <button
-            onClick={() => dispatch(clearAllTracks())}
-            className="flex items-center gap-1.5 pl-4 pr-1.5 w-full text-left text-gray-400 hover:text-red-500 hover:bg-red-50/50"
-            style={{ height: rowHeight, lineHeight: `${rowHeight}px` }}
-          >
-            <X size={10} />
-            <span>clear all tracks</span>
-          </button>
-        )}
-      </div>
-    </details>
   );
 }
 
@@ -969,6 +877,287 @@ function TrackInfoPopover({
         </span>
         <span className="text-[9px] text-gray-300 font-mono truncate" title={entry.spec.id}>
           {entry.spec.id.slice(0, 14)}…
+        </span>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ChainAuxInfoPopover — describes a chain-scoped aux row (variants / ligand /
+// PTM). Same visual shell as TrackInfoPopover but reads the chain's annotation
+// data + visibility instead of a TrackEntry's FilterSpec.
+// ---------------------------------------------------------------------------
+
+function ChainAuxInfoPopover({
+  desc,
+  chainKey,
+  data,
+  visibility,
+  anchorRect,
+  onClose,
+}: {
+  desc: NonNullable<ReturnType<typeof parseLayerType>>;
+  chainKey: string;
+  data: ChainAnnotationData;
+  visibility: ChainVisibility;
+  anchorRect: DOMRect;
+  onClose: () => void;
+}) {
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onMouseDown = (e: MouseEvent) => {
+      if (!popoverRef.current) return;
+      if (popoverRef.current.contains(e.target as Node)) return;
+      onClose();
+    };
+    const handle = setTimeout(() => {
+      document.addEventListener('mousedown', onMouseDown);
+    }, 0);
+    return () => {
+      clearTimeout(handle);
+      document.removeEventListener('mousedown', onMouseDown);
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  // ── Build the header (title + accent swatch) and body rows per layer kind ──
+
+  let title = '';
+  let accent: React.ReactNode = null;
+  const rows: Array<{ label: string; value: React.ReactNode }> = [];
+  let footerCount: { n: number; unit: string } | null = null;
+
+  const pushChips = (label: string, values: (string | number)[]) => {
+    if (values.length === 0) return;
+    rows.push({
+      label,
+      value: (
+        <span className="flex flex-wrap gap-0.5">
+          {values.map((v, i) => (
+            <span
+              key={`${v}-${i}`}
+              className="px-1 py-px rounded border border-gray-200 bg-gray-50 text-[9px] font-mono"
+            >
+              {String(v)}
+            </span>
+          ))}
+        </span>
+      ),
+    });
+  };
+
+  rows.push({ label: 'Chain', value: <span className="font-mono">{chainKey}</span> });
+  if (data.family) {
+    rows.push({
+      label: 'Family',
+      value: <span className="font-mono">{data.family.replace('tubulin_', '')}</span>,
+    });
+  }
+  if (data.speciesFullName) {
+    rows.push({
+      label: 'Source organism',
+      value: <span className="italic">{data.speciesFullName}{data.taxId != null ? ` (tax ${data.taxId})` : ''}</span>,
+    });
+  }
+
+  if (desc.kind === 'variants') {
+    title = 'Variants';
+    accent = <span className="inline-block w-2.5 h-2.5 rounded-sm bg-orange-400 border border-white/50" />;
+    const structural = data.variants.filter(v => v.source === 'structural');
+    const literature = data.variants.filter(v => v.source === 'morisette');
+    const otherSources = data.variants.filter(v => v.source !== 'structural' && v.source !== 'morisette');
+    const byType: Record<string, number> = {};
+    for (const v of data.variants) byType[v.type] = (byType[v.type] ?? 0) + 1;
+    rows.push({
+      label: 'Type breakdown',
+      value: (
+        <span className="flex flex-wrap gap-0.5">
+          {Object.entries(byType).map(([t, n]) => (
+            <span key={t} className="px-1 py-px rounded border border-gray-200 bg-gray-50 text-[9px] font-mono">
+              {t.slice(0, 3)}:{n}
+            </span>
+          ))}
+        </span>
+      ),
+    });
+    rows.push({
+      label: 'Sources',
+      value: (
+        <span className="flex flex-wrap gap-0.5">
+          <span className="px-1 py-px rounded border border-gray-200 bg-gray-50 text-[9px] font-mono">structural:{structural.length}</span>
+          <span className="px-1 py-px rounded border border-amber-200 bg-amber-50 text-[9px] font-mono">literature:{literature.length}</span>
+          {otherSources.length > 0 && (
+            <span className="px-1 py-px rounded border border-gray-200 bg-gray-50 text-[9px] font-mono">other:{otherSources.length}</span>
+          )}
+        </span>
+      ),
+    });
+    footerCount = { n: data.variants.length, unit: 'variant' };
+  } else if (desc.kind === 'ligand') {
+    const site = data.ligandSites.find(s => s.id === desc.id);
+    title = site ? `${site.ligandId}${site.ligandName && site.ligandName !== site.ligandId ? ' — ' + site.ligandName : ''}` : 'Ligand';
+    accent = <span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-300 border border-white/50" />;
+    if (site) {
+      rows.push({ label: 'Ligand ID', value: <span className="font-mono">{site.ligandId}</span> });
+      if (site.ligandName && site.ligandName !== site.ligandId) {
+        rows.push({ label: 'Name', value: <span>{site.ligandName}</span> });
+      }
+      rows.push({
+        label: 'Ligand chain',
+        value: <span className="font-mono">{site.ligandChain}{site.ligandAuthSeqId != null ? `/${site.ligandAuthSeqId}` : ''}</span>,
+      });
+      if (site.drugbankId) {
+        rows.push({
+          label: 'DrugBank',
+          value: (
+            <a
+              href={`https://go.drugbank.com/drugs/${site.drugbankId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-blue-600 hover:text-blue-800 underline"
+            >
+              {site.drugbankId}
+            </a>
+          ),
+        });
+      }
+      pushChips('Contact residues', site.authSeqIds);
+      footerCount = { n: site.residueCount, unit: 'contact residue' };
+    }
+  } else if (desc.kind === 'ptm') {
+    const modType = desc.id ?? '';
+    title = modType ? modType.charAt(0).toUpperCase() + modType.slice(1) : 'Modification';
+    accent = <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-400 border border-white/50" />;
+
+    const includedSet = new Set(visibility.includedSpeciesTaxIds ?? []);
+    const allOfType = data.modifications.filter(m => m.modificationType === modType);
+    const inSelection = allOfType.filter(m => m.taxId != null && includedSet.has(m.taxId));
+
+    // Build taxId -> { name, count } map across ALL records of this modType
+    // (not just the selection) so the user sees what's available vs. what's on.
+    const taxBuckets = new Map<number, { name: string | null; total: number; selected: number }>();
+    for (const m of allOfType) {
+      if (m.taxId == null) continue;
+      const bucket = taxBuckets.get(m.taxId) ?? { name: m.speciesFullName ?? m.species ?? null, total: 0, selected: 0 };
+      bucket.total += 1;
+      if (includedSet.has(m.taxId)) bucket.selected += 1;
+      taxBuckets.set(m.taxId, bucket);
+    }
+    const orderedTaxa = Array.from(taxBuckets.entries()).sort((a, b) => b[1].total - a[1].total);
+
+    rows.push({
+      label: 'Species',
+      value: (
+        <span className="flex flex-col gap-0.5">
+          {orderedTaxa.map(([taxId, b]) => {
+            const active = b.selected > 0;
+            return (
+              <span
+                key={taxId}
+                className={`inline-flex items-center gap-1 px-1 py-px rounded text-[9px] ${active ? 'border border-blue-200 bg-blue-50 text-gray-700' : 'border border-gray-200 bg-gray-50/50 text-gray-400'}`}
+                title={`tax ${taxId} — ${active ? 'included' : 'not in current selection'}`}
+              >
+                <span className={`w-1 h-1 rounded-full ${active ? 'bg-blue-500' : 'bg-gray-300'}`} />
+                <span className="italic flex-1">{b.name ?? `tax ${taxId}`}</span>
+                <span className="font-mono">{active ? b.selected : b.total}</span>
+              </span>
+            );
+          })}
+          {orderedTaxa.length === 0 && <span className="text-gray-400 italic">none</span>}
+        </span>
+      ),
+    });
+
+    // Top phenotypes across the current selection — concise read on what these
+    // records are actually annotating.
+    const phenoCounts: Record<string, number> = {};
+    for (const m of inSelection) {
+      if (!m.phenotype) continue;
+      phenoCounts[m.phenotype] = (phenoCounts[m.phenotype] ?? 0) + 1;
+    }
+    const topPhenotypes = Object.entries(phenoCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    if (topPhenotypes.length > 0) {
+      rows.push({
+        label: 'Top phenotypes',
+        value: (
+          <span className="flex flex-col gap-0.5">
+            {topPhenotypes.map(([p, n]) => (
+              <span key={p} className="flex items-center gap-1 text-[9px]">
+                <span className="text-gray-400 font-mono w-5 text-right">×{n}</span>
+                <span className="text-gray-700 truncate" title={p}>{p}</span>
+              </span>
+            ))}
+          </span>
+        ),
+      });
+    }
+
+    footerCount = { n: inSelection.length, unit: 'record' };
+  }
+
+  // Position popover — same logic as TrackInfoPopover.
+  const POPOVER_WIDTH = 320;
+  const margin = 8;
+  const wouldOverflow = anchorRect.right + margin + POPOVER_WIDTH > window.innerWidth;
+  const left = wouldOverflow
+    ? Math.max(margin, anchorRect.left - POPOVER_WIDTH - margin)
+    : anchorRect.right + margin;
+  const top = Math.min(
+    Math.max(margin, anchorRect.top),
+    window.innerHeight - 400,
+  );
+
+  return createPortal(
+    <div
+      ref={popoverRef}
+      className="fixed z-50 bg-white border border-gray-200 rounded-md shadow-lg text-[10px] text-gray-700"
+      style={{ top, left, width: POPOVER_WIDTH, maxHeight: 'min(400px, calc(100vh - 48px))' }}
+    >
+      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-gray-100">
+        <div className="flex items-center gap-1.5 min-w-0">
+          {accent}
+          <span className="font-semibold text-gray-800 truncate" title={title}>{title}</span>
+        </div>
+        <button
+          onClick={onClose}
+          className="flex-shrink-0 p-0.5 text-gray-400 hover:text-gray-700"
+          title="Close"
+        >
+          <X size={10} />
+        </button>
+      </div>
+
+      <div className="px-2.5 py-1.5 overflow-y-auto" style={{ maxHeight: 320 }}>
+        <table className="w-full">
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="align-top">
+                <td className="text-[9px] uppercase tracking-wider text-gray-400 pr-2 py-0.5 whitespace-nowrap">
+                  {r.label}
+                </td>
+                <td className="py-0.5">{r.value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex items-center justify-between px-2.5 py-1.5 border-t border-gray-100 bg-gray-50/50">
+        <span className="text-[9px] text-gray-500">
+          {footerCount
+            ? <><span className="font-semibold text-gray-700">{footerCount.n}</span> {footerCount.unit}{footerCount.n === 1 ? '' : 's'}</>
+            : ''}
+        </span>
+        <span className="text-[9px] text-gray-300 font-mono truncate" title={`${desc.kind}:${desc.id ?? ''}`}>
+          {desc.kind}{desc.id ? `:${desc.id}` : ''}
         </span>
       </div>
     </div>,

@@ -54,6 +54,15 @@ interface SelectedResidue {
   authSeqId: number;
 }
 
+/** Lightweight residue summary used to drive the always-on display chip in
+ *  the header. The chip prefers hovered → selected → empty placeholder. */
+interface HoveredResidue {
+  residueLetter: string;
+  chainLabel: string;
+  authSeqId: number;
+  masterIdx: number; // 1-based
+}
+
 /** Info emitted from MSA right-click. Page uses this to construct a ResiduePopupTarget. */
 export interface MSAContextMenuEvent {
   residueLetter: string;
@@ -625,6 +634,68 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
     const displaySequencesRef = useRef(displaySequences);
     displaySequencesRef.current = displaySequences;
 
+    // ── Transient hovered-residue (drives the header chip). Sources: MSA hover
+    //    on a structural row, or Molstar 3D hover. When null, the chip falls
+    //    back to selectedResidue (or a placeholder).
+    const [hoveredResidue, setHoveredResidue] = useState<HoveredResidue | null>(null);
+
+    // Reverse mapping (auth_seq_id -> master_index) per chainKey, computed from
+    // the Redux position mappings. Used to translate Molstar 3D hovers into MSA
+    // columns for the header display.
+    const reverseMappings = useMemo(() => {
+      const out: Record<string, Record<number, number>> = {};
+      for (const [ck, mapping] of Object.entries(allPositionMappings)) {
+        if (!mapping) continue;
+        const reverse: Record<number, number> = {};
+        for (const [masterStr, authSeqId] of Object.entries(mapping)) {
+          if (authSeqId != null) reverse[authSeqId as number] = parseInt(masterStr, 10);
+        }
+        out[ck] = reverse;
+      }
+      return out;
+    }, [allPositionMappings]);
+
+    const displaySequencesForHoverRef = useRef(displaySequences);
+    displaySequencesForHoverRef.current = displaySequences;
+    const reverseMappingsRef = useRef(reverseMappings);
+    reverseMappingsRef.current = reverseMappings;
+
+    // ── Molstar 3D hover -> hoveredResidue. Mirrors the MSA-side hover path
+    //    so the header chip works regardless of which surface the user is
+    //    pointing at. ──
+    useEffect(() => {
+      const viewer = instance?.viewer;
+      if (!viewer) return;
+      const unsub = viewer.subscribeToHover(info => {
+        if (!info) { setHoveredResidue(null); return; }
+        // Find a displayed structural sequence whose chainRef matches the
+        // hovered auth_asym_id. Iterate so this works for primary + aligned.
+        const seqs = displaySequencesForHoverRef.current;
+        let match: MsaSequence | undefined;
+        let chainKey: string | null = null;
+        for (const s of seqs) {
+          if (s.originType !== 'pdb' || !s.chainRef) continue;
+          if (s.chainRef.chainId !== info.chainId) continue;
+          match = s;
+          chainKey = makeChainKey(s.chainRef.pdbId, s.chainRef.chainId);
+          break;
+        }
+        if (!match || !chainKey || !match.chainRef) { setHoveredResidue(null); return; }
+
+        const reverse = reverseMappingsRef.current[chainKey];
+        const masterIdx = reverse?.[info.authSeqId];
+        if (masterIdx == null) { setHoveredResidue(null); return; }
+
+        setHoveredResidue({
+          residueLetter: match.sequence[masterIdx - 1] ?? '?',
+          chainLabel: `${match.chainRef.pdbId}:${match.chainRef.chainId}`,
+          authSeqId: info.authSeqId,
+          masterIdx,
+        });
+      });
+      return unsub;
+    }, [instance]);
+
     // Track last hovered residue for context menu (both structural and non-structural)
     const lastHoveredResidueRef = useRef<Omit<MSAContextMenuEvent, 'screenX' | 'screenY'> | null>(null);
 
@@ -680,6 +751,13 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
                   pdbId: seq.chainRef.pdbId,
                 },
               };
+              // Drive the header chip too.
+              setHoveredResidue({
+                residueLetter: seq.sequence[position] ?? '?',
+                chainLabel: `${seq.chainRef.pdbId}:${seq.chainRef.chainId}`,
+                authSeqId: authSeq,
+                masterIdx: position + 1,
+              });
             }
           }
         } else if (seq) {
@@ -704,6 +782,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
         msaRef.current?.clearHighlight();
         dispatch(setHoveredChain(null));
         lastHoveredResidueRef.current = null;
+        setHoveredResidue(null);
         onResidueLeave?.();
       },
       [onResidueLeave, dispatch]
@@ -849,14 +928,21 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
     if (!nglLoaded || !family || maxLength === 0 || !isAligned) {
       return (
         <div className="h-full flex flex-col bg-white overflow-hidden">
-          {/* Header with dropdown even while loading */}
-          <ChainDropdownHeader
-            chainId={chainId}
-            chainOptions={chainOptions}
-            onChainChange={onChainChange}
-            onClose={onClose}
-            flash={flash}
-          />
+          <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 border-b border-gray-100 bg-gray-50/40">
+            <ResidueDisplayChip
+              hovered={null}
+              selected={null}
+              onClear={() => {}}
+            />
+            <div className="flex-1" />
+            <button
+              onClick={onClose}
+              className="p-0.5 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+              title="Close sequence panel"
+            >
+              <X size={14} />
+            </button>
+          </div>
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2" />
@@ -871,29 +957,17 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
 
     return (
       <div className="h-full flex flex-col bg-white overflow-hidden">
-        {/* Header: chain dropdown + toolbar */}
+        {/* Header: residue display (left) + tools (right) + close ── */}
         <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 border-b border-gray-100 bg-gray-50/40">
-          <ChainDropdownHeader
-            chainId={chainId}
-            chainOptions={chainOptions}
-            onChainChange={onChainChange}
-            onClose={onClose}
-            flash={flash}
-            inline
+          <ResidueDisplayChip
+            hovered={hoveredResidue}
+            selected={selectedResidue}
+            onClear={() => {
+              setSelectedResidue(null);
+              msaRef.current?.clearSelectionHighlight();
+              instance?.viewer.clearSelection();
+            }}
           />
-          {selectedResidue && (
-            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-50 border border-green-200 rounded text-[10px] flex-shrink-0">
-              <span className="font-mono font-bold text-green-800">{selectedResidue.residueLetter}</span>
-              <span className="text-green-700">{selectedResidue.chainLabel}</span>
-              <span className="text-green-500">#{selectedResidue.authSeqId}</span>
-              <button
-                onClick={() => { setSelectedResidue(null); msaRef.current?.clearSelectionHighlight(); instance?.viewer.clearSelection(); }}
-                className="text-green-400 hover:text-green-600"
-              >
-                <X size={10} />
-              </button>
-            </div>
-          )}
           <div className="flex-1 min-w-0 overflow-x-auto">
             <MSAToolbar
               currentScheme={colorScheme}
@@ -902,13 +976,17 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
               onJumpToRange={handleJumpToRange}
               onReset={handleReset}
               compact
-              showMasters={showMasters}
-              masterCount={masterSequences.length}
-              onShowMastersChange={setShowMasters}
               inRangeOnly={inRangeOnly}
               onInRangeOnlyChange={handleInRangeToggle}
             />
           </div>
+          <button
+            onClick={onClose}
+            className="p-0.5 text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+            title="Close sequence panel"
+          >
+            <X size={14} />
+          </button>
         </div>
 
         {/* MSA content */}
@@ -934,12 +1012,76 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
             primaryPdbId={pdbId}
             primaryChainId={chainId}
             onRemoveAlignedChain={handleRemoveAlignedChain}
+            showMasters={showMasters}
+            masterCount={masterSequences.length}
+            onShowMastersChange={setShowMasters}
           />
         </div>
       </div>
     );
   }
 );
+
+// ────────────────────────────────────────────
+// Residue Display Chip
+// ────────────────────────────────────────────
+
+/** Reserves a slot in the MSA header that always shows a residue. Sources:
+ *  hover (Molstar 3D or MSA) takes priority; if no hover, shows the selected
+ *  residue with a green outline; if neither, renders a placeholder. */
+function ResidueDisplayChip({
+  hovered,
+  selected,
+  onClear,
+}: {
+  hovered: HoveredResidue | null;
+  selected: SelectedResidue | null;
+  onClear: () => void;
+}) {
+  // Hover wins; otherwise fall back to selection; otherwise placeholder.
+  const showSelected = !hovered && !!selected;
+  const display: { residueLetter: string; chainLabel: string; authSeqId: number } | null =
+    hovered ?? (selected
+      ? {
+          residueLetter: selected.residueLetter,
+          chainLabel: selected.chainLabel,
+          authSeqId: selected.authSeqId,
+        }
+      : null);
+
+  if (!display) {
+    return (
+      <div className="flex items-center gap-1 px-2 py-0.5 border border-dashed border-slate-200 rounded text-[10px] text-slate-400 flex-shrink-0 min-w-[10rem]">
+        <span className="italic">hover or click a residue</span>
+      </div>
+    );
+  }
+
+  const baseClasses =
+    'flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] flex-shrink-0 min-w-[10rem]';
+  const tone = showSelected
+    ? 'bg-green-50 border border-green-200 text-green-700'
+    : 'bg-slate-50 border border-slate-200 text-slate-600';
+  const letterTone = showSelected ? 'text-green-800' : 'text-slate-800';
+  const numTone = showSelected ? 'text-green-500' : 'text-slate-400';
+
+  return (
+    <div className={`${baseClasses} ${tone}`}>
+      <span className={`font-mono font-bold ${letterTone}`}>{display.residueLetter}</span>
+      <span>{display.chainLabel}</span>
+      <span className={numTone}>#{display.authSeqId}</span>
+      {showSelected && (
+        <button
+          onClick={onClear}
+          className="ml-auto text-green-400 hover:text-green-600"
+          title="Clear selection"
+        >
+          <X size={10} />
+        </button>
+      )}
+    </div>
+  );
+}
 
 // ────────────────────────────────────────────
 // Chain Dropdown Header
