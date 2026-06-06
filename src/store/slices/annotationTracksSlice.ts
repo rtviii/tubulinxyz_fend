@@ -30,7 +30,9 @@ export interface VariantFilterSpec {
   sources?: ('structural' | 'literature')[];
   uniprot_ids?: string[];
   species_names?: string[];
+  species_tax_ids?: number[];
   position_range?: [number, number];
+  positions?: number[];
   co_occurs_with_mod_type?: string[];
   phenotype_contains?: string[];
 }
@@ -43,6 +45,7 @@ export interface ModificationFilterSpec {
   species_tax_ids?: number[];
   species_names?: string[];
   position_range?: [number, number];
+  positions?: number[];
   co_occurs_with_variant?: boolean;
   evidence_source?: string[];
   phenotype_contains?: string[];
@@ -53,6 +56,7 @@ export interface BindingContactFilterSpec {
   family: Family;
   chemical_ids: string[];
   structure_ids?: string[];
+  positions?: number[];
 }
 
 export type FilterSpec =
@@ -78,6 +82,7 @@ export interface AnnotationTrack {
   family: Family;
   filters: FilterSpec;
   paint: PaintSpec;
+  source: 'user' | 'ai';
 }
 
 export interface ResolvedPosition {
@@ -148,7 +153,8 @@ export const annotationTracksSlice = createSlice({
   initialState,
   reducers: {
     /** Add a new track. Idempotent on (family, filters, paint) — same inputs
-     *  update the existing track's label rather than creating a duplicate. */
+     *  update the existing track's label rather than creating a duplicate.
+     *  source defaults to 'user'; LLM-dispatched tracks pass 'ai'. */
     addTrack: (
       state,
       action: PayloadAction<{
@@ -156,16 +162,20 @@ export const annotationTracksSlice = createSlice({
         family: Family;
         filters: FilterSpec;
         paint: PaintSpec;
+        source?: 'user' | 'ai';
       }>,
     ) => {
-      const { label, family, filters, paint } = action.payload;
+      const { label, family, filters, paint, source = 'user' } = action.payload;
       const id = trackIdFor(family, filters, paint);
       if (state.tracks[id]) {
         state.tracks[id].spec.label = label;
+        // Upgrade an existing user track to 'ai' provenance if re-dispatched
+        // by AI (rare race); never downgrade ai->user without explicit intent.
+        if (source === 'ai') state.tracks[id].spec.source = 'ai';
         return;
       }
       state.tracks[id] = {
-        spec: { id, label, family, filters, paint },
+        spec: { id, label, family, filters, paint, source },
         resolved: null,
         isLoading: false,
         error: null,

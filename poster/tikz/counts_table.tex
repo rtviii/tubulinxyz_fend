@@ -1,21 +1,19 @@
-% Database counts table. Embedded inside a \block in poster.tex.
-% Light-touch hairline table matching the UI aesthetic.
+% Database key stats. Three large numerals + short labels, replacing
+% the previous 8-row counts table. The catalogue thumbnail below
+% carries the visual weight; this strip is the numeric anchor.
 {\setlength{\tabcolsep}{4pt}%
-\renewcommand{\arraystretch}{1.20}%
-\arrayrulecolor{tubHairline}%
-\begin{tabularx}{\linewidth}{@{}l X r@{}}
-  \toprule
-  {\color{tubMuted}\fontsize{9}{11}\selectfont\bfseries LAYER} &
-  {\color{tubMuted}\fontsize{9}{11}\selectfont\bfseries SOURCE} &
-  {\color{tubMuted}\fontsize{9}{11}\selectfont\bfseries COUNT} \\
-  \midrule
-  Structures            & RCSB PDB (IPR000217)             & $\sim$1000      \\
-  Tubulin families      & HMM ($\alpha,\beta,\gamma,\delta,\varepsilon$) & 5 \\
-  MAP / enzyme families & HMM (kinesins, EBs, TTLLs, $\ldots$) & 39          \\
-  $\alpha/\beta$ isotypes & UniProt (TUBA1A--TUBB8)        & 16              \\
-  Lit.\ mutations       & \tubulindb (Abbaali 2023)        & $\sim$5{,}200   \\
-  Lit.\ modifications   & \tubulindb + Janke 2020          & $\sim$1{,}950   \\
-  Binding sites         & Mol* $\to$ master coords         & varies          \\
-  Taxonomy              & NCBI / ete3 lineages             & hundreds        \\
-  \bottomrule
+\renewcommand{\arraystretch}{0.95}%
+\begin{tabularx}{\linewidth}{
+    @{}
+    >{\centering\arraybackslash}X
+    >{\centering\arraybackslash}X
+    >{\centering\arraybackslash}X
+    @{}
+  }
+  {\fontsize{34}{38}\selectfont\headingfont\color{tubInk}$\sim$1000} &
+  {\fontsize{34}{38}\selectfont\headingfont\color{tubInk}39} &
+  {\fontsize{34}{38}\selectfont\headingfont\color{tubInk}$\sim$7{,}150} \\[2pt]
+  {\condensedfont\fontsize{9}{11}\selectfont\color{tubMuted}STRUCTURES} &
+  {\condensedfont\fontsize{9}{11}\selectfont\color{tubMuted}MAP / MOD FAMILIES} &
+  {\condensedfont\fontsize{9}{11}\selectfont\color{tubMuted}LIT. ANNOTATIONS} \\
 \end{tabularx}}

@@ -551,4 +551,263 @@ Key directives:
 
 ---
 
+## 15. Session-end feedback (next session: apply these)
+
+User screenshot review of the current draft surfaced the following.
+Apply in this order; do NOT reopen completed decisions (showcases,
+abstract, paper size) unless something explicitly contradicts them.
+
+### 15.1 Ligand showcase: drop the MSA strip, use the new figure full-bleed
+
+User has produced a polished figure for the ligand showcase
+(approximately one-and-a-half-figure worth of content). The decision is:
+**drop the small MSA strip** from the ligand side panel. Let the new
+figure occupy the entire ligand-showcase block.
+
+- In `poster.tex`, the ligand block currently has two `\fbox{\parbox{...}}`
+  placeholders (`ligand_3d.png` + `ligand_msa.png`). Collapse into a
+  single `\includegraphics` consuming the whole panel.
+- Update `figures/README.md` accordingly — `ligand_msa.png` is now
+  unused; keep the recipe in case it's reinstated.
+- Recheck vertical layout: dropping one placeholder gives the ligand
+  block more breathing room, possibly enough to tighten the row.
+- PTM showcase still uses the 3D + MSA pattern.
+
+### 15.2 Abstract block typography is broken on screen
+
+The motivation/abstract block in the current rendered PDF reads as
+visibly cramped — the body text inside it is too small, lines run too
+long, and it competes for attention with the larger title font of the
+Database block. Likely causes:
+
+- The custom `tubeBlock` style probably sets a body font size that
+  doesn't scale for a text-heavy block.
+- The block is wider than its readable line-length comfort zone.
+- Internal `\medskip` between paragraphs may be eaten by tight leading.
+
+Fix path:
+
+1. Bump the motivation body text to the same size as the database
+   counts table cells (or slightly larger). Currently it looks
+   smaller than the counts table, which is the wrong hierarchy ---
+   motivation is body prose, counts is reference data.
+2. Increase `\baselineskip` inside the motivation block specifically
+   (custom `\linespread` scope, or a `\renewcommand` per block).
+3. Drop a `\paragraph{}` / explicit `\par\vspace{...}` between the
+   three paragraphs of the abstract so they read as distinct.
+4. Keep Helvetica Neue (already set globally). Don't change the global
+   typography choice.
+
+### 15.3 New showcase captions: scientific, not chatbot-centric
+
+The current "What the chatbot does." / "Why this matters." caption
+pattern under each showcase reads as too tool-focused. The chatbot is
+ONE of the navigation primitives, not the headline. Captions should
+describe the **scientific scenario** the figure is making visible.
+
+Rewrite captions to a more academic blurb structure: one sentence on
+what the figure shows; one sentence on the biological / clinical
+significance; no mention of "the chatbot" except in passing.
+
+Suggested replacement caption seeds (refine in next session):
+
+- **Central (TUBB3 disease map)**: "Five disease-linked TUBB3
+  mutations (clinical phenotypes: CFEOM and MCD; biochemical: kinesin
+  impairment) sit at residues conserved across all nine human
+  β-isotypes. Their pathogenicity reflects positions the protein
+  cannot afford to vary; lifted onto the family master alignment,
+  the same coordinate exposes structural and literature variant
+  layers simultaneously."
+- **Ligand (taxane)**: "The taxane-stabilising drug paclitaxel
+  contacts the M-loop (S7–H9) of β-tubulin. Projecting binding
+  contacts onto the master alignment exposes the contact residues
+  across every human β-isotype simultaneously, revealing positions
+  where isotype-specific substitutions may underlie differential
+  drug response."
+- **PTM (phospho-β)**: "Annotated phosphorylation sites on TUBB3
+  include the regulatory residue β-S172, a CDK1 substrate whose
+  modification modulates GTP affinity. Mapping all phosphorylation
+  annotations onto the master alignment exposes which residues are
+  uniformly phosphorylatable across isotypes and which are
+  isotype-specific."
+
+Crucially: each caption should sit comfortably in 2–4 lines of body
+text, not the dense column of the current draft. Move chatbot
+descriptions to an optional "How it was produced" margin note OR
+delete entirely — the architecture-strip already tells the reader
+the chatbot exists.
+
+### 15.4 Add subtle geometric separation between regions
+
+The current poster reads as one continuous white field. Sections
+need visual grouping without resorting to coloured headers. Approach:
+
+- A 0.4pt hairline at the top of each block (the existing
+  `tubeBlock` already has one under the title; add one above too,
+  selectively).
+- OR: a very subtle background tint (~2% gray) for alternating
+  rows: title row white, top row light gray, central showcase
+  white, side row light gray, footer white. Keep the difference
+  barely perceptible.
+- OR: thin vertical dividers between left/right columns in the same
+  row (e.g. between Motivation and Database overview).
+- Use whatever's most consistent with the existing card-aesthetic
+  `tubeBlock` style.
+
+Pick one approach; don't combine multiple. The card style of
+showcases is already doing some of this work — the goal is just to
+group the supporting blocks cleanly.
+
+### 15.5 Remove GitHub QR; add affiliation logos
+
+- Delete the GitHub QR code from the footer (keep only the tube.xyz
+  one).
+- Add an affiliation-logos strip beside the footer-left or under the
+  references block. Logos already in `public/landing/`:
+  - `Logo_Curie.png` (Janke — Institut Curie)
+  - `PSI-Logo.png` (Steinmetz — Paul Scherrer Institut)
+  - `birkbeck_log.png` (Birkbeck)
+- Plus the "data sources" / dependency logos in the same folder
+  could be cited (separate placement, e.g. inline with the
+  architecture diagram):
+  - `pdb_logo.png`, `uniprot.png`, `logo_neo4j.png`,
+    `logo_molstar.png`, `logo_hmmer.png`, `logo_chimerax.svg`
+- LaTeX-side: `\includegraphics[height=2cm]{...}` with the full
+  paths into `../public/landing/...` from the poster directory,
+  OR copy the relevant logos into `poster/figures/` to keep the
+  build self-contained on Overleaf.
+
+Strong recommendation: **copy the needed logos into
+`poster/figures/`** so the Overleaf upload doesn't need a
+relative path outside the project root.
+
+### 15.6 Architecture diagram: needs to look professional, even if minimal
+
+The current `tikz/architecture_diagram.tex` is decent but the
+rendered output (SOURCES / PROCESS / STORE / SERVE strip) feels a
+bit "engineering diagram on a whiteboard" — uniform card width,
+abrupt arrows, dense text in the cards.
+
+Refinement direction (not a full rebuild):
+
+- Make the four group containers consistent width (currently SOURCES
+  / PROCESS are 4 cm, STORE is 3.4 cm, SERVE is 5.2 cm — equalise to
+  ~4.5 cm each).
+- Reduce text inside the cards by half — let the card label be the
+  primary signal; demote sub-labels (the muted-grey small text) to a
+  single phrase per card.
+- Add a soft drop shadow on the Neo4j and Chatbot accent cards (the
+  ones currently in `tubAccent`/`tubAccentSoft`). That visually
+  promotes them as the "interesting" boxes without breaking the
+  monochrome restraint.
+- Make the flow arrows curved (`bend left=8`) rather than
+  straight — adds movement.
+- Keep the lane-header labels (SOURCES / PROCESS / STORE / SERVE)
+  but bump them slightly larger and weight them a little heavier
+  so they're more "section labels" than tiny annotations.
+
+This is a polish pass, not a rebuild. The existing geometry works.
+
+### 15.7 Data overview that shares the catalogue figure
+
+The "Database overview" block currently has the counts table + a
+catalogue thumbnail placeholder. Idea raised at session end: the
+catalogue figure (with filter sidebar visible) is itself a strong
+data-overview signal — it shows scale, faceting, and the actual
+content side by side. Plan:
+
+- Render `figures/catalogue.png` so the **left sidebar is the focal
+  point**: isotype/family/organism/ligand/year/resolution filters
+  visible with population counts ("cryo-EM 412 · X-ray 403", "TUBB3
+  32 · TUBB2A 614", etc.). Those numeric badges in the filter
+  sidebar carry the same information as the counts table, but
+  visually.
+- Reduce the explicit counts table to just **the bottom-line
+  numbers**: total structures, MAP / mod-enzyme families, total
+  literature annotations. 3 large numbers, not a 9-row table.
+- Above or beside the catalogue thumbnail, those 3 big numbers
+  become a small "key stats" line.
+- Caption under the catalogue figure: "~1000 indexed structures
+  faceted by isotype, organism, ligand, year, resolution and variant
+  annotations."
+
+The combined effect: the Database block becomes lighter, the
+catalogue figure carries more weight, and the redundancy between
+counts table and catalogue is collapsed. This is a Phase 2 task
+once the catalogue screenshot exists.
+
+### 15.8 Apply order (suggested for next session)
+
+1. **Apply 15.5 first** — copy logos into `poster/figures/`,
+   remove GitHub QR code, add the affiliations strip. Low-risk,
+   touches only the footer.
+2. **Apply 15.4 next** — pick one separation approach and apply
+   uniformly. Mostly a `\useblockstyle` / `\settheme` tweak.
+3. **Apply 15.1** — restructure ligand showcase block to single
+   full-bleed figure.
+4. **Apply 15.2** — abstract typography fix. Verify by recompiling
+   and reading at 100% on screen.
+5. **Apply 15.3** — rewrite the three showcase captions. Pure text
+   edits.
+6. **Apply 15.6** — architecture diagram polish.
+7. **Apply 15.7** — Database overview restructure (depends on
+   catalogue screenshot existing).
+8. **Re-render images** — central 3D + MSA, ligand single figure,
+   PTM 3D + MSA, catalogue.
+9. **Rebuild `tubexyz_poster.zip`** and verify clean compile in a
+   fresh directory.
+
+---
+
+## 16. Iteration history (briefly, for future-you)
+
+For context on why the current state looks the way it does:
+
+1. **Started at A2 portrait, 25pt**. Layout overflowed massively —
+   tikzposter silently clips content past the page bottom.
+   Diagnosis took ~6 rebuilds. Lesson: always check via `pdftotext`
+   or high-DPI render that the footer is actually present.
+2. **Went through 25pt → 17pt → 15pt → 14pt** at A2 trying to fit;
+   eventually committed to A1 portrait at 15pt which had headroom.
+3. **TikZ overlay-callout pattern** for annotated screenshots: the
+   `\\` inside a TikZ node needs explicit `align=left, text width=Xcm`
+   or the line break is silently dropped and 150+pt of horizontal
+   overflow cascades through the page layout. This was the single
+   most expensive gotcha.
+4. **GTP showcase → TUBB3 disease showcase**. Initial pitch was the
+   GTP cross-species comparison (6S8L:A vs 9Y9Z:1A). Switched to
+   TUBB3 disease map on Carsten's email suggestion. The disease
+   mutations integrate the literature + structural layers more
+   strongly and are clinically resonant for the Janke/Steinmetz
+   audience.
+5. **Three small "Other queries the chatbot handles" tiles → two
+   side showcases**. The chatbot tile-list compressed to a tabular
+   one-liner at one point (to fit at A2), then in the A1 redesign was
+   replaced entirely by two science-first side showcases (ligand +
+   PTM) sharing the same MSA-aux-row + 3D-sync mechanism as the
+   central. This shift was triggered by the user adding (a) variants
+   aux-row creation controls and (b) ligand-binding-site controls,
+   making all three showcases reproducible via the same UX paradigm.
+6. **R262 residue-chip card dropped**. Originally a TikZ-drawn vector
+   card alongside the central 3D. User decided to capture the chip
+   inside the actual expert-mode screenshot instead — one less
+   render-of-render in the build.
+7. **Typography**: default Latin Modern → Helvetica Neue via
+   `fontspec`, to match the web UI. Custom `tubeBlock` style
+   (white body, no frame, hairline under title) replaces the default
+   tikzposter coloured title bars.
+8. **Architecture diagram**: initially full 3-lane diagram, then cut
+   entirely (Carsten "don't overcharge"), now restored as a compact
+   layered grouped-card diagram (SOURCES / PROCESS / STORE / SERVE)
+   in the bottom row next to the references block.
+9. **References**: full 13-ref list → 3 essentials → 4 (Tischfield
+   2010 added to back the TUBB3 disease showcase).
+10. **The "Morisette" misspelling**: backend codebase names the
+    TubulinDB import "Morisette" but the senior author is Morrissette
+    (UCI, Abbaali 2023 PLoS ONE first author). Separate background
+    task spawned to rename across the codebase. Does not affect the
+    poster itself — only citation discipline.
+
+---
+
 End of report.

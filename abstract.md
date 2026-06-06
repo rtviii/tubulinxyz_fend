@@ -1,7 +1,12 @@
-# tube.xyz: an interactive structural atlas of the tubulin code
+Title1: tube.xyz: an interactive structural atlas of tubulin features
 
-**Authors** — A. Kushner, M. Igaev, C. Janke, M. O. Steinmetz *(final author list TBC)*
-**Affiliations** — *(TBC)*
+Title2: tube.xyz: an interactive structural atlas of tubulin
+Subtitle2: ligands, isotypes, mutations and modifications in one residue frame
+
+Title3:  Structure and sequence on a shared residue framei
+Subtitle3: cross-linking ligands, isotypes, mutations and modifications
+
+Author list: Artem Kushner, Carsten Janke, Michel O. Steinmetz, Maxim Igaev
 
 ---
 The *tubulin code* — combinations of α/β isotypes and a wide variety of
@@ -14,38 +19,6 @@ layers, however, are documented in separate schemas, belong to different resourc
 
 We present **tube.xyz**, an interactive structural atlas that places
 every recorded tubulin residue from every deposited structure into a single
-"coordinate system" per family (α, β, γ, δ, ε): sequence variants, ligand-binding contacts, literature mutations and PTMs are programmatically lifted onto the common residue index. The coordinate substrate is deliberately pluggable: new annotation sources — clinical variant catalogues, fragment screens, new structures -- can be added to the atlas on a rolling basis via a simple mapping between theirs and the substrate-supplied common residue index.
+coordinate system per family (α, β, γ, δ, ε): sequence variants, ligand contacts, literature mutations and PTMs are programmatically lifted onto the common residue index. The coordinate substrate is deliberately pluggable: new annotation sources — clinical variant catalogues, fragment screens, new structures -- will be added to the atlas in perpetuity via a simple mapping between the external and the substrate-supplied common residue index.
 
-A 2D MSA bidirectionally coupled to a Mol*-based 3D viewer, together with an LLM-driven chatbot that translates plain-language questions about binding sites, cross-species residue comparison, disease-linked mutations and post-translational modifications into navigation actions on the integrated data, facilitate the navigation and export of these layers. It's our hope that this database and its integrative facilities can provide connective tissue between the structural data and the wealth of literature annotations, while the web interface lets both experts and students navigate the data.
-
-
----
-
-*Word count: 251 (within 250–300 target).*
-*Candidate alternative titles in `poster/poster_spec.md`.*
-
-## Notes on framing
-
-This draft has been updated after the second pass over the literature
-workspace (`/Users/rtviii/paper-workspaces/tubulin/papers/`):
-
-- **TubulinDB (Abbaali *et al.* 2023, PLoS ONE 18(12): e0295279)** is the
-  source of the ~5,200 mutation and ~1,950 modification entries we
-  ingest. Their work is the canonical curated annotation layer; the
-  abstract now positions tube.xyz as the interactive structure-first
-  substrate that sits *on top of* their data plus the full ~800-structure
-  PDB corpus, rather than as a competing database. Important note:
-  internally the codebase calls these CSVs "Morisette" (misspelling of
-  the senior author **Morrissette**, UCI); see the spawned task to
-  rename and re-cite throughout the codebase.
-- **Janke & Magiera (2020) *Nat. Rev. Mol. Cell Biol.* 21, 307–326** is
-  the canonical tubulin-code reference. The opening sentence adopts
-  their framing of isotypes + PTMs modulating microtubule composition.
-- **Steinmetz & Prota (2018) *Trends Cell Biol.* 28(10)** is the
-  canonical MTA-binding-sites review (taxane, colchicine, vinca,
-  laulimalide/peloruside, maytansine, pironetin). The Mühlethaler 2021
-  fragment-screen paper extends this with 18 additional novel sites.
-- **Findeisen *et al.* (2014) *Genome Biol. Evol.* 6(9): 2274–2288**
-  identifies six tubulin subfamilies (α, β, γ, δ, ε, ζ); ζ has no
-  experimentally determined structures yet — our atlas covers the five
-  represented (α–ε).
+A 2D MSA bidirectionally coupled to a Mol*-based 3D viewer, together with an LLM-driven chatbot that translates plain-language questions about binding sites, cross-species residue comparison, disease-linked mutations and post-translational modifications into navigation actions on the integrated data, facilitate the navigation and export of these layers. The database and its integrative facilities can provide a unifying annotation and access layer between the structural data and the wealth of literature annotations, while the web interface lets both experts and students navigate the data.

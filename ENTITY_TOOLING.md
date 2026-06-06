@@ -413,6 +413,19 @@ the last clicked card and formats lines via `summarizeCardLines`.
   primary but ignores its `mode`/`chain`/`align`/`range`. Open. See
   `PLAN_llm_entity_tooling.md` § ROADMAP.
 
+- **Landing → viewer chained intent.** Queries typed into the landing-page chat
+  hit `/nl_query/global` and emit `ActionCard`s — they cannot ALSO carry viewer
+  actions (`AddAnnotationTrack`, `FocusBindingSite`, etc.) that should fire
+  AFTER the user lands on the structure page. Result: "show GTP binding site in
+  human alpha tubulin" from the landing chat opens the right structure in
+  expert mode but does NOT focus the binding site or add a track. Same query
+  works end-to-end from the expert-mode chat because that hits `/viewer`
+  directly. Resolving this needs either (a) a `pendingActions` URL fragment
+  the structure page replays once the chain/MSA is ready, or (b) the landing
+  endpoint emitting a follow-up viewer call that the page picks up. The
+  cross-page hydration sequencing is the same blocker as the structure→
+  structure case above.
+
 - **Redux store is session-long.** It's instantiated once in
   `src/app/layout.tsx`, so the `sequenceRegistry` slice (PDB sequences for the
   MSA) persists across navigations. Without cleanup, stale aligned rows linger

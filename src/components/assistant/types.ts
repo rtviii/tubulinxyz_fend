@@ -2,8 +2,12 @@
 //
 // Viewer action types mirror the Pydantic models in
 // `tubulinxyz/api/nl_translator/viewer_actions.py`. Keep the two in sync
-// manually — the surface is small (~10 action kinds), codegen is overkill
+// manually — the surface is small (~12 action kinds), codegen is overkill
 // for the MVP.
+
+import type { FilterSpec } from '@/store/slices/annotationTracksSlice';
+
+export type { FilterSpec } from '@/store/slices/annotationTracksSlice';
 
 // ---------------------------------------------------------------------------
 // Viewer actions
@@ -22,7 +26,17 @@ export type ViewerAction =
   // Add another organism's chain to the current expert-mode alignment. The
   // backend resolves organism_id -> a real (rcsb_id, auth_asym_id); the
   // dispatcher reads those two and runs the in-place align flow.
-  | { type: 'AlignChain'; args: { rcsb_id: string; auth_asym_id: string; organism_id?: number | null; family?: string | null } };
+  | { type: 'AlignChain'; args: { rcsb_id: string; auth_asym_id: string; organism_id?: number | null; family?: string | null } }
+  // Chain-independent MSA aux row, family-scoped, painted from a typed FilterSpec.
+  // The dispatcher reads (label, spec, color) and dispatches addTrack with
+  // source: 'ai' so the UI can badge it. Auto-resolved by useResolveTracks.
+  | { type: 'AddAnnotationTrack'; args: { label: string; spec: FilterSpec; color: string; description?: string | null } }
+  // Substring-matches against existing track labels (case-insensitive).
+  | { type: 'RemoveAnnotationTrack'; args: { label_match: string } }
+  // Focus 3D camera + draw binding-site representation for a named ligand on a
+  // loaded chain. Reuses already-fetched per-chain contact data (no fetch).
+  // auth_asym_id defaults to the active monomer chain when null/undefined.
+  | { type: 'FocusBindingSite'; args: { chemical_id: string; auth_asym_id?: string | null } };
 
 export type ViewerActionType = ViewerAction['type'];
 

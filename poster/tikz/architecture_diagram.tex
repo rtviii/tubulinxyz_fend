@@ -1,8 +1,8 @@
 % Pipeline architecture: compact, layered, "industrial software" style.
 % Four grouped containers (Sources, Process, Store, Serve), each holding
 % small white sub-cards with hairline borders. Subtle background tint per
-% group; flow arrows are thin, dark grey, no shadows. Designed to live
-% inside a half-width \block.
+% group; flow arrows are thin, dark grey with a gentle bend. Inline tool
+% logos sit at the bottom of the relevant cards.
 %
 % Embedded inside a \block in poster.tex.
 
@@ -10,11 +10,11 @@
     every node/.style={font=\sffamily, inner sep=0pt},
     grp/.style={
       draw=tubHairline2, line width=0.4pt, rounded corners=3pt,
-      fill=tubSurface2, minimum height=42mm
+      fill=tubSurface2, minimum height=46mm
     },
     grphead/.style={
-      font=\condensedfont\fontsize{8}{10}\selectfont,
-      text=tubMuted, anchor=south west
+      font=\headingfont\fontsize{10}{12}\selectfont,
+      text=tubInk2, anchor=south west
     },
     card/.style={
       draw=tubHairline, line width=0.3pt, rounded corners=2pt,
@@ -23,85 +23,91 @@
       text=tubInk2, align=left, anchor=west
     },
     cardbold/.style={card, font=\fontsize{8}{10}\selectfont\sffamily\bfseries},
+    cardaccent/.style={cardbold, draw=tubAccent, fill=tubAccentSoft,
+      blur shadow={shadow xshift=0.4pt, shadow yshift=-0.8pt,
+        shadow blur radius=2.4pt, shadow blur steps=4,
+        shadow opacity=0.20}
+    },
     sub/.style={
       font=\fontsize{7}{8}\selectfont\sffamily, text=tubMuted,
       align=left, anchor=west
     },
     flow/.style={
-      ->, >=Stealth, draw=tubMuted2, line width=0.6pt
+      ->, >=Stealth, draw=tubMuted2, line width=0.7pt,
+      bend left=8, looseness=0.6
+    },
+    cardlogo/.style={
+      inner sep=0pt, anchor=north west
     },
   ]
 
-  % --- Lane geometry. 4 group containers stacked side-by-side.
-  \def\gh{4.2}     % group container height (cm)
-  \def\gw{4.0}     % default group width (cm)
-  \def\gwwide{5.2} % wider for Serve
+  % --- Lane geometry. 4 equal-width group containers stacked side-by-side.
+  \def\gh{4.6}     % group container height (cm)
+  \def\gw{4.5}     % uniform group width (cm)
   \def\xa{0}
-  \def\xb{4.6}
-  \def\xc{9.2}
-  \def\xd{13.0}
+  \def\xb{5.1}
+  \def\xc{10.2}
+  \def\xd{15.3}
 
   % ---------------- SOURCES ----------------
   \node[grp, minimum width=\gw cm] (gA) at (\xa, 0) {};
-  \node[grphead] at ($(gA.north west) + (3pt, 2pt)$) {SOURCES};
+  \node[grphead] at ($(gA.north west) + (3pt, 3pt)$) {SOURCES};
 
   \node[card, text width=\gw cm - 8pt]
     (s1) at ($(gA.north west) + (4pt, -8pt)$)
-    {RCSB PDB \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont InterPro IPR000217}};
+    {RCSB PDB \\ \includegraphics[height=3.5mm]{figures/logo_pdb}};
   \node[card, text width=\gw cm - 8pt, anchor=north west]
     (s2) at ($(s1.south west) + (0, -4pt)$)
-    {TubulinDB \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont Abbaali \emph{et al.} 2023}};
+    {TubulinDB \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont Abbaali 2023}};
   \node[card, text width=\gw cm - 8pt, anchor=north west]
     (s3) at ($(s2.south west) + (0, -4pt)$)
     {NCBI taxonomy \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont ete3 lineages}};
 
   % ---------------- PROCESS ----------------
   \node[grp, minimum width=\gw cm] (gB) at (\xb, 0) {};
-  \node[grphead] at ($(gB.north west) + (3pt, 2pt)$) {PROCESS};
+  \node[grphead] at ($(gB.north west) + (3pt, 3pt)$) {PROCESS};
 
   \node[card, text width=\gw cm - 8pt]
     (p1) at ($(gB.north west) + (4pt, -8pt)$)
-    {HMM classify \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont $\alpha,\beta,\gamma,\delta,\varepsilon$ + MAPs}};
+    {HMM classify \\ \includegraphics[height=3.5mm]{figures/logo_hmmer}};
   \node[card, text width=\gw cm - 8pt, anchor=north west]
     (p2) at ($(p1.south west) + (0, -4pt)$)
-    {Isotype call \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont UniProt $\to$ HGNC}};
+    {Isotype call \\ \includegraphics[height=3mm]{figures/logo_uniprot}};
   \node[card, text width=\gw cm - 8pt, anchor=north west]
     (p3) at ($(p2.south west) + (0, -4pt)$)
     {MUSCLE align \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont per-family master MSA}};
 
   % ---------------- STORE ----------------
-  \node[grp, minimum width=3.4cm] (gC) at (\xc, 0) {};
-  \node[grphead] at ($(gC.north west) + (3pt, 2pt)$) {STORE};
+  \node[grp, minimum width=\gw cm] (gC) at (\xc, 0) {};
+  \node[grphead] at ($(gC.north west) + (3pt, 3pt)$) {STORE};
 
-  \node[cardbold, text width=3.4cm - 8pt, anchor=north west,
-        draw=tubAccent, fill=tubAccentSoft]
+  \node[cardaccent, text width=\gw cm - 8pt, anchor=north west]
     (st1) at ($(gC.north west) + (4pt, -8pt)$)
-    {Neo4j graph};
-  \node[sub, text width=3.4cm - 8pt, anchor=north west]
-    at ($(st1.south west) + (0, -3pt)$)
-    {Structure, Entity,\\ Variant, Modification,\\ Chemical};
-  \node[sub, text width=3.4cm - 8pt, anchor=south west, text=tubMuted]
+    {Neo4j graph \\[1pt] \includegraphics[height=3.5mm]{figures/logo_neo4j}};
+  \node[sub, text width=\gw cm - 8pt, anchor=north west]
+    at ($(st1.south west) + (0, -4pt)$)
+    {Structure, Entity,\\ Variant, Modification};
+  \node[sub, text width=\gw cm - 8pt, anchor=south west, text=tubMuted]
     at ($(gC.south west) + (4pt, 6pt)$)
     {join key:\\ \texttt{\fontsize{7}{8}\selectfont Variant.master\_index}};
 
   % ---------------- SERVE ----------------
-  \node[grp, minimum width=\gwwide cm] (gD) at (\xd, 0) {};
-  \node[grphead] at ($(gD.north west) + (3pt, 2pt)$) {SERVE};
+  \node[grp, minimum width=\gw cm] (gD) at (\xd, 0) {};
+  \node[grphead] at ($(gD.north west) + (3pt, 3pt)$) {SERVE};
 
-  \node[card, text width=\gwwide cm - 8pt]
+  \node[card, text width=\gw cm - 8pt]
     (sv1) at ($(gD.north west) + (4pt, -8pt)$)
-    {FastAPI \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont /structures /polymers /ligands /msa}};
-  \node[card, text width=\gwwide cm - 8pt, anchor=north west]
+    {FastAPI \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont REST endpoints}};
+  \node[card, text width=\gw cm - 8pt, anchor=north west]
     (sv2) at ($(sv1.south west) + (0, -4pt)$)
-    {Next.js client \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont Mol* + Nightingale}};
-  \node[card, text width=\gwwide cm - 8pt, anchor=north west,
-        draw=tubAccent, fill=tubAccentSoft]
+    {Next.js client \\ \includegraphics[height=3.5mm]{figures/logo_molstar}};
+  \node[cardaccent, text width=\gw cm - 8pt, anchor=north west]
     (sv3) at ($(sv2.south west) + (0, -4pt)$)
-    {LLM chatbot \\ \textcolor{tubMuted}{\fontsize{7}{8}\selectfont natural-language $\to$ Cypher}};
+    {LLM chatbot \\[1pt] \textcolor{tubInk2!85}{\fontsize{7}{8}\selectfont NL $\to$ Cypher}};
 
-  % ---------------- Flow arrows ----------------
-  \draw[flow] (gA.east) -- (gB.west);
-  \draw[flow] (gB.east) -- (gC.west);
-  \draw[flow] (gC.east) -- (gD.west);
+  % ---------------- Flow arrows (curved) ----------------
+  \draw[flow] (gA.east) to (gB.west);
+  \draw[flow] (gB.east) to (gC.west);
+  \draw[flow] (gC.east) to (gD.west);
 
 \end{tikzpicture}

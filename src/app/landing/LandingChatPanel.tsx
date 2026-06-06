@@ -14,7 +14,7 @@ import { API_BASE_URL } from '@/config';
 
 const EXAMPLES = [
   'Where does taxol bind?',
-  'What kinds of PTMs are in tubulin?',
+  // 'What kinds of PTMs are in tubulin?',
   'Compare GTP site in human vs Toxoplasma α-tubulin',
   'Find cryo-EM structures under 3 Å',
 ];

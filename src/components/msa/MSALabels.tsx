@@ -438,6 +438,15 @@ export function MSALabels({
                   <EyeIcon size={9} />
                 </button>
                 {swatches}
+                {isTrackRow && trackEntry?.spec.source === 'ai' && (
+                  <span
+                    className="inline-flex items-center px-1 rounded-sm bg-violet-100 text-violet-700 font-semibold tracking-wider"
+                    style={{ fontSize: '7px', lineHeight: '11px' }}
+                    title="Added by the assistant — click X to remove"
+                  >
+                    AI
+                  </span>
+                )}
                 <span className={layerActive ? 'text-gray-400' : 'text-gray-300'}>
                   {seq.layerLabel ?? seq.name}
                 </span>

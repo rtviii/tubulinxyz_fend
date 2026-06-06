@@ -107,7 +107,10 @@ placeholder in `poster.tex` accordingly.
 4. Frame the M-loop region in the camera.
 5. Export ~2000 px wide.
 
-`ligand_msa.png` — recipe:
+`ligand_msa.png` — **currently unused.** The ligand panel was
+collapsed to a single full-bleed figure in the §15.1 pass; only
+`ligand_3d.png` is referenced by `poster.tex`. Recipe kept for the
+case the panel is split again later.
 
 1. Same view; expand the MSA panel.
 2. Add a few β-isotype rows for context.

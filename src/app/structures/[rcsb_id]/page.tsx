@@ -16,7 +16,8 @@ import {
   selectActiveMonomerChainId,
   selectAlignedStructuresForActiveChain,
 } from '@/components/molstar/state/selectors';
-import { setPrimaryChain, hideAllVisibility } from '@/store/slices/annotationsSlice';
+import { setPrimaryChain, hideAllVisibility, toggleLigandSite } from '@/store/slices/annotationsSlice';
+import { resolveLigandColor } from '@/lib/colors/annotationPaletteResolve';
 import { useGetMasterProfileQuery, tubxz_api } from '@/store/tubxz_api';
 import { useChainAlignment } from '@/hooks/useChainAlignment';
 import { useViewerSync } from '@/hooks/useViewerSync';
@@ -273,6 +274,66 @@ function StructureProfilePageInner() {
     setActiveBindingSite(null);
   }, [instance]);
 
+  // Store handle (lifted above the LLM callback so it can read fresh state
+  // without re-rendering when annotations change).
+  const store = useAppStore();
+
+  // LLM-facing: resolve (chemical_id, optional auth_asym_id) to the matching
+  // LigandSite already in Redux, then run the same activate flow the user gets
+  // from the ligand-pill toolbox. No fetch — operates entirely on per-chain
+  // ligand-neighborhood data fetched at mount.
+  const handleFocusBindingSiteForLLM = useCallback(async (
+    chemicalId: string,
+    authAsymIdOverride?: string | null,
+  ) => {
+    console.log('[focusBindingSiteForLLM] called', { chemicalId, authAsymIdOverride, activeChainId, loadedStructure });
+    if (!instance || !loadedStructure) {
+      throw new Error('Viewer not ready');
+    }
+    const targetChain = authAsymIdOverride ?? activeChainId;
+    if (!targetChain) {
+      throw new Error('No active chain to focus on');
+    }
+    const chainKey = makeChainKey(loadedStructure, targetChain);
+    const s = store.getState();
+    const entry = s.annotations.chains[chainKey];
+    const sites = entry?.data?.ligandSites ?? [];
+    console.log('[focusBindingSiteForLLM] lookup', {
+      chainKey,
+      knownChainKeys: Object.keys(s.annotations.chains),
+      sitesCount: sites.length,
+      sitesLigandIds: sites.map(x => x.ligandId),
+    });
+    const needle = chemicalId.toUpperCase();
+    const site = sites.find(x => x.ligandId.toUpperCase() === needle);
+    if (!site) {
+      throw new Error(`No ${chemicalId} binding site on chain ${targetChain}`);
+    }
+    if (!entry?.visibility?.visibleLigandIds.includes(site.id)) {
+      dispatch(toggleLigandSite({ chainKey, siteId: site.id }));
+    }
+    const uniqueKey = `${site.ligandId}_${site.ligandChain}_${site.ligandAuthSeqId}`;
+    const color = resolveLigandColor(s.colorOverrides?.ligand, site.ligandId);
+    console.log('[focusBindingSiteForLLM] activating', { uniqueKey, color, site });
+    await handleActivateBindingSite({
+      uniqueKey,
+      chemId: site.ligandId,
+      color,
+      ligandName: site.ligandName,
+      drugbankId: site.drugbankId,
+      chainKey,
+      siteId: site.id,
+    });
+    const indices = site.masterIndices;
+    if (indices && indices.length > 0) {
+      const min = Math.min(...indices);
+      const max = Math.max(...indices);
+      const PAD = 5;
+      msaRef.current?.jumpToRange(Math.max(1, min - PAD), max + PAD);
+    }
+    console.log('[focusBindingSiteForLLM] done');
+  }, [instance, loadedStructure, activeChainId, store, dispatch, handleActivateBindingSite]);
+
   // Wipe binding-site state if we navigate to a different structure — the
   // Molstar component refs we hold would be stale after reload.
   useEffect(() => {
@@ -281,7 +342,6 @@ function StructureProfilePageInner() {
 
   // ── Direct alignment from popup "+" buttons ──
   const { alignChainFromProfile } = useChainAlignment();
-  const store = useAppStore();
   const handleDirectAlign = useCallback(async (pdbId: string, entityOrChainId: string) => {
     if (!instance || !activeChainId) return;
     const masterLen = masterData?.alignment_length ?? 0;
@@ -751,7 +811,18 @@ function StructureProfilePageInner() {
           setViewerNavCard(data.card);
           return { summary: data.summary || 'Suggested action ready.' };
         }
-        const reports = await dispatchViewerActions(instance, data.actions, { alignChain: alignChainById });
+        const reports = await dispatchViewerActions(instance, data.actions, {
+          alignChain: alignChainById,
+          dispatch,
+          getTracks: () => {
+            const s = store.getState();
+            return s.annotationTracks.order
+              .map((id: string) => s.annotationTracks.tracks[id])
+              .filter(Boolean);
+          },
+          viewMode,
+          focusBindingSite: handleFocusBindingSiteForLLM,
+        });
         // Surface entities + summary in the side panel regardless of action
         // success — partial action failure shouldn't kill the panel.
         setViewerEntities(data.entities ?? []);
@@ -776,6 +847,9 @@ function StructureProfilePageInner() {
     activeChainId,
     activeFamily,
     alignChainById,
+    dispatch,
+    store,
+    handleFocusBindingSiteForLLM,
   ]);
 
   return (
