@@ -47,8 +47,8 @@ import {
   type AssistantTargetValue,
 } from '@/components/assistant/AssistantTargetContext';
 import { dispatchViewerActions } from '@/components/assistant/viewerCommandDispatcher';
-import type { ViewerResponse } from '@/components/assistant/types';
-import type { ActionCard, EntityRef } from '@/components/assistant/globalTypes';
+import type { AssistantResult, AssistantSuggestedAction, AssistantViewerActionCall, ViewerAction } from '@/components/assistant/types';
+import type { ActionCard, EntityRef, QuerySpec } from '@/components/assistant/globalTypes';
 import { ViewerAssistantPanel } from '@/components/assistant/ViewerAssistantPanel';
 import {
   searchParamsToStructureView,
@@ -107,6 +107,10 @@ function StructureProfilePageInner() {
   const [viewerEntities, setViewerEntities] = useState<EntityRef[]>([]);
   const [viewerSummary, setViewerSummary] = useState<string>('');
   const [viewerNavCard, setViewerNavCard] = useState<ActionCard | null>(null);
+  const [viewerAnswer, setViewerAnswer] = useState<{ markdown: string; data?: Record<string, unknown> | null } | null>(null);
+  const [viewerCards, setViewerCards] = useState<ActionCard[]>([]);
+  const [viewerSuggestedActions, setViewerSuggestedActions] = useState<AssistantSuggestedAction[]>([]);
+  const [viewerQueries, setViewerQueries] = useState<QuerySpec[]>([]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const msaRef = useRef<MSAHandle>(null);
@@ -767,6 +771,41 @@ function StructureProfilePageInner() {
     setStructureSequenceChainId(polymerComponents[0].chainId);
   }, [layoutState, isMonomerView, structureSequenceChainId, polymerComponents]);
 
+  // Single place that dispatches a batch of viewer actions with the page's
+  // full dispatch context. Reused by the assistant handler (auto-apply) and by
+  // suggested-action chips (user click).
+  const runViewerActions = useCallback(
+    (actions: ViewerAction[]) => {
+      if (!instance) return Promise.resolve([] as Awaited<ReturnType<typeof dispatchViewerActions>>);
+      return dispatchViewerActions(instance, actions, {
+        alignChain: alignChainById,
+        dispatch,
+        getTracks: () => {
+          const s = store.getState();
+          return s.annotationTracks.order
+            .map((id: string) => s.annotationTracks.tracks[id])
+            .filter(Boolean);
+        },
+        viewMode,
+        focusBindingSite: handleFocusBindingSiteForLLM,
+      });
+    },
+    [instance, alignChainById, dispatch, store, viewMode, handleFocusBindingSiteForLLM],
+  );
+
+  // Run a single suggested action (clicked chip). Failures are swallowed to a
+  // console warning — the chip is best-effort.
+  const onRunSuggestedAction = useCallback(
+    async (action: AssistantViewerActionCall) => {
+      const reports = await runViewerActions([action as unknown as ViewerAction]);
+      const failed = reports.filter(r => !r.ok);
+      if (failed.length) {
+        console.warn('[assistant] suggested action failed', failed.map(r => r.error));
+      }
+    },
+    [runViewerActions],
+  );
+
   // ── Assistant target: enables the cross-page PillChatInput to drive this viewer ──
   const assistantValue = useMemo<AssistantTargetValue | null>(() => {
     if (!instance || !loadedStructure) return null;
@@ -774,18 +813,26 @@ function StructureProfilePageInner() {
       target: 'viewer',
       placeholder: 'Ask about this structure...',
       handle: async (text, signal) => {
+        const loadedTracks = (() => {
+          const s = store.getState();
+          return s.annotationTracks.order
+            .map((id: string) => s.annotationTracks.tracks[id]?.spec?.label)
+            .filter(Boolean) as string[];
+        })();
         const body = {
           text,
-          view_context: {
+          page_context: {
+            page: 'structure',
             rcsb_id: loadedStructure,
             chain_ids: polymerComponents.map(p => p.chainId),
             ligand_keys: ligandComponents.map(l => l.uniqueKey),
             view_mode: viewMode,
             active_monomer_chain: activeChainId,
             active_family: activeFamily,
+            loaded_tracks: loadedTracks,
           },
         };
-        const resp = await fetch(`${API_BASE_URL}/nl_query/viewer`, {
+        const resp = await fetch(`${API_BASE_URL}/assistant/query`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(body),
@@ -795,47 +842,60 @@ function StructureProfilePageInner() {
           const txt = await resp.text().catch(() => '');
           return { error: `HTTP ${resp.status}: ${txt.slice(0, 200)}` };
         }
-        const data = (await resp.json()) as ViewerResponse;
-        if (data.kind === 'clarify') {
-          // Backend may also attach a nav card alongside the clarification —
-          // surface it in the panel so the user has a concrete next step.
+        const data = (await resp.json()) as AssistantResult;
+
+        const resetPanel = () => {
           setViewerEntities([]);
           setViewerSummary('');
-          setViewerNavCard(data.card ?? null);
-          return { clarification: data.clarification };
+          setViewerNavCard(null);
+          setViewerAnswer(null);
+          setViewerCards([]);
+          setViewerSuggestedActions([]);
+          setViewerQueries([]);
+        };
+
+        if (data.kind === 'clarify') {
+          resetPanel();
+          return { clarification: data.clarification ?? 'Please clarify.' };
         }
-        if (data.kind === 'nav_card') {
-          // Navigation intent — show the card, skip viewer actions entirely.
-          setViewerEntities([]);
-          setViewerSummary(data.summary ?? '');
-          setViewerNavCard(data.card);
-          return { summary: data.summary || 'Suggested action ready.' };
+        if (data.kind === 'cannot') {
+          // Honest decline — surface as a soft note, not a red error.
+          resetPanel();
+          return { clarification: data.reason ?? "I can't answer that with the data we have." };
         }
-        const reports = await dispatchViewerActions(instance, data.actions, {
-          alignChain: alignChainById,
-          dispatch,
-          getTracks: () => {
-            const s = store.getState();
-            return s.annotationTracks.order
-              .map((id: string) => s.annotationTracks.tracks[id])
-              .filter(Boolean);
-          },
-          viewMode,
-          focusBindingSite: handleFocusBindingSiteForLLM,
-        });
-        // Surface entities + summary in the side panel regardless of action
-        // success — partial action failure shouldn't kill the panel.
+
+        // kind === 'respond' — render whatever is present and auto-apply actions.
+        const reports = await runViewerActions(
+          (data.viewer_actions ?? []) as unknown as ViewerAction[],
+        );
+        resetPanel();
         setViewerEntities(data.entities ?? []);
         setViewerSummary(data.summary ?? '');
-        setViewerNavCard(null);
-        const failed = reports.filter(r => !r.ok);
-        if (failed.length > 0) {
-          const detail = failed
-            .map(r => `${r.action.type}: ${r.error ?? 'unknown'}`)
-            .join('; ');
-          return { error: `${failed.length}/${reports.length} failed — ${detail}` };
+        setViewerCards(data.cards ?? []);
+        setViewerQueries(data.queries ?? []);
+        setViewerSuggestedActions(data.suggested_actions ?? []);
+        if (data.answer_markdown) {
+          setViewerAnswer({ markdown: data.answer_markdown, data: data.data ?? null });
         }
-        return { summary: data.summary || `${reports.length} action(s) applied` };
+
+        // Surface action failures and server-dropped actions honestly.
+        const failed = reports.filter(r => !r.ok);
+        const dropped = data.dropped_actions ?? [];
+        if (failed.length > 0 || dropped.length > 0) {
+          const parts: string[] = [
+            ...failed.map(r => `${r.action.type}: ${r.error ?? 'unknown'}`),
+            ...dropped.map(d => `${d.type}: ${d.reason}`),
+          ];
+          const appliedOk = reports.filter(r => r.ok).length;
+          const detail = parts.join('; ');
+          // If at least some actions applied, or there's an answer/cards to show,
+          // a soft note; only a hard error if nothing useful came back.
+          const haveContent = appliedOk > 0 || !!data.answer_markdown || (data.cards?.length ?? 0) > 0 || (data.suggested_actions?.length ?? 0) > 0;
+          return haveContent
+            ? { summary: `${appliedOk} applied; issues: ${detail}` }
+            : { error: detail };
+        }
+        return { summary: data.summary || (data.answer_markdown ? 'Answer ready.' : `${reports.length} action(s) applied`) };
       },
     };
   }, [
@@ -846,10 +906,8 @@ function StructureProfilePageInner() {
     viewMode,
     activeChainId,
     activeFamily,
-    alignChainById,
-    dispatch,
     store,
-    handleFocusBindingSiteForLLM,
+    runViewerActions,
   ]);
 
   return (
@@ -1008,17 +1066,26 @@ function StructureProfilePageInner() {
         </div>
       )}
 
-      {/* ── In-page assistant panel (entities + summary from /nl_query/viewer) ── */}
-      {(viewerEntities.length > 0 || viewerSummary || viewerNavCard) && (
+      {/* ── In-page assistant panel (AssistantResult from /assistant/query) ── */}
+      {(viewerEntities.length > 0 || viewerSummary || viewerNavCard || viewerAnswer || viewerCards.length > 0 || viewerSuggestedActions.length > 0) && (
         <ViewerAssistantPanel
           entities={viewerEntities}
           summary={viewerSummary}
           navCard={viewerNavCard}
+          answer={viewerAnswer}
+          cards={viewerCards}
+          queries={viewerQueries}
+          suggestedActions={viewerSuggestedActions}
+          onRunAction={onRunSuggestedAction}
           instance={instance}
           onDismiss={() => {
             setViewerEntities([]);
             setViewerSummary('');
             setViewerNavCard(null);
+            setViewerAnswer(null);
+            setViewerCards([]);
+            setViewerSuggestedActions([]);
+            setViewerQueries([]);
           }}
         />
       )}

@@ -104,10 +104,10 @@ async function dispatchOne(
         throw new Error('Annotation tracks require dispatch in ViewerDispatchContext');
       }
       if (ctx.viewMode !== 'monomer') {
-        // Defense-in-depth — the prompt already discourages this. Skip silently
-        // with a warning rather than mid-emit mode-switching the user.
-        console.warn('[viewerDispatcher] skipping AddAnnotationTrack outside expert mode', a.args.label);
-        return;
+        // Honesty over silence: fail loudly so the assistant reports it rather
+        // than claiming a track was added when nothing happened. (The prompt
+        // also tells the model to avoid this outside expert mode.)
+        throw new Error('Annotation tracks require expert (monomer) mode — switch to expert mode first');
       }
       const spec = a.args.spec as FilterSpec;
       ctx.dispatch(

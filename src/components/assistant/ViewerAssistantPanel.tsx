@@ -14,10 +14,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { X, Eye, Layers, FlaskConical, MapPin, HelpCircle } from 'lucide-react';
+import { X, Eye, Layers, FlaskConical, MapPin, HelpCircle, Sparkles } from 'lucide-react';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
-import type { ActionCard, EntityKind, EntityRef } from './globalTypes';
+import type { ActionCard, EntityKind, EntityRef, QuerySpec } from './globalTypes';
+import type { AssistantSuggestedAction, AssistantViewerActionCall } from './types';
 import { CardChip } from './AssistantResultsPanel';
+import { AssistantAnswer } from './AssistantAnswer';
 import { cardToHref } from './globalCommandDispatcher';
 import { useAppDispatch } from '@/store/store';
 import { showAssistantToast } from '@/store/slices/assistantToastSlice';
@@ -45,11 +47,21 @@ export interface ViewerAssistantPanelProps {
   // of viewer actions. Rendered as a click-through chip; mutually exclusive
   // with `entities` in practice.
   navCard?: ActionCard | null;
+  // Grounded textual answer (AssistantResult kind='answer'). Rendered as a
+  // markdown block above the pills/cards.
+  answer?: { markdown: string; data?: Record<string, unknown> | null } | null;
+  // Routing cards (AssistantResult kind='cards' or attached to an answer).
+  cards?: ActionCard[];
+  // Query specs the cards reference by query_ref (drives full catalogue filters).
+  queries?: QuerySpec[];
+  // Viewer actions offered as clickable chips; clicking runs onRunAction.
+  suggestedActions?: AssistantSuggestedAction[];
+  onRunAction?: (action: AssistantViewerActionCall) => void | Promise<void>;
   instance: MolstarInstance | null;
   onDismiss: () => void;
 }
 
-export function ViewerAssistantPanel({ entities, summary, navCard, instance, onDismiss }: ViewerAssistantPanelProps) {
+export function ViewerAssistantPanel({ entities, summary, navCard, answer, cards, queries, suggestedActions, onRunAction, instance, onDismiss }: ViewerAssistantPanelProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
 
@@ -79,14 +91,16 @@ export function ViewerAssistantPanel({ entities, summary, navCard, instance, onD
   };
 
   const handleNavClick = (card: ActionCard) => {
-    const { href } = cardToHref(card, []);
+    const { href } = cardToHref(card, queries ?? []);
     if (href && href !== '#') {
       dispatch(showAssistantToast(card));
       router.push(href);
     }
   };
 
-  if (pills.length === 0 && !summary && !navCard) return null;
+  const cardList = cards ?? [];
+  const chips = suggestedActions ?? [];
+  if (pills.length === 0 && !summary && !navCard && !answer && cardList.length === 0 && chips.length === 0) return null;
 
   return (
     <div className="absolute top-3 right-3 z-30 w-[320px] pointer-events-auto">
@@ -111,6 +125,31 @@ export function ViewerAssistantPanel({ entities, summary, navCard, instance, onD
           </button>
         </div>
 
+        {/* Grounded textual answer */}
+        {answer && (
+          <div className="px-3 py-2 border-b border-slate-100">
+            <AssistantAnswer markdown={answer.markdown} />
+          </div>
+        )}
+
+        {/* Suggested actions — clickable chips that visualize the answer's data */}
+        {chips.length > 0 && (
+          <div className="px-2 py-2 flex flex-wrap gap-1.5 border-b border-slate-100">
+            {chips.map((s, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onRunAction?.(s.action)}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-violet-200 bg-violet-50 text-violet-700 text-[11px] font-medium hover:bg-violet-100 hover:border-violet-300 transition-colors"
+                title="Visualize this in the viewer / MSA"
+              >
+                <Sparkles size={11} />
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Navigation card (when LLM emitted EmitNavigationCard instead of actions) */}
         {navCard && (
           <div className="p-2">
@@ -120,6 +159,21 @@ export function ViewerAssistantPanel({ entities, summary, navCard, instance, onD
               ok={true}
               onClick={() => handleNavClick(navCard)}
             />
+          </div>
+        )}
+
+        {/* Routing cards (kind='cards', or cards attached to an answer) */}
+        {cardList.length > 0 && (
+          <div className="p-2 flex flex-col gap-1.5">
+            {cardList.map((card, i) => (
+              <CardChip
+                key={i}
+                card={card}
+                queries={[]}
+                ok={true}
+                onClick={() => handleNavClick(card)}
+              />
+            ))}
           </div>
         )}
 

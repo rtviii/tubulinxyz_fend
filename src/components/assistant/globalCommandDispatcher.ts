@@ -38,7 +38,11 @@ function backendStructureFiltersToUi(bf: Record<string, unknown>): Partial<UiFil
   if (arrS('has_isotype')) out.isotype = arrS('has_isotype');
   if (arrS('has_ligand_ids')) out.ligands = arrS('has_ligand_ids');
   if (arrS('has_uniprot')) out.uniprot = arrS('has_uniprot');
-  if (arrN('source_organism_ids')) out.sourceTaxa = arrN('source_organism_ids');
+  // NOTE: StructureFilters.source_organism_ids has the Pydantic alias `sourceTaxa`,
+  // and FastAPI serializes responses by_alias — so the wire key is `sourceTaxa`.
+  // Accept both so query filters from the assistant/global endpoints round-trip.
+  const sourceTaxa = arrN('source_organism_ids') ?? arrN('sourceTaxa');
+  if (sourceTaxa) out.sourceTaxa = sourceTaxa;
   if (arrN('host_organism_ids')) out.hostTaxa = arrN('host_organism_ids');
 
   if (n('resolution_min') !== undefined) out.resMin = n('resolution_min');

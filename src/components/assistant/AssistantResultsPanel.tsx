@@ -307,7 +307,7 @@ function backendStructureFiltersToApiArg(bf: Record<string, unknown>): ListStruc
     resMax: n('resolution_max'),
     yearMin: n('year_min'),
     yearMax: n('year_max'),
-    sourceTaxa: arrNAsS('source_organism_ids'),
+    sourceTaxa: arrNAsS('source_organism_ids') ?? arrNAsS('sourceTaxa'),
     hostTaxa: arrNAsS('host_organism_ids'),
     hasVariants: b('has_variants'),
     variantFamily: s('variant_family'),

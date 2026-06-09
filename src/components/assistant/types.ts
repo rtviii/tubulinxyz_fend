@@ -44,7 +44,7 @@ export type ViewerActionType = ViewerAction['type'];
 // Backend response envelopes
 // ---------------------------------------------------------------------------
 
-import type { ActionCard, EntityRef } from './globalTypes';
+import type { ActionCard, EntityRef, QuerySpec } from './globalTypes';
 
 export interface ViewerResponseActions {
   kind: 'viewer_actions';
@@ -96,4 +96,49 @@ export interface ActionReport {
   action: ViewerAction;
   ok: boolean;
   error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Grounded orchestrator result (mirrors AssistantResult in
+// `tubulinxyz/api/nl_translator/orchestrator.py`). One discriminated shape for
+// all pages; `kind` selects how the frontend renders it.
+// ---------------------------------------------------------------------------
+
+// A viewer action as the backend emits it: {type, args}. Matches the ViewerAction
+// union shape so it can be passed straight to dispatchViewerActions.
+export interface AssistantViewerActionCall {
+  type: string;
+  args: Record<string, unknown>;
+}
+
+// A viewer action offered to the user as a clickable chip (not auto-applied).
+export interface AssistantSuggestedAction {
+  label: string;
+  action: AssistantViewerActionCall;
+}
+
+export interface AssistantTraceEntry {
+  tool: string;
+  args: Record<string, unknown>;
+  ok: boolean;
+  summary: string;
+}
+
+// kind ∈ {'respond','clarify','cannot'}. A 'respond' may carry any combination
+// of answer text, auto-applied viewer actions, offered suggested actions,
+// routing cards (+ queries), and entity pills — render whatever is present.
+export interface AssistantResult {
+  kind: 'respond' | 'clarify' | 'cannot';
+  answer_markdown?: string | null;
+  data?: Record<string, unknown> | null;
+  summary?: string | null;
+  clarification?: string | null;
+  reason?: string | null;
+  cards?: ActionCard[];
+  queries?: QuerySpec[];
+  entities?: EntityRef[];
+  viewer_actions?: AssistantViewerActionCall[];
+  suggested_actions?: AssistantSuggestedAction[];
+  dropped_actions?: Array<{ type: string; reason: string }>;
+  trace?: AssistantTraceEntry[];
 }
