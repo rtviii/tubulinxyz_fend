@@ -142,3 +142,29 @@ export interface AssistantResult {
   dropped_actions?: Array<{ type: string; reason: string }>;
   trace?: AssistantTraceEntry[];
 }
+
+// ---------------------------------------------------------------------------
+// Structured tables. The backend puts tabular results in `AssistantResult.data`
+// as `{ table: { columns, rows } }` (instead of mangling them into markdown).
+// Shared by ViewerAssistantPanel (structured channel) and AssistantAnswer
+// (markdown pipe-table fallback). See orchestrator `_ANSWER_FORMATTING`.
+// ---------------------------------------------------------------------------
+
+export interface AssistantTableData {
+  columns: string[];
+  rows: (string | number)[][];
+}
+
+// Narrow the untyped `data.table` JSON to a usable table, or null if malformed.
+export function asAssistantTable(value: unknown): AssistantTableData | null {
+  if (!value || typeof value !== 'object') return null;
+  const { columns, rows } = value as { columns?: unknown; rows?: unknown };
+  if (!Array.isArray(columns) || columns.length === 0) return null;
+  if (!Array.isArray(rows)) return null;
+  const cleanRows = rows.filter((r): r is unknown[] => Array.isArray(r));
+  if (cleanRows.length === 0) return null;
+  return {
+    columns: columns.map((c) => String(c)),
+    rows: cleanRows.map((r) => r.map((cell) => (cell == null ? '' : (cell as string | number)))),
+  };
+}

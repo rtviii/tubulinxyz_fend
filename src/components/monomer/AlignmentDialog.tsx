@@ -115,7 +115,8 @@ export function AlignmentDialog({
 
   const handleBrowseSelect = useCallback((pdbId: string, chainId: string, family?: string) => {
     setAlignError(null);
-    setPendingAlign({ pdbId: pdbId.toUpperCase(), chainId: chainId.toUpperCase(), family });
+    // chainId is an auth_asym_id (case-sensitive, e.g. 9WDA uses 'a'/'b') — do NOT uppercase it.
+    setPendingAlign({ pdbId: pdbId.toUpperCase(), chainId, family });
   }, []);
 
   useEffect(() => {

@@ -874,8 +874,10 @@ function StructureProfilePageInner() {
         setViewerCards(data.cards ?? []);
         setViewerQueries(data.queries ?? []);
         setViewerSuggestedActions(data.suggested_actions ?? []);
-        if (data.answer_markdown) {
-          setViewerAnswer({ markdown: data.answer_markdown, data: data.data ?? null });
+        // Set the answer block when there's prose OR structured data (e.g. a
+        // table-only answer with just a short lead-in or none at all).
+        if (data.answer_markdown || data.data) {
+          setViewerAnswer({ markdown: data.answer_markdown ?? '', data: data.data ?? null });
         }
 
         // Surface action failures and server-dropped actions honestly.

@@ -58,7 +58,8 @@ export function AlignStructureForm({
 
     if (!sourceProfile) return;
 
-    const chainId = sourceChainId.trim().toUpperCase();
+    // auth_asym_id is case-sensitive (e.g. 9WDA's chains are 'a'/'b') — use exactly as entered.
+    const chainId = sourceChainId.trim();
     const result = alignChainFromProfile(sourceProfile, chainId, masterLength);
 
     if (!result) {
@@ -89,8 +90,8 @@ export function AlignStructureForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const pdbId = sourcePdbId.trim().toUpperCase();
-    const chainId = sourceChainId.trim().toUpperCase();
+    const pdbId = sourcePdbId.trim().toUpperCase();   // RCSB ids are case-insensitive / canonical-upper
+    const chainId = sourceChainId.trim();             // auth_asym_id is case-sensitive — preserve exact case
     if (!instance || !pdbId || !chainId) return;
 
     // Block duplicates: is this chain already aligned into the viewer?

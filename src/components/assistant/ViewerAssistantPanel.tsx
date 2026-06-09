@@ -18,8 +18,10 @@ import { X, Eye, Layers, FlaskConical, MapPin, HelpCircle, Sparkles } from 'luci
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { ActionCard, EntityKind, EntityRef, QuerySpec } from './globalTypes';
 import type { AssistantSuggestedAction, AssistantViewerActionCall } from './types';
+import { asAssistantTable } from './types';
 import { CardChip } from './AssistantResultsPanel';
 import { AssistantAnswer } from './AssistantAnswer';
+import { AssistantTable } from './AssistantTable';
 import { cardToHref } from './globalCommandDispatcher';
 import { useAppDispatch } from '@/store/store';
 import { showAssistantToast } from '@/store/slices/assistantToastSlice';
@@ -125,12 +127,16 @@ export function ViewerAssistantPanel({ entities, summary, navCard, answer, cards
           </button>
         </div>
 
-        {/* Grounded textual answer */}
-        {answer && (
-          <div className="px-3 py-2 border-b border-slate-100">
-            <AssistantAnswer markdown={answer.markdown} />
-          </div>
-        )}
+        {/* Grounded textual answer (+ optional structured table from data.table) */}
+        {answer && (() => {
+          const table = asAssistantTable((answer.data as Record<string, unknown> | null)?.table);
+          return (
+            <div className="px-3 py-2 border-b border-slate-100 space-y-2">
+              {answer.markdown && <AssistantAnswer markdown={answer.markdown} />}
+              {table && <AssistantTable table={table} />}
+            </div>
+          );
+        })()}
 
         {/* Suggested actions — clickable chips that visualize the answer's data */}
         {chips.length > 0 && (
