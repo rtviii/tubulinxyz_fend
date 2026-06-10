@@ -31,16 +31,14 @@
 
 ## expert mode demo
 
-- work out a demo struct to show each peice of functionality (msa, ptms,
-  reference)
+- work out a demo struct to show each peice of functionality (msa, ptms, reference)
 - stress the manual navigability (scientific value)
 
 ## demo scripts
 
 - polish the demo Qs
 - work out the script (scope/motivation), a fwe sentnces
-- come up with a demo "sentence" for filtering NLP processing that returns a few
-  demostrable structs
+- come up with a demo "sentence" for filtering NLP processing that returns a few demostrable structs
 - a little explanation abotu how the prompt transforms into the query
 
 ## ux/ui
@@ -70,10 +68,9 @@
 - filter ligands in expert mode by binding associtation.
 - make sure thumbnails are rendered (duh)
 
-
 # Wed May 27th
 
-- [ ] send in the abstract to Carsten | Make sure under 250 wc.
+- [x] send in the abstract to Carsten | Make sure under 250 wc.
 - [ ] stabilize + start polishing, llm tooling optimization in separate worktree..
 - [ ] add loggign for queries for history/postmortems.. --> 
 - [ ] bubble up the feedback form on all pages (landing included)
@@ -87,8 +84,15 @@
 Todos: 
 - to heidelberg from frankfurt + accommodations for 16th
 
-
 Remind Maxim to share pdfs for software paper.
-
-  
 https://www.mpinat.mpg.de/grubmueller/kutzner/posters
+
+
+----
+
+# UI/UX
+
+- [ ] name on the front page
+- [ ] tubexyz ->tubulinxyz
+- [ ] switching structutures directly from the floating menu
+- [ ] articulate entity tooling boxes

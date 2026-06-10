@@ -13,3 +13,7 @@ export function makeChainKey(rcsbId: string, authAsymId: string): string {
 export function authAsymIdFromChainKey(chainKey: string): string {
   return chainKey.slice(5); // 4-char RCSB ID + '_'
 }
+
+export function rcsbIdFromChainKey(chainKey: string): string {
+  return chainKey.slice(0, 4); // 4-char RCSB ID before the '_'
+}

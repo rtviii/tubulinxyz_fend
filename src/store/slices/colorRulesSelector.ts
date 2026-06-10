@@ -1,7 +1,7 @@
 import { createSelector } from '@reduxjs/toolkit';
 import { RootState } from '../store';
 import { VariantType } from './annotationsSlice';
-import { authAsymIdFromChainKey } from '@/lib/chain_key';
+import { authAsymIdFromChainKey, rcsbIdFromChainKey } from '@/lib/chain_key';
 import type { MsaSequence } from './sequence_registry';
 import {
   resolveLigandColor,
@@ -155,6 +155,14 @@ export const makeSelectActiveColorRulesForSequenceIds = () =>
           if (!chainEntry.data) continue;
           if (!visible.has(chainKey)) continue;
           if (chainEntry.data.family !== entry.spec.family) continue;
+          // Scope a structure-pinned binding_contacts track to only its source
+          // structures' chains, so a per-structure pocket doesn't smear its
+          // contacts onto every aligned chain of the same family.
+          const filters = entry.spec.filters;
+          if (filters.kind === 'binding_contacts' && filters.structure_ids?.length) {
+            const rcsbId = rcsbIdFromChainKey(chainKey).toUpperCase();
+            if (!filters.structure_ids.some(s => s.toUpperCase() === rcsbId)) continue;
+          }
           const mapping = positionMappings[chainKey];
           if (!mapping) continue;
           const authAsymId = authAsymIdFromChainKey(chainKey);
