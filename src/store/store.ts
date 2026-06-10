@@ -11,6 +11,7 @@ import annotationTracksReducer from './slices/annotationTracksSlice';
 import chainFocusReducer from './slices/chainFocusSlice';
 import colorOverridesReducer from './slices/colorOverridesSlice';
 import assistantToastReducer from './slices/assistantToastSlice';
+import arrivalActionsReducer from './slices/arrivalActionsSlice';
 
 export const makeStore = () => {
   return configureStore({
@@ -23,6 +24,7 @@ export const makeStore = () => {
       colorOverrides: colorOverridesReducer,
       structures_page: structuresReducer,
       assistantToast: assistantToastReducer,
+      arrivalActions: arrivalActionsReducer,
       [tubxz_api.reducerPath]: tubxz_api.reducer,
     },
     middleware: getDefaultMiddleware =>

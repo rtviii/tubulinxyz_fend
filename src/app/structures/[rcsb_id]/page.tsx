@@ -16,7 +16,8 @@ import {
   selectActiveMonomerChainId,
   selectAlignedStructuresForActiveChain,
 } from '@/components/molstar/state/selectors';
-import { setPrimaryChain, hideAllVisibility, toggleLigandSite } from '@/store/slices/annotationsSlice';
+import { setPrimaryChain, hideAllVisibility, toggleLigandSite, selectChainData } from '@/store/slices/annotationsSlice';
+import { selectArrivalActions, clearArrivalActions } from '@/store/slices/arrivalActionsSlice';
 import { resolveLigandColor } from '@/lib/colors/annotationPaletteResolve';
 import { useGetMasterProfileQuery, tubxz_api } from '@/store/tubxz_api';
 import { useChainAlignment } from '@/hooks/useChainAlignment';
@@ -102,6 +103,9 @@ function StructureProfilePageInner() {
   // One-shot guards so the URL-range focus + MSA jump each fire once per mount.
   const rangeFocusedRef = useRef(false);
   const rangeMsaJumpedRef = useRef(false);
+  // Arrival actions (precomputed on landing, replayed here): last-applied nonce
+  // so we one-shot per arrival even across StrictMode double-invokes / remounts.
+  const arrivalAppliedNonceRef = useRef<number>(0);
 
   // In-page assistant: surfaced entities + last summary from /nl_query/viewer.
   const [viewerEntities, setViewerEntities] = useState<EntityRef[]>([]);
@@ -129,6 +133,16 @@ function StructureProfilePageInner() {
   const activeChainKey = activeChainId ? makeChainKey(pdbIdFromUrl, activeChainId) : null;
   const activePositionMapping = useAppSelector(state =>
     activeChainKey ? selectPositionMapping(state, activeChainKey) : null
+  );
+
+  // Arrival-action replay: the handoff payload + whether the active chain's
+  // per-chain ligand data has loaded (FocusBindingSite reads it and throws if
+  // absent — see handleFocusBindingSiteForLLM).
+  const arrival = useAppSelector(selectArrivalActions);
+  const activeChainData = useAppSelector(state =>
+    loadedStructure && activeChainId
+      ? selectChainData(state, makeChainKey(loadedStructure, activeChainId))
+      : null
   );
 
   const [isLoading, setIsLoading] = useState(false);
@@ -805,6 +819,51 @@ function StructureProfilePageInner() {
     },
     [runViewerActions],
   );
+
+  // Replay precomputed arrival actions handed off from a landing card click.
+  // Mirrors the pendingAligns gating: wait until the structure is loaded in
+  // expert mode with master data, the URL-pending aligns have drained, and the
+  // active chain's ligand data is present (FocusBindingSite reads it). One-shot
+  // per arrival (by nonce, claimed synchronously before the await); cleared
+  // after applying so a refresh / back-nav doesn't re-apply.
+  useEffect(() => {
+    if (arrival.actions.length === 0) return;
+    if (arrival.nonce === arrivalAppliedNonceRef.current) return;
+    if (!loadedStructure || (arrival.rcsbId ?? '').toUpperCase() !== loadedStructure.toUpperCase()) return;
+    if (!instance || !activeChainId || !activeFamily) return;
+    if (viewMode !== 'monomer') return;
+    if ((masterData?.alignment_length ?? 0) === 0) return;
+    if (pendingAligns.length > 0) return;
+    if (!activeChainData) return; // annoReady: the active chain's ligand data has loaded
+
+    arrivalAppliedNonceRef.current = arrival.nonce;
+    const actions = arrival.actions as unknown as ViewerAction[];
+    (async () => {
+      try {
+        const reports = await runViewerActions(actions);
+        const failed = reports.filter(r => !r.ok);
+        if (failed.length) {
+          console.warn('[arrival] some actions failed', failed.map(r => r.error));
+        }
+      } catch (e) {
+        console.warn('[arrival] replay failed', e);
+      } finally {
+        dispatch(clearArrivalActions());
+      }
+    })();
+  }, [
+    arrival,
+    loadedStructure,
+    instance,
+    activeChainId,
+    activeFamily,
+    viewMode,
+    masterData,
+    pendingAligns,
+    activeChainData,
+    runViewerActions,
+    dispatch,
+  ]);
 
   // ── Assistant target: enables the cross-page PillChatInput to drive this viewer ──
   const assistantValue = useMemo<AssistantTargetValue | null>(() => {

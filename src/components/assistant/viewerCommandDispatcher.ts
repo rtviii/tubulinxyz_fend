@@ -14,7 +14,7 @@ import {
   type FilterSpec,
   type TrackEntry,
 } from '@/store/slices/annotationTracksSlice';
-import type { ActionReport, ViewerAction } from './types';
+import type { ActionReport, ViewerAction, ViewerActionType } from './types';
 
 // Extra capabilities the call-site (the structure page) supplies for actions
 // that need more than a MolstarInstance — e.g. AlignChain needs the page's
@@ -38,6 +38,37 @@ export interface ViewerDispatchContext {
   focusBindingSite?: (chemicalId: string, authAsymId?: string | null) => Promise<void>;
 }
 
+// Defense-in-depth guard. The backend validates action args against Pydantic
+// models and drops bad ones, but the wire contract is stringly-typed
+// (`{ type: string, args }`), so we re-check here before touching molstar: an
+// unknown type or a missing required arg becomes a visible failed report
+// instead of a call like `focusChain(undefined)` that silently no-ops. The
+// Record<ViewerActionType, …> shape forces this table to track the union — add
+// an action type and TypeScript makes you list its required args here.
+const REQUIRED_ARGS: Record<ViewerActionType, string[]> = {
+  FocusChain: ['auth_asym_id'],
+  FocusResidue: ['auth_asym_id', 'auth_seq_id'],
+  FocusResidueRange: ['auth_asym_id', 'start', 'end'],
+  ClearFocus: [],
+  SetChainVisibility: ['auth_asym_id', 'visible'],
+  IsolateChain: ['auth_asym_id'],
+  HighlightChain: ['auth_asym_id'],
+  HighlightResidueRange: ['auth_asym_id', 'start', 'end'],
+  ClearHighlight: [],
+  AlignChain: ['rcsb_id', 'auth_asym_id'],
+  AddAnnotationTrack: ['label', 'spec', 'color'],
+  RemoveAnnotationTrack: ['label_match'],
+  FocusBindingSite: ['chemical_id'],
+};
+
+function validateAction(action: ViewerAction): string | null {
+  const required = REQUIRED_ARGS[action.type];
+  if (!required) return `unknown action type: ${(action as { type?: string }).type ?? '(none)'}`;
+  const args = (action.args ?? {}) as Record<string, unknown>;
+  const missing = required.filter((k) => args[k] === undefined || args[k] === null);
+  return missing.length ? `missing arg(s) for ${action.type}: ${missing.join(', ')}` : null;
+}
+
 export async function dispatchViewerActions(
   instance: MolstarInstance,
   actions: ViewerAction[],
@@ -45,6 +76,12 @@ export async function dispatchViewerActions(
 ): Promise<ActionReport[]> {
   const reports: ActionReport[] = [];
   for (const action of actions) {
+    const invalid = validateAction(action);
+    if (invalid) {
+      console.error('[viewerDispatcher] rejected action', action?.type, invalid);
+      reports.push({ action, ok: false, error: invalid });
+      continue;
+    }
     try {
       await dispatchOne(instance, action, ctx);
       reports.push({ action, ok: true });

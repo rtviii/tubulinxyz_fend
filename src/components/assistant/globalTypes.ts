@@ -52,6 +52,10 @@ export interface ActionCard {
   label: string;
   description?: string;
 
+  // Server-assigned stable id (hash of the card's semantic key). Used as the
+  // React key and the validation-map key, and to dedupe on render.
+  id?: string;
+
   // open_catalogue
   query_ref?: string;
 
@@ -86,6 +90,13 @@ export interface ActionCard {
 
   // clarify
   question?: string;
+
+  // Grounded viewer actions auto-applied on the destination page after the user
+  // clicks this card and the view settles (precompute-on-landing / replay-on-arrival).
+  // Stashed in the arrivalActions slice on click; replayed via dispatchViewerActions.
+  // Typed locally (not ViewerActionCall) to avoid an import cycle: types.ts imports
+  // from this module.
+  arrival_actions?: Array<{ type: string; args: Record<string, unknown> }>;
 }
 
 export type QueryTarget = 'structures' | 'polymers' | 'ligands';

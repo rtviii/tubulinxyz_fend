@@ -11,7 +11,7 @@
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { buildCatalogueUrl, buildStructureUrl } from '@/lib/url_state';
-import type { GlobalNLResponse } from './globalTypes';
+import type { ActionCard } from './globalTypes';
 
 export type InlineEntityTone = 'structure' | 'ligand' | 'family';
 
@@ -110,7 +110,7 @@ export function inlineEntitiesFromCard(card: {
 // Helpers
 // ---------------------------------------------------------------------------
 
-export function entitiesFromGlobalResponse(response: GlobalNLResponse): InlineEntity[] {
+export function entitiesFromGlobalResponse(response: { cards: ActionCard[] }): InlineEntity[] {
   const seen = new Set<string>();
   const out: InlineEntity[] = [];
   const push = (match: string | undefined, href: string, tone: InlineEntityTone) => {

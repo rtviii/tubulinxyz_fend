@@ -3,13 +3,14 @@
 // Landing-page chat: a clean, centered assistant input that slides up once a
 // query is in flight, with suggestions underneath while idle and result cards
 // piping in below once the backend responds. Self-contained — POSTs directly
-// to /nl_query/global (no AssistantTargetProvider needed here).
+// to the grounded /assistant/query loop (page_context.page='landing'); no
+// AssistantTargetProvider needed here.
 
 import { useCallback, useRef, useState } from 'react';
 import { ArrowUp } from 'lucide-react';
 import { AssistantResultsPanel } from '@/components/assistant/AssistantResultsPanel';
 import { ExampleQueries } from '@/components/assistant/ExampleQueries';
-import type { GlobalNLResponse, NLGlobalResponseBody } from '@/components/assistant/globalTypes';
+import type { AssistantResult } from '@/components/assistant/types';
 import { API_BASE_URL } from '@/config';
 
 const EXAMPLES = [
@@ -40,7 +41,7 @@ function ThinkingDots() {
 export function LandingChatPanel() {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<GlobalNLResponse | null>(null);
+  const [response, setResponse] = useState<AssistantResult | null>(null);
   const [note, setNote] = useState<Note>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -57,10 +58,10 @@ export function LandingChatPanel() {
     setLoading(true);
     setNote(null);
     try {
-      const resp = await fetch(`${API_BASE_URL}/nl_query/global`, {
+      const resp = await fetch(`${API_BASE_URL}/assistant/query`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text: trimmed }),
+        body: JSON.stringify({ text: trimmed, page_context: { page: 'landing' } }),
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
@@ -69,17 +70,19 @@ export function LandingChatPanel() {
         setNote({ kind: 'error', message: `HTTP ${resp.status}: ${body.slice(0, 200)}` });
         return;
       }
-      const data = (await resp.json()) as NLGlobalResponseBody;
+      const data = (await resp.json()) as AssistantResult;
       if (data.kind === 'clarify') {
         setResponse(null);
         setNote({ kind: 'clarify', message: data.clarification ?? 'Please clarify.' });
         return;
       }
-      if (!data.response) {
-        setNote({ kind: 'error', message: 'Empty response.' });
+      if (data.kind === 'cannot') {
+        // Honest soft decline (amber, not a red error).
+        setResponse(null);
+        setNote({ kind: 'clarify', message: data.reason ?? "I can't answer that." });
         return;
       }
-      setResponse(data.response);
+      setResponse(data);
       setText('');
     } catch (e) {
       if (controller.signal.aborted || (e instanceof Error && e.name === 'AbortError')) return;

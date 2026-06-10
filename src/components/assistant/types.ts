@@ -140,6 +140,9 @@ export interface AssistantResult {
   viewer_actions?: AssistantViewerActionCall[];
   suggested_actions?: AssistantSuggestedAction[];
   dropped_actions?: Array<{ type: string; reason: string }>;
+  // Per-card {ok, reason} keyed by card.id (mirrors GlobalNLResponse.validation).
+  // The landing panel keys card dimming on it.
+  validation?: Record<string, { ok: boolean; reason?: string }>;
   trace?: AssistantTraceEntry[];
 }
 

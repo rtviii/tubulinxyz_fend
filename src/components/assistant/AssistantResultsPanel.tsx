@@ -16,11 +16,16 @@ import { X, LayoutGrid, Eye, Microscope, FlaskConical, Dna, HelpCircle } from 'l
 import { useListStructuresQuery, type ListStructuresApiArg } from '@/store/tubxz_api';
 import { getHexForFamily } from '@/components/molstar/colors/palette';
 import { API_BASE_URL } from '@/config';
-import type { ActionCard, ActionKind, GlobalNLResponse, QuerySpec } from './globalTypes';
+import type { ActionCard, ActionKind, QuerySpec } from './globalTypes';
+import type { AssistantResult } from './types';
+import { asAssistantTable } from './types';
 import { cardToHref } from './globalCommandDispatcher';
-import { PillifiedText, entitiesFromGlobalResponse, inlineEntitiesFromCard } from './PillifiedText';
+import { PillifiedText, inlineEntitiesFromCard } from './PillifiedText';
+import { AssistantAnswer } from './AssistantAnswer';
+import { AssistantTable } from './AssistantTable';
 import { useAppDispatch } from '@/store/store';
 import { showAssistantToast } from '@/store/slices/assistantToastSlice';
+import { setArrivalActions } from '@/store/slices/arrivalActionsSlice';
 
 const ACTION_META: Record<ActionKind, { label: string; Icon: typeof LayoutGrid; tone: string }> = {
   open_catalogue: { label: 'Browse', Icon: LayoutGrid, tone: 'text-slate-500 bg-slate-50 border-slate-200' },
@@ -31,8 +36,26 @@ const ACTION_META: Record<ActionKind, { label: string; Icon: typeof LayoutGrid; 
   clarify: { label: 'Clarify', Icon: HelpCircle, tone: 'text-blue-600 bg-blue-50 border-blue-200' },
 };
 
+// Defensive dedup: the backend already collapses true duplicates and assigns a
+// stable `id`, but we dedup again on render so a duplicate can never reach the
+// grid (the user's top annoyance). Falls back to a semantic key when `id` is
+// absent (e.g. an un-hydrated response).
+function dedupeCards(cards: ActionCard[]): ActionCard[] {
+  const seen = new Set<string>();
+  const out: ActionCard[] = [];
+  for (const c of cards) {
+    const key =
+      c.id ??
+      [c.action, c.rcsb_id, c.query_ref, c.primary_organism_id, c.family, c.chemical_id].join('|');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  return out;
+}
+
 export interface AssistantResultsPanelProps {
-  response: GlobalNLResponse;
+  response: AssistantResult;
   onDismiss: () => void;
   // When embedded inside a column (e.g. the landing chat panel) drop the
   // page-width centering so the panel fills its container instead.
@@ -53,20 +76,30 @@ export function AssistantResultsPanel({ response, onDismiss, embedded = false }:
 
   const handleCardClick = (card: ActionCard, ok: boolean) => {
     if (!ok || card.action === 'clarify') return;
-    const { href } = cardToHref(card, response.queries);
+    const { href } = cardToHref(card, response.queries ?? []);
     if (href && href !== '#') {
+      // Precompute -> replay: stash the card's grounded arrival actions so the
+      // destination page can replay them once the view settles (see the replay
+      // effect in the structure page). Must dispatch BEFORE navigating.
+      if (card.arrival_actions?.length) {
+        dispatch(setArrivalActions({ rcsbId: card.rcsb_id ?? null, actions: card.arrival_actions }));
+      }
       dispatch(showAssistantToast(card));
       router.push(href);
     }
   };
 
+  // Dedup defensively before anything reads the card list.
+  const cards = dedupeCards(response.cards ?? []);
+
   // Single-clarify shortcut: render just the prompt, no grid.
-  const onlyCard = response.cards.length === 1 ? response.cards[0] : null;
+  const onlyCard = cards.length === 1 ? cards[0] : null;
   const isClarifyOnly = onlyCard?.action === 'clarify';
 
-  // Inline entities for the blurb — derived from cards so we don't pillify
-  // anything that's not real.
-  const inlineEntities = entitiesFromGlobalResponse(response);
+  // Grounded answer (full answers on landing): prose via AssistantAnswer, the
+  // structured table via AssistantTable — same channels as the structure page.
+  const answerMarkdown = response.answer_markdown ?? response.summary ?? '';
+  const table = asAssistantTable((response.data as Record<string, unknown> | null)?.table);
 
   return (
     <div
@@ -80,17 +113,14 @@ export function AssistantResultsPanel({ response, onDismiss, embedded = false }:
         {/* Header: blurb + dismiss */}
         <div className="px-4 py-3 flex items-start gap-3 border-b border-slate-100">
           <div className="flex-1 min-w-0">
-            {response.blurb ? (
-              <PillifiedText
-                text={response.blurb}
-                entities={inlineEntities}
-                className="text-[13px] text-slate-700 leading-snug"
-              />
+            {answerMarkdown ? (
+              <AssistantAnswer markdown={answerMarkdown} />
             ) : (
               <p className="text-[11px] text-slate-400 uppercase tracking-wider">
-                {isClarifyOnly ? 'Clarification' : `${response.cards.length} suggestion${response.cards.length === 1 ? '' : 's'}`}
+                {isClarifyOnly ? 'Clarification' : `${cards.length} suggestion${cards.length === 1 ? '' : 's'}`}
               </p>
             )}
+            {table && <AssistantTable table={table} className="mt-2" />}
           </div>
           <button
             onClick={onDismiss}
@@ -109,17 +139,17 @@ export function AssistantResultsPanel({ response, onDismiss, embedded = false }:
             </p>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {response.cards.map((card, i) => {
-                const v = response.validation?.[`card_${i}`];
+              {cards.map((card, i) => {
+                const v = response.validation?.[card.id ?? `card_${i}`];
                 const ok = v?.ok !== false;
                 return (
                   <CardChip
-                    key={i}
+                    key={card.id ?? i}
                     card={card}
-                    queries={response.queries}
+                    queries={response.queries ?? []}
                     ok={ok}
                     reason={v?.reason}
-                    featured={i === 0 && response.cards.length > 1}
+                    featured={i === 0 && cards.length > 1}
                     onClick={() => handleCardClick(card, ok)}
                   />
                 );
