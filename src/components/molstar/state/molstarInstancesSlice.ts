@@ -15,6 +15,11 @@ interface MolstarInstanceState {
   tubulinClassification: TubulinClassification;
   components: Record<string, Component>;
   componentStates: Record<string, ComponentUIState>;
+  /** Explicit per-ligand visibility set by the user (keyed by ligand component
+   *  key / uniqueKey). Takes precedence over the geometry-based proximity filter
+   *  in `filterLigandsForChain`, so a ligand the user hid/showed stays that way
+   *  across chain switches instead of popping back on. Reset on structure reload. */
+  userLigandVisibility: Record<string, boolean>;
   activeColorscheme: string | null;
   viewMode: ViewMode;
   activeMonomerChainId: string | null;
@@ -33,6 +38,7 @@ const createEmptyInstanceState = (): MolstarInstanceState => ({
   tubulinClassification: {},
   components: {},
   componentStates: {},
+  userLigandVisibility: {},
   activeColorscheme: null,
   viewMode: 'structure',
   activeMonomerChainId: null,
@@ -50,7 +56,7 @@ const initialState: MolstarInstancesState = {
     structure: createEmptyInstanceState(),
     monomer: createEmptyInstanceState(),
     msalite: createEmptyInstanceState(),
-    landing_1jff: createEmptyInstanceState(),
+    landing_9mlf: createEmptyInstanceState(),
     landing_6wvm: createEmptyInstanceState(),
   },
 };
@@ -100,6 +106,14 @@ export const molstarInstancesSlice = createSlice({
       const { instanceId, componentKey, visible } = action.payload;
       const s = state.instances[instanceId].componentStates[componentKey];
       if (s) s.visible = visible;
+    },
+
+    setUserLigandVisibility: (
+      state,
+      action: PayloadAction<{ instanceId: MolstarInstanceId; componentKey: string; visible: boolean }>
+    ) => {
+      const { instanceId, componentKey, visible } = action.payload;
+      state.instances[instanceId].userLigandVisibility[componentKey] = visible;
     },
 
     setComponentHovered: (
@@ -203,6 +217,7 @@ export const {
   setLoadedStructure,
   registerComponents,
   setComponentVisibility,
+  setUserLigandVisibility,
   setComponentHovered,
   setActiveColorscheme,
   setViewMode,

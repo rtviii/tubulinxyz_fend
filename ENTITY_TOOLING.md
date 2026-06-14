@@ -11,6 +11,124 @@ The deeper / more chronological material lives in `PLAN_llm_entity_tooling.md`
 (working spec + session logs) and `~/.claude/plans/let-s-plan-first-what-bubbly-wombat.md`
 (curated-verb plan). This doc is the navigable summary.
 
+> NOTE (2026-06-13): Sections 1-13 below describe the older `/nl_query/*` era.
+> The landing page (and the catalogue/structure chat) now run through a single
+> grounded orchestrator at `POST /assistant/query`
+> (`tubulinxyz/api/nl_translator/orchestrator.py`). Read section 0 first for the
+> current architecture; the rest is still accurate for the shared vocabularies
+> (`EntityRef`, `ActionCard`, `ViewerAction`) and the anti-hallucination resolver.
+
+---
+
+## 0. Current architecture (2026-06-13): grounded orchestrator + demo interactions
+
+### The loop
+`POST /assistant/query { text, page_context }` → `run_assistant` runs a bounded
+tool-use loop (max 5 steps). READ tools (find_structures, get_structure_chains,
+resolve_structure, get_binding_site, get_binding_contacts, count_modifications,
+count_variants, get_facets) gather real data; one COMMIT tool (`respond` /
+`request_clarification` / `cannot_answer`) ends it. The model NEVER states a
+residue/count/id from memory — the ABSOLUTE GROUNDING RULE forces a lookup.
+`respond` returns one `AssistantResult` carrying any of: answer_markdown,
+data.table, cards (+queries), entities, viewer_actions, suggested_actions,
+validation, trace. TS mirror: `src/components/assistant/types.ts`.
+
+### Landing demo interactions (the new surface)
+The landing page shows a live Molstar demo (9MLF α/β dimer: A=α, B=β). Its
+identity + chains travel in `page_context.demo_rcsb_id` / `demo_chains`, so the
+orchestrator can point at it. Three pillars:
+
+1. master→auth grounding (`api/nl_translator/grounding.py`). Every position the
+   tools return is a MASTER (canonical MSA) index, not a structure's auth_seq_id.
+   `ground_master_positions(rcsb, chain, family, masters)` maps them via the
+   profile JSON's `entities[*].chain_index_mappings[chain].master_to_auth_seq_id`
+   (built in ETL). Gap/unmodeled positions → None → dropped. Honest by
+   construction; never highlights a residue that isn't there.
+
+2. Deterministic harvest (`orchestrator._harvest_demo_entities` /
+   `_harvest_demo_cards`). The assistant model is haiku (per `.env`, to conserve
+   quota) and does NOT reliably emit entities/cards by hand. So the backend
+   harvests them from the tool results it already has, on landing only:
+   - one `residue_range` entity per grounded binding/PTM/variant position (so
+     every position number in the prose becomes hover-interactive);
+   - one `residue_set` entity per ligand pocket (so hovering the LIGAND NAME, or
+     a "TA1 pocket (35)" pill, lights up the WHOLE site via
+     `MolstarInstance.highlightResidues`/`focusResidues` +
+     `buildMultiResidueQuery`);
+   - a fallback `open_structure` card pointing at a real bound structure
+     (resolve_structure result, or resolved ourselves from the binding lookup)
+     when the model emitted no card.
+   Honesty gate `_ground_landing_entities` + `_filter_landing_actions` keep only
+   demo-chain entities and whole-chain actions (no AddAnnotationTrack/AlignChain/
+   FocusBindingSite on landing — those throw outside expert mode).
+
+3. Frontend rendering (`src/components/assistant/`):
+   - `ActionPlanCard.tsx` — roomy offer: title + subtitle + a VISIBLE numbered
+     step list (nav line(s) via `cardSummary.summarizeCardLines` + each
+     `arrival_action` via `actionHumanizer.humanizeViewerAction`) + one CTA.
+     Replaces the cramped `CardChip` on landing; multiple offers stack.
+   - `EntityHoverText.tsx` (via an `AssistantAnswer` `renderText` seam) — wraps
+     answer-text tokens that match a grounded entity in hover→3D-highlight spans.
+     Residue number → that residue; ligand name → the pocket. Displayed number is
+     the master position; the highlight uses the grounded auth_seq_id.
+   - `entityHighlight.ts` — shared ephemeral highlight helpers + `canGroundOnDemo`
+     gate; `EntityKind` now includes `residue_set` (positions[]).
+   - Pill row shows named targets (chains, ligands, pockets); individual residues
+     are inline-only so the row doesn't balloon.
+
+### Status (what works / what's weak)
+Works reliably now: residue hover-highlights and a card for binding / PTM /
+variant questions; pocket-as-one-unit highlight; comparison cards with
+arrival_actions; catalogue/variant cards. Shipped 2026-06-13 (see § 0.1):
+- **Range-aware inline**: harvest collapses contiguous auth runs into one
+  `residue_range` (start≠end); the prose token "a-b" lights the whole span.
+- **Category tint + pre-paint**: every harvested residue carries
+  `category` (binding/modification/variant); inline text + pills tint by it, and
+  an answer pre-paints the demo dimer by category (`useAssistantPrepaint`,
+  auto-restored on dismiss / new query / tab change; mutually exclusive with the
+  manual Demos).
+- **Region entities**: a new `region` kind groups grounded residues that fall in
+  a NAMED structural region — C-terminal tail, GTP/nucleotide site, MREI motif —
+  sourced honestly from UniProt curated features mapped into the master alignment
+  (`lib/etl/build_regions.py` → `data/genenames/regions_tubulin_{a,b}.json`,
+  read at runtime by `api/nl_translator/regions.py`). Hover a region pill →
+  cluster lights; click → frame. Residues in no named region stay as their inline
+  range run (no redundant span pills). Nogales loop names (M-loop, T7) deferred.
+
+Weak / next:
+- chain entities aren't always surfaced when a chain action is offered (soft).
+- no reverse 3D→text sync on landing; ligands actually present in the demo
+  (GTP/GDP) aren't highlighted as ligands.
+- assistant runs on haiku; prose + any model-emitted extras would sharpen on
+  Sonnet (`OPENAI_ASSISTANT_MODEL`, commented out).
+- `kd_taxol_honest` eval case is a flaky cannot/clarify/respond boundary.
+
+### § 0.1 Roadmap — richer interactions & actions (prioritized)
+Done (2026-06-13): range-aware inline; category tint + demo pre-paint; region
+entities (UniProt-sourced named regions, Nogales loop names deferred). See Status.
+
+Still open:
+- Cited Nogales loop ontology (M-loop, T7-loop, H6-H7, …): a small per-family
+  table mapping the canonical loop residue ranges → master, layered OVER the
+  UniProt regions so the taxane-pocket clusters get their real names instead of
+  staying as inline span runs. The region table builder + runtime already exist;
+  this is just an additional, cited region source with a `precedence` above the
+  UniProt features.
+- "Show the pocket" + "Frame the pocket" as explicit suggested-action chips
+  (alongside the pocket pill), and emit 2 card options where sensible
+  (easy-mode view + expert compare).
+- Variant/PTM answers → an open_expert card that arrives with the track painted
+  (arrival_actions), like the comparison case already does.
+- Reverse 3D→text sync on landing (hover a residue in Molstar → emphasize its
+  number in the answer), reusing `subscribeToHover` + `matchesHover`.
+- Surface demo-present ligands (GTP/GDP) as real `ligand` entities.
+- chain entities not always surfaced when a chain action is offered (soft).
+Infra:
+- Move the assistant loop to Sonnet if quota allows; tighten the kd honesty case.
+
+Eval: `scripts/eval_assistant.py` (landing cases + `landing_demo_honesty`
+invariant). Run after any orchestrator/grounding/harvest change (Neo4j up).
+
 ---
 
 ## 1. The three endpoints
@@ -264,7 +382,7 @@ validated.
 
 ## 7. Vocabularies
 
-### `EntityRef` (7 kinds; flat schema, `kind` discriminator)
+### `EntityRef` (9 kinds; flat schema, `kind` discriminator)
 
 | kind             | typical payload                                        |
 |------------------|--------------------------------------------------------|
@@ -275,8 +393,13 @@ validated.
 | `ligand`         | `chemical_id`, optional `in_structure`/instance coords |
 | `variant`        | `family`, `master_index`, `wild_type`, `observed`     |
 | `residue_range`  | `rcsb_id`, `auth_asym_id`, `start`, `end`             |
+| `residue_set`    | `auth_asym_id`, `positions[]`, `chemical_id` (pocket)  |
+| `region`         | `auth_asym_id`, `positions[]`, `label` (named region)  |
 
-Pydantic: `api/nl_translator/global_actions.py`. TS mirror:
+Two cross-cutting fields are set by the demo harvest (never the model):
+`category` (`binding`/`modification`/`variant`, tints the residue) and `label`
+(human region name on `region`). Pydantic: `api/nl_translator/global_actions.py`.
+TS mirror:
 `src/components/assistant/globalTypes.ts`. Used both by `/global` (cards and
 inline pill derivation) and by `/viewer` (MentionEntities).
 

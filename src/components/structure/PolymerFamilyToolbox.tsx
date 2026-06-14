@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Focus, ArrowUpRight } from 'lucide-react';
 import { useAppSelector } from '@/store/store';
 import { getHexForFamily, TUBULIN_GHOST_COLORS } from '@/components/molstar/colors/palette';
+import { isAlignableFamily } from '@/lib/profile_utils';
 import type { StructureProfile } from '@/lib/profile_utils';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { PolymerComponent } from '@/components/molstar/core/types';
@@ -112,12 +113,22 @@ interface PolymerFamilyToolboxProps {
   group: EntityGroup;
   loadedStructure: string | null;
   instance: MolstarInstance | null;
+  /** Expert (monomer) mode: chain rows switch the active chain instead of
+   *  opening a new expert view, and the chip highlights when it owns the
+   *  active chain. */
+  isMonomerView?: boolean;
+  activeChainId?: string | null;
+  /** Switch the active monomer chain (expert mode). */
+  onSwitchChain?: (chainId: string) => void;
 }
 
 export function PolymerFamilyToolbox({
   group,
   loadedStructure,
   instance,
+  isMonomerView = false,
+  activeChainId = null,
+  onSwitchChain,
 }: PolymerFamilyToolboxProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -128,6 +139,13 @@ export function PolymerFamilyToolbox({
     const cs = state.molstarInstances.instances.structure?.componentStates;
     return cs ? chainIds.some(id => cs[id]?.visible ?? true) : true;
   });
+
+  // Whether this family has an MSA alignment (i.e. its chains can open in
+  // expert mode). Non-alignable families (other tubulins, MAPs, unclassified)
+  // are still listed and focusable in 3D, just not openable in expert view.
+  const alignable = isAlignableFamily(group.family);
+  // In expert mode, light up the chip whose family owns the active chain.
+  const ownsActiveChain = isMonomerView && activeChainId != null && chainIds.includes(activeChainId);
 
   const familyName = familyDisplayName(group.family);
   const familyColor = getHexForFamily(group.family);
@@ -144,8 +162,17 @@ export function PolymerFamilyToolbox({
     if (group.chains[0]) instance?.focusChain(group.chains[0].chainId);
   };
   const enterExpertOnChain = (chainId: string) => {
-    if (!loadedStructure) return;
-    router.push(`/structures/${loadedStructure}?mode=monomer&chain=${chainId}`);
+    // Prefer the imperative path (same as the toolbar's Expert button): the
+    // structure page snapshots URL state only at mount, so a router.push to the
+    // already-loaded page wouldn't switch views. Fall back to a URL navigation
+    // when no live instance is available (e.g. cross-page entry).
+    if (instance) {
+      instance.enterMonomerView(chainId);
+      return;
+    }
+    if (loadedStructure) {
+      router.push(`/structures/${loadedStructure}?mode=monomer&chain=${chainId}`);
+    }
   };
 
   const closeTimer = useMemo(() => ({ id: 0 as any }), []);
@@ -166,11 +193,11 @@ export function PolymerFamilyToolbox({
       {/* ── Chip ── */}
       <button
         type="button"
-        className="flex items-center gap-1 px-1.5 py-0.5 rounded-full
-                   border border-slate-200/80 bg-white hover:bg-slate-50
-                   text-[10px] transition-colors"
+        className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full
+                   border bg-white hover:bg-slate-50 text-[10px] transition-colors
+                   ${ownsActiveChain ? 'border-slate-400 ring-1 ring-slate-300' : 'border-slate-200/80'}`}
         style={{ backgroundColor: ghostHex(group.family) + '18' }}
-        title={familyName}
+        title={isMonomerView ? `${familyName} — switch chain` : familyName}
       >
         <span
           className="font-semibold text-[11px] leading-none"
@@ -211,13 +238,15 @@ export function PolymerFamilyToolbox({
                 {uniprot}
               </a>
             )}
-            <button
-              onClick={toggleAll}
-              className="p-0.5 text-slate-400 hover:text-slate-700"
-              title={anyVisible ? 'Hide all chains in this group' : 'Show all chains in this group'}
-            >
-              {anyVisible ? <Eye size={11} /> : <EyeOff size={11} />}
-            </button>
+            {!isMonomerView && (
+              <button
+                onClick={toggleAll}
+                className="p-0.5 text-slate-400 hover:text-slate-700"
+                title={anyVisible ? 'Hide all chains in this group' : 'Show all chains in this group'}
+              >
+                {anyVisible ? <Eye size={11} /> : <EyeOff size={11} />}
+              </button>
+            )}
             <button
               onClick={focusFirst}
               className="p-0.5 text-slate-400 hover:text-slate-700"
@@ -231,13 +260,22 @@ export function PolymerFamilyToolbox({
               {organism}
             </div>
           )}
+          {!alignable && (
+            <div className="px-2 pb-1 text-[9px] text-amber-600/90 leading-snug">
+              No alignment yet — expert / MSA view unavailable for this family.
+            </div>
+          )}
           <div className="px-1 pb-1 flex flex-wrap gap-0.5 border-t border-slate-100 pt-1">
             {group.chains.map(chain => (
               <ChainChip
                 key={chain.chainId}
                 chainId={chain.chainId}
                 instance={instance}
+                mode={isMonomerView ? 'expert' : 'easy'}
+                isActive={chain.chainId === activeChainId}
+                alignable={alignable}
                 onEnterExpert={() => enterExpertOnChain(chain.chainId)}
+                onSwitch={() => onSwitchChain?.(chain.chainId)}
               />
             ))}
           </div>
@@ -247,14 +285,24 @@ export function PolymerFamilyToolbox({
   );
 }
 
+const NO_ALIGN_TIP = 'No alignment for this family yet — expert / MSA view unavailable';
+
 function ChainChip({
   chainId,
   instance,
+  mode,
+  isActive,
+  alignable,
   onEnterExpert,
+  onSwitch,
 }: {
   chainId: string;
   instance: MolstarInstance | null;
+  mode: 'easy' | 'expert';
+  isActive: boolean;
+  alignable: boolean;
   onEnterExpert: () => void;
+  onSwitch: () => void;
 }) {
   const visible = useAppSelector(
     state => state.molstarInstances.instances.structure?.componentStates?.[chainId]?.visible ?? true
@@ -263,6 +311,46 @@ function ChainChip({
   const handleEnter = () => instance?.highlightChain(chainId, true);
   const handleLeave = () => instance?.highlightChain(chainId, false);
 
+  // Expert mode: the chain row IS the switch control. Active chain is marked;
+  // non-alignable chains are inert with a disclaimer tooltip.
+  if (mode === 'expert') {
+    const tip = isActive
+      ? 'Current chain'
+      : alignable
+        ? `Switch to chain ${chainId}`
+        : NO_ALIGN_TIP;
+    return (
+      <div
+        className={`group/chain flex items-center gap-0.5 pl-1.5 pr-0.5 py-px rounded
+                    border text-[10px] font-mono transition-colors
+                    ${isActive
+                      ? 'border-slate-400 bg-slate-100 text-slate-900'
+                      : alignable
+                        ? 'border-slate-200 bg-white text-slate-700'
+                        : 'border-slate-100 bg-slate-50 text-slate-300'}`}
+        onMouseEnter={handleEnter}
+        onMouseLeave={handleLeave}
+      >
+        <button
+          onClick={() => { if (!isActive && alignable) onSwitch(); }}
+          disabled={isActive || !alignable}
+          className="px-0.5 disabled:cursor-default"
+          title={tip}
+        >
+          {chainId}
+        </button>
+        <button
+          onClick={() => instance?.focusChain(chainId)}
+          className="p-0.5 text-slate-300 hover:text-slate-700"
+          title="Focus in 3D"
+        >
+          <Focus size={9} />
+        </button>
+      </div>
+    );
+  }
+
+  // Easy mode: visibility + focus + (gated) open-in-expert.
   return (
     <div
       className={`group/chain flex items-center gap-0.5 pl-1.5 pr-0.5 py-px rounded
@@ -289,9 +377,10 @@ function ChainChip({
         <Focus size={9} />
       </button>
       <button
-        onClick={onEnterExpert}
-        className="p-0.5 text-slate-300 hover:text-blue-600"
-        title="Open in expert mode"
+        onClick={() => { if (alignable) onEnterExpert(); }}
+        disabled={!alignable}
+        className="p-0.5 text-slate-300 hover:text-blue-600 disabled:text-slate-200 disabled:cursor-default"
+        title={alignable ? 'Open in expert mode' : NO_ALIGN_TIP}
       >
         <ArrowUpRight size={9} />
       </button>

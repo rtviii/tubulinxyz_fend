@@ -5,7 +5,7 @@ import { Provider } from 'react-redux';
 import { makeStore, AppStore } from '@/store/store';
 import './globals.css';
 import { MolstarInstanceManagerProvider } from '@/components/molstar/services/MolstarInstanceManager';
-import { IBM_Plex_Sans } from 'next/font/google';
+import { IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google';
 import { FloatingNav } from '@/components/ui/FloatingNav';
 import { AssistantToastHost } from '@/components/assistant/AssistantToastHost';
 
@@ -13,6 +13,13 @@ const ibmPlexSans = IBM_Plex_Sans({
   subsets: ['latin'],
   weight: ['300', '400', '500', '600', '700'],
   variable: '--font-ibm-plex-sans',
+  display: 'swap',
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-ibm-plex-mono',
   display: 'swap',
 });
 
@@ -28,7 +35,7 @@ export default function RootLayout({
   }
 
   return (
-    <html lang="en" className={ibmPlexSans.variable}>
+    <html lang="en" className={`${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
       <body className="bg-white font-sans">
         <Provider store={storeRef.current}>
           <MolstarInstanceManagerProvider>

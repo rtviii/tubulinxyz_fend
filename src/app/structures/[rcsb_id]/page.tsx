@@ -25,7 +25,7 @@ import { useViewerSync } from '@/hooks/useViewerSync';
 import { useResolveTracks } from '@/hooks/useResolveTracks';
 import { useMultiChainAnnotations, ChainAnnotationFetcher } from '@/hooks/useMultiChainAnnotations';
 import { createClassificationFromProfile } from '@/services/profile_service';
-import { getFamilyForChain, StructureProfile } from '@/lib/profile_utils';
+import { getFamilyForChain, chainIsAlignable, StructureProfile } from '@/lib/profile_utils';
 import { ViewerToolbar } from '@/components/structure/ViewerToolbar';
 import { MonomerToolbar } from '@/components/structure/MonomerToolbar';
 import { ChainAnchorPill } from '@/components/structure/ChainAnchorPill';
@@ -162,6 +162,16 @@ function StructureProfilePageInner() {
     () => (sequencePanelChainId ? getFamilyForChain(profile, sequencePanelChainId) : undefined),
     [sequencePanelChainId, profile]
   );
+
+  // Default chain for "enter expert mode": only α/β tubulin chains have an MSA
+  // alignment, so prefer the user's currently-selected chain if it qualifies,
+  // else the first alignable chain. null => expert mode disabled for this structure.
+  const expertDefaultChainId = useMemo(() => {
+    if (structureSequenceChainId && chainIsAlignable(profile, structureSequenceChainId)) {
+      return structureSequenceChainId;
+    }
+    return polymerComponents.find(p => chainIsAlignable(profile, p.chainId))?.chainId ?? null;
+  }, [structureSequenceChainId, polymerComponents, profile]);
 
   // Only fetch master data at page level in monomer mode (for MonomerSidebar's masterLength).
   // In structure mode, the panel handles its own master data to avoid RTK Query cache interference.
@@ -586,10 +596,18 @@ function StructureProfilePageInner() {
           if (!urlHydratedRef.current) {
             urlHydratedRef.current = true;
             if (urlInitialState.mode === 'monomer' && urlInitialState.chain) {
-              try {
-                await instance.enterMonomerView(urlInitialState.chain);
-              } catch (e) {
-                console.warn('[url-hydration] enterMonomerView failed:', e);
+              // Only honor a deep-linked expert view for an alignable (α/β)
+              // chain; otherwise stay in easy mode rather than open an empty MSA.
+              if (chainIsAlignable(profileData, urlInitialState.chain)) {
+                try {
+                  await instance.enterMonomerView(urlInitialState.chain);
+                } catch (e) {
+                  console.warn('[url-hydration] enterMonomerView failed:', e);
+                }
+              } else {
+                console.warn(
+                  `[url-hydration] expert mode requested for non-alignable chain ${urlInitialState.chain} — staying in easy mode (no MSA alignment)`
+                );
               }
             }
             if (urlInitialState.align?.length) {
@@ -1103,9 +1121,7 @@ function StructureProfilePageInner() {
                 instance={instance}
                 loadedStructure={loadedStructure}
                 profile={profile}
-                defaultMonomerChainId={
-                  structureSequenceChainId ?? polymerComponents[0]?.chainId ?? null
-                }
+                defaultMonomerChainId={expertDefaultChainId}
               />
             )}
           </div>

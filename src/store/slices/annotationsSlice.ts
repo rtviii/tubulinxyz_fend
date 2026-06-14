@@ -118,11 +118,11 @@ export const annotationsSlice = createSlice({
   initialState,
   reducers: {
     setPrimaryChain: (state, action: PayloadAction<string | null>) => {
+      // Note: annotation rows (variants/ligands/PTMs) deliberately stay OFF by
+      // default here -- the user opts in explicitly via the aux-row controls.
+      // (We used to auto-enable showVariants for the new primary, which made
+      // expert mode pop a variants track the user never asked for.)
       state.primaryChainKey = action.payload;
-      // Auto-enable variants for the new primary if data already loaded
-      if (action.payload && state.chains[action.payload]) {
-        state.chains[action.payload].visibility.showVariants = true;
-      }
     },
 
     setChainLoading: (state, action: PayloadAction<string>) => {

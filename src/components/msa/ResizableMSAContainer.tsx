@@ -177,7 +177,7 @@ export const ResizableMSAContainer = forwardRef<ResizableMSAContainerHandle, Res
       const onMove = (ev: MouseEvent) => {
         if (!labelDragRef.current) return;
         const delta = ev.clientX - labelDragRef.current.startX;
-        const clamped = Math.max(60, Math.min(availableWidth * 0.5, labelDragRef.current.startW + delta));
+        const clamped = Math.max(90, Math.min(availableWidth * 0.5, labelDragRef.current.startW + delta));
         setUserLabelWidth(clamped);
       };
 

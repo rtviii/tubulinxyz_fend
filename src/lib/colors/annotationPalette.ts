@@ -22,6 +22,14 @@ export const MODIFICATION_COLORS: Record<string, string> = {
 
 export const DEFAULT_ANNOTATION_COLOR = '#9ca3af';
 
+// Category -> paint color for the assistant's pre-paint of grounded demo
+// residues. One distinct tint per source so a glance tells you what a residue is.
+export const CATEGORY_PAINT: Record<string, string> = {
+  binding:      '#f59e0b', // amber
+  modification: '#6366f1', // indigo
+  variant:      '#f97316', // orange
+};
+
 export const getVariantColor = (t: VariantType): string => VARIANT_COLORS[t];
 
 export const getModificationColor = (t: string): string =>

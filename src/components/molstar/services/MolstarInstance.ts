@@ -35,6 +35,7 @@ import {
   setLoadedStructure,
   registerComponents,
   setComponentVisibility,
+  setUserLigandVisibility,
   setComponentHovered,
   setActiveColorscheme,
   setViewMode,
@@ -47,12 +48,13 @@ import {
 import { Structure, StructureElement } from 'molstar/lib/mol-model/structure';
 import { Color } from 'molstar/lib/mol-util/color';
 import { Mat4 } from 'molstar/lib/mol-math/linear-algebra';
+import { isAlignableFamily } from '@/lib/profile_utils';
 import { StateTransforms } from 'molstar/lib/mol-plugin-state/transforms';
 import { StateSelection } from 'molstar/lib/mol-state';
 import { MolScriptBuilder as MS } from 'molstar/lib/mol-script/language/builder';
 import { StateObjectRef } from 'molstar/lib/mol-state';
 import { setSubtreeVisibility } from 'molstar/lib/mol-plugin/behavior/static/state';
-import { STYLIZED_POSTPROCESSING } from '../rendering/postprocessing-config';
+import { STYLIZED_POSTPROCESSING, flatBallAndStickParams } from '../rendering/postprocessing-config';
 import { alignAndSuperpose } from 'molstar/lib/mol-model/structure/structure/util/superposition';
 import { StructureSelectionQueries } from 'molstar/lib/mol-plugin-state/helpers/structure-selection-query';
 import { StructureSelection, QueryContext } from 'molstar/lib/mol-model/structure';
@@ -667,6 +669,8 @@ private componentLabelText(key: string, component: Component): string {
       }
     }
 
+    const userOverrides = this.instanceState.userLigandVisibility ?? {};
+
     for (const [key, component] of Object.entries(this.instanceState.components)) {
       if (!isLigandComponent(component)) continue;
 
@@ -686,12 +690,16 @@ private componentLabelText(key: string, component: Component): string {
         }
       }
 
-      this.viewer.setSubtreeVisibility(component.ref, isNear);
+      // An explicit user toggle wins over the geometry default so visibility
+      // persists across chain switches; untouched ligands follow proximity.
+      const finalVisible = key in userOverrides ? userOverrides[key] : isNear;
+
+      this.viewer.setSubtreeVisibility(component.ref, finalVisible);
       this.dispatch(
         setComponentVisibility({
           instanceId: this.id,
           componentKey: key,
-          visible: isNear,
+          visible: finalVisible,
         })
       );
     }
@@ -835,6 +843,15 @@ const color = getMolstarGhostColor(family);
   // ============================================================
 
   async enterMonomerView(chainId: string): Promise<void> {
+    // Expert mode requires a populated MSA, which only exists for families with
+    // an alignment (alpha/beta tubulin). Block other families here as a backstop
+    // so no entry path (URL deep-link, assistant, stray sidebar) can open an
+    // empty MSA. UI controls disable + disclaim this ahead of time.
+    if (!isAlignableFamily(this.getChainFamily(chainId))) {
+      console.warn(`[${this.id}] expert view blocked for chain ${chainId} (family ${this.getChainFamily(chainId) ?? 'unknown'}): no MSA alignment available`);
+      return;
+    }
+
     // Clear any lingering focus/selection from structure mode
     this.viewer.clearFocus();
     this.viewer.clearSelection();
@@ -907,6 +924,13 @@ const color = getMolstarGhostColor(family);
   async switchMonomerChain(newChainId: string): Promise<void> {
     const currentChainId = this.activeMonomerChainId;
     if (currentChainId === newChainId) return;
+
+    // Same MSA-availability guard as enterMonomerView: only switch to a chain
+    // whose family has an alignment, so the bottom panel never goes empty.
+    if (!isAlignableFamily(this.getChainFamily(newChainId))) {
+      console.warn(`[${this.id}] chain switch blocked for ${newChainId} (family ${this.getChainFamily(newChainId) ?? 'unknown'}): no MSA alignment available`);
+      return;
+    }
 
     // Restore the outgoing chain's appearance
     if (currentChainId) {
@@ -1149,6 +1173,10 @@ const color = getMolstarGhostColor(family);
     if (!component || !isLigandComponent(component)) return;
     this.viewer.setSubtreeVisibility(component.ref, visible);
     this.dispatch(setComponentVisibility({ instanceId: this.id, componentKey: uniqueKey, visible }));
+    // Record the explicit user intent so the geometry-based proximity filter in
+    // filterLigandsForChain() honors it across chain switches (otherwise the
+    // ligand pops back on when re-entering / switching the monomer view).
+    this.dispatch(setUserLigandVisibility({ instanceId: this.id, componentKey: uniqueKey, visible }));
   }
 
   setAllChainsVisibility(visible: boolean): void {
@@ -1239,6 +1267,24 @@ const color = getMolstarGhostColor(family);
     if (!structure) return;
     const loci = executeQuery(buildResidueQuery(chainId, start, end), structure);
     this.viewer.highlightLoci(loci);
+  }
+
+  /** Highlight a discrete set of residues at once (e.g. a whole binding pocket). */
+  highlightResidues(chainId: string, authSeqIds: number[], highlight: boolean): void {
+    if (!highlight || authSeqIds.length === 0) { this.viewer.highlightLoci(null); return; }
+    const structure = this.viewer.getCurrentStructure();
+    if (!structure) return;
+    const loci = executeQuery(buildMultiResidueQuery(chainId, authSeqIds), structure);
+    this.viewer.highlightLoci(loci);
+  }
+
+  /** Frame the camera on a discrete set of residues (e.g. a binding pocket). */
+  focusResidues(chainId: string, authSeqIds: number[]): void {
+    if (authSeqIds.length === 0) return;
+    const structure = this.viewer.getCurrentStructure();
+    if (!structure) return;
+    const loci = executeQuery(buildMultiResidueQuery(chainId, authSeqIds), structure);
+    if (loci) this.viewer.focusLoci(loci);
   }
 
   /** Select a single residue. Caller must call viewer.clearSelection() first. */
@@ -1392,7 +1438,7 @@ const color = getMolstarGhostColor(family);
           type: 'ball-and-stick',
           color: 'uniform',
           colorParams: { value: ghostColor },
-          typeParams: { sizeFactor: 0.15 },
+          typeParams: flatBallAndStickParams(0.15),
         });
       }
     }
@@ -1967,7 +2013,7 @@ const color = getMolstarGhostColor(family);
       type: 'ball-and-stick',
       color: 'uniform',
       colorParams: { value: color },
-      typeParams: { sizeFactor: 0.3 },
+      typeParams: flatBallAndStickParams(0.3),
     } as any);
 
     const ref = component.ref;

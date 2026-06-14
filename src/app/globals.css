@@ -35,13 +35,8 @@ html, body {
   height: 100% !important;
 }
 
-:root {
-  --font-ibm-plex-sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
-    "Apple Color Emoji", "Segoe UI Emoji";
-}
-
 body {
-  font-family: var(--font-ibm-plex-sans);
+  font-family: var(--font-ibm-plex-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
 .landing-viewer-wrap .msp-viewport-controls,
@@ -49,4 +44,55 @@ body {
 .landing-viewer-wrap .msp-highlight-info,
 .landing-viewer-wrap .msp-viewport-controls-buttons {
   display: none !important;
+}
+
+/* Borderless landing demo: strip the frame Mol*'s standard layout draws (the
+   border lives on .msp-plugin-content.msp-layout-standard) so the structure
+   floats flush on the white page. Scoped to the Mol* subtree only, so the
+   sibling overlays (structure label, explanation card) keep their own borders. */
+.landing-viewer-wrap .msp-plugin,
+.landing-viewer-wrap .msp-plugin * {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+.landing-viewer-wrap .msp-plugin,
+.landing-viewer-wrap .msp-plugin-content,
+.landing-viewer-wrap .msp-layout-standard,
+.landing-viewer-wrap .msp-layout-region,
+.landing-viewer-wrap .msp-layout-static,
+.landing-viewer-wrap .msp-viewport {
+  background: transparent !important;
+}
+
+/* Feather the structure's edges: a zoomed-in structure fades out over the last
+   --fade px of each edge instead of hitting a hard clipped boundary. The mask
+   fades content to transparent; against the white page that reads as a soft
+   fade-to-white. Two gradients intersected so all four edges + corners feather.
+   --fade is the only knob worth touching. */
+.landing-viewer-fade {
+  --fade: 32px;
+  -webkit-mask-image:
+    linear-gradient(to right, transparent 0, #000 var(--fade), #000 calc(100% - var(--fade)), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 var(--fade), #000 calc(100% - var(--fade)), transparent 100%);
+  -webkit-mask-composite: source-in;
+  -webkit-mask-repeat: no-repeat;
+  mask-image:
+    linear-gradient(to right, transparent 0, #000 var(--fade), #000 calc(100% - var(--fade)), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 var(--fade), #000 calc(100% - var(--fade)), transparent 100%);
+  mask-composite: intersect;
+  mask-repeat: no-repeat;
+}
+
+/* Assistant "thinking" shimmer — skeleton blocks sweep while a reply loads. */
+@keyframes landing-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.landing-shimmer {
+  background-color: #eef2f7;
+  background-image: linear-gradient(90deg, rgba(226, 232, 240, 0) 0%, rgba(203, 213, 225, 0.75) 50%, rgba(226, 232, 240, 0) 100%);
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: landing-shimmer 1.5s ease-in-out infinite;
 }

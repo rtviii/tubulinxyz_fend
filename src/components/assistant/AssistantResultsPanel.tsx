@@ -12,20 +12,45 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { X, LayoutGrid, Eye, Microscope, FlaskConical, Dna, HelpCircle } from 'lucide-react';
+import { X, LayoutGrid, Eye, Microscope, FlaskConical, Dna, HelpCircle, Sparkles } from 'lucide-react';
 import { useListStructuresQuery, type ListStructuresApiArg } from '@/store/tubxz_api';
 import { getHexForFamily } from '@/components/molstar/colors/palette';
 import { API_BASE_URL } from '@/config';
-import type { ActionCard, ActionKind, QuerySpec } from './globalTypes';
-import type { AssistantResult } from './types';
+import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
+import type { ActionCard, ActionKind, EntityRef, QuerySpec } from './globalTypes';
+import type { AssistantResult, AssistantSuggestedAction, AssistantViewerActionCall, ViewerAction } from './types';
 import { asAssistantTable } from './types';
 import { cardToHref } from './globalCommandDispatcher';
+import { dispatchViewerActions } from './viewerCommandDispatcher';
 import { PillifiedText, inlineEntitiesFromCard } from './PillifiedText';
 import { AssistantAnswer } from './AssistantAnswer';
 import { AssistantTable } from './AssistantTable';
+import { ActionPlanCard, type PlanStep } from './ActionPlanCard';
+import { EntityHoverText } from './EntityHoverText';
+import { humanizeViewerAction } from './actionHumanizer';
+import { summarizeCardLines } from './cardSummary';
+import {
+  KIND_META,
+  applyHighlight,
+  applyFocus,
+  canGroundOnDemo,
+  labelFor,
+  toneFor,
+  type DemoGrounding,
+} from './entityHighlight';
 import { useAppDispatch } from '@/store/store';
 import { showAssistantToast } from '@/store/slices/assistantToastSlice';
 import { setArrivalActions } from '@/store/slices/arrivalActionsSlice';
+
+// Per-action CTA verb + thumbnail eligibility for the landing plan cards.
+const ACTION_CTA: Record<ActionKind, string> = {
+  open_catalogue: 'Browse catalogue',
+  open_structure: 'Open structure',
+  open_expert: 'Open in expert mode',
+  inspect_ligand: 'Inspect ligand',
+  view_variants: 'View variants',
+  clarify: 'Clarify',
+};
 
 const ACTION_META: Record<ActionKind, { label: string; Icon: typeof LayoutGrid; tone: string }> = {
   open_catalogue: { label: 'Browse', Icon: LayoutGrid, tone: 'text-slate-500 bg-slate-50 border-slate-200' },
@@ -60,9 +85,18 @@ export interface AssistantResultsPanelProps {
   // When embedded inside a column (e.g. the landing chat panel) drop the
   // page-width centering so the panel fills its container instead.
   embedded?: boolean;
+  // When the host already provides a close affordance (e.g. the landing reply
+  // container's sticky header), hide this panel's own dismiss button.
+  hideDismiss?: boolean;
+  // The live demo Molstar instance beside the chat (landing page). Suggested
+  // actions run against it; surfaced entities hover-highlight on it.
+  instance?: MolstarInstance | null;
+  // The demo structure's identity + chains, so the honesty gate knows what can
+  // actually be shown on the demo viewer. Omit to disable demo highlighting.
+  demo?: { rcsbId: string; chainIds: string[] } | null;
 }
 
-export function AssistantResultsPanel({ response, onDismiss, embedded = false }: AssistantResultsPanelProps) {
+export function AssistantResultsPanel({ response, onDismiss, embedded = false, hideDismiss = false, instance = null, demo = null }: AssistantResultsPanelProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
 
@@ -73,6 +107,9 @@ export function AssistantResultsPanel({ response, onDismiss, embedded = false }:
     const id = requestAnimationFrame(() => setVisible(true));
     return () => cancelAnimationFrame(id);
   }, []);
+
+  // Inline note when a demo action can't run (honesty over silent no-op).
+  const [actionNote, setActionNote] = useState<string | null>(null);
 
   const handleCardClick = (card: ActionCard, ok: boolean) => {
     if (!ok || card.action === 'clarify') return;
@@ -89,17 +126,72 @@ export function AssistantResultsPanel({ response, onDismiss, embedded = false }:
     }
   };
 
+  // Run a single demo-safe viewer action against the live demo instance. The
+  // backend already restricted landing actions to whole-chain ops, but we guard
+  // again and surface failures inline rather than no-op silently.
+  const runSuggestedAction = async (action: AssistantViewerActionCall) => {
+    setActionNote(null);
+    if (!instance) {
+      setActionNote('No demo viewer is loaded to show that on.');
+      return;
+    }
+    try {
+      const reports = await dispatchViewerActions(instance, [action as unknown as ViewerAction], { viewMode: 'structure' });
+      const failed = reports.find((r) => !r.ok);
+      if (failed) setActionNote(`Couldn't show that here: ${failed.error}`);
+    } catch (e) {
+      setActionNote(`Couldn't show that here: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
   // Dedup defensively before anything reads the card list.
   const cards = dedupeCards(response.cards ?? []);
+  const entities: EntityRef[] = response.entities ?? [];
 
-  // Single-clarify shortcut: render just the prompt, no grid.
+  // Offer demo-viewer actions as clickable plan cards — NEVER auto-apply on the
+  // landing demo. The model may place a demo action in either channel
+  // (suggested_actions or viewer_actions); merge both and dedupe so it surfaces
+  // either way and never twice.
+  const suggested: AssistantSuggestedAction[] = (() => {
+    const merged: AssistantSuggestedAction[] = [
+      ...(response.suggested_actions ?? []),
+      ...(response.viewer_actions ?? []).map((a) => ({ label: humanizeViewerAction(a).label, action: a })),
+    ];
+    const seen = new Set<string>();
+    return merged.filter((s) => {
+      const key = `${s.action.type}:${JSON.stringify(s.action.args ?? {})}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  })();
+
+  // Honesty gate input for the demo viewer (residues only on the clean dimer).
+  const grounding: DemoGrounding | null = demo
+    ? { chainIds: new Set(demo.chainIds), allowResidues: true }
+    : null;
+  const groundableEntities = entities.filter((e) => canGroundOnDemo(e, grounding));
+  // Residues live as inline hover targets in the prose; the pill row shows only
+  // the "named" targets (chains, ligands) so it doesn't balloon to 40 chips.
+  const pillEntities = groundableEntities.filter((e) => e.kind !== 'residue_range');
+
+  // Single-clarify shortcut: render just the prompt, no offers.
   const onlyCard = cards.length === 1 ? cards[0] : null;
   const isClarifyOnly = onlyCard?.action === 'clarify';
 
-  // Grounded answer (full answers on landing): prose via AssistantAnswer, the
-  // structured table via AssistantTable — same channels as the structure page.
+  // Grounded answer prose via AssistantAnswer; the structured table via
+  // AssistantTable. On the landing page, wrap plain-text runs in EntityHoverText
+  // so positions/chains the model surfaced hover-highlight on the demo.
   const answerMarkdown = response.answer_markdown ?? response.summary ?? '';
   const table = asAssistantTable((response.data as Record<string, unknown> | null)?.table);
+  const renderText =
+    instance && grounding && groundableEntities.length
+      ? (t: string) => (
+          <EntityHoverText text={t} entities={entities} instance={instance} grounding={grounding} />
+        )
+      : undefined;
+
+  const hasOffers = suggested.length > 0 || cards.length > 0;
 
   return (
     <div
@@ -110,56 +202,135 @@ export function AssistantResultsPanel({ response, onDismiss, embedded = false }:
       `}
     >
       <div className="rounded-xl border border-slate-200/80 bg-white/95 shadow-sm overflow-hidden">
-        {/* Header: blurb + dismiss */}
+        {/* Header: answer + table + dismiss */}
         <div className="px-4 py-3 flex items-start gap-3 border-b border-slate-100">
           <div className="flex-1 min-w-0">
             {answerMarkdown ? (
-              <AssistantAnswer markdown={answerMarkdown} />
+              <AssistantAnswer markdown={answerMarkdown} renderText={renderText} />
             ) : (
               <p className="text-[11px] text-slate-400 uppercase tracking-wider">
                 {isClarifyOnly ? 'Clarification' : `${cards.length} suggestion${cards.length === 1 ? '' : 's'}`}
               </p>
             )}
             {table && <AssistantTable table={table} className="mt-2" />}
-          </div>
-          <button
-            onClick={onDismiss}
-            className="flex-shrink-0 p-1 rounded text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-            aria-label="Dismiss results"
-          >
-            <X size={14} />
-          </button>
-        </div>
 
-        {/* Body */}
-        <div className="p-3">
-          {isClarifyOnly && onlyCard?.question ? (
-            <p className="text-[13px] text-slate-600 italic px-2 py-2">
-              {onlyCard.question}
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {cards.map((card, i) => {
-                const v = response.validation?.[card.id ?? `card_${i}`];
-                const ok = v?.ok !== false;
-                return (
-                  <CardChip
-                    key={card.id ?? i}
-                    card={card}
-                    queries={response.queries ?? []}
-                    ok={ok}
-                    reason={v?.reason}
-                    featured={i === 0 && cards.length > 1}
-                    onClick={() => handleCardClick(card, ok)}
-                  />
-                );
-              })}
-            </div>
+            {/* Quick hover targets: named entities we can show on the demo
+                (chains/ligands). Residues are inline in the prose above. */}
+            {pillEntities.length > 0 && (
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {pillEntities.map((e, i) => {
+                  const meta = KIND_META[e.kind];
+                  return (
+                    <span
+                      key={i}
+                      className={`group inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium cursor-pointer transition-all hover:shadow-sm hover:scale-[1.02] ${toneFor(e)}`}
+                      onMouseEnter={() => applyHighlight(instance, e, true)}
+                      onMouseLeave={() => applyHighlight(instance, e, false)}
+                      onClick={() => applyFocus(instance, e)}
+                      title="Hover to highlight in the 3D viewer, click to focus"
+                    >
+                      <meta.Icon size={9} />
+                      <span className="font-mono">{labelFor(e)}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {!hideDismiss && (
+            <button
+              onClick={onDismiss}
+              className="flex-shrink-0 p-1 rounded text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              aria-label="Dismiss results"
+            >
+              <X size={14} />
+            </button>
           )}
         </div>
+
+        {/* Body: offers */}
+        {isClarifyOnly && onlyCard?.question ? (
+          <p className="text-[13px] text-slate-600 italic px-4 py-3">{onlyCard.question}</p>
+        ) : hasOffers ? (
+          <div className="p-3 space-y-2">
+            {/* Demo-viewer offers (act on the structure beside the chat) */}
+            {suggested.map((s, i) => {
+              const step = humanizeViewerAction(s.action);
+              return (
+                <ActionPlanCard
+                  key={`s-${i}`}
+                  title={s.label}
+                  steps={[{ icon: step.icon, label: step.label, detail: step.detail }]}
+                  cta="Show in viewer"
+                  tag={{ label: 'This demo', tone: 'text-sky-600 bg-sky-50 border-sky-200', Icon: Sparkles }}
+                  onRun={() => runSuggestedAction(s.action)}
+                />
+              );
+            })}
+
+            {/* Navigation offers (each a legible chain of steps) */}
+            {cards.map((card, i) => {
+              const v = response.validation?.[card.id ?? `card_${i}`];
+              const ok = v?.ok !== false;
+              return (
+                <ActionPlanCard
+                  key={card.id ?? i}
+                  title={card.label}
+                  subtitle={card.description}
+                  steps={buildCardSteps(card)}
+                  cta={ACTION_CTA[card.action] ?? 'Open'}
+                  tag={cardTag(card.action)}
+                  thumbnailRcsbId={cardThumbnail(card)}
+                  extra={
+                    card.action === 'open_catalogue' && card.query_ref ? (
+                      <CatalogueCount queryRef={card.query_ref} queries={response.queries ?? []} />
+                    ) : undefined
+                  }
+                  disabled={!ok}
+                  reason={v?.reason}
+                  onRun={() => handleCardClick(card, ok)}
+                />
+              );
+            })}
+          </div>
+        ) : null}
+
+        {actionNote && (
+          <p className="px-4 py-2 text-[11px] text-amber-600 bg-amber-50/60 border-t border-amber-100">
+            {actionNote}
+          </p>
+        )}
       </div>
     </div>
   );
+}
+
+// Steps shown inside a navigation offer: a humanized line per resolved field
+// (Loaded/Aligned/Focused…) plus each arrival action (what auto-applies after
+// you land). open_catalogue is title + count, so it needs no steps.
+function buildCardSteps(card: ActionCard): PlanStep[] {
+  const meta = ACTION_META[card.action] ?? ACTION_META.open_catalogue;
+  const steps: PlanStep[] =
+    card.action === 'open_catalogue'
+      ? []
+      : summarizeCardLines(card).map((line) => ({ icon: meta.Icon, label: line }));
+  for (const a of card.arrival_actions ?? []) {
+    const h = humanizeViewerAction({ type: a.type, args: a.args });
+    steps.push({ icon: h.icon, label: h.label, detail: h.detail });
+  }
+  return steps;
+}
+
+function cardTag(action: ActionKind): { label: string; tone: string; Icon: typeof LayoutGrid } {
+  const meta = ACTION_META[action] ?? ACTION_META.open_catalogue;
+  return { label: meta.label, tone: meta.tone, Icon: meta.Icon };
+}
+
+function cardThumbnail(card: ActionCard): string | undefined {
+  if (!card.rcsb_id) return undefined;
+  return card.action === 'open_structure' || card.action === 'open_expert' || card.action === 'inspect_ligand'
+    ? card.rcsb_id
+    : undefined;
 }
 
 // ---------------------------------------------------------------------------

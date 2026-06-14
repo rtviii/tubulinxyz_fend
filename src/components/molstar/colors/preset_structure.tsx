@@ -10,6 +10,7 @@ import {
     getMolstarColorForFamily,
     getMolstarLigandColor,
 } from './palette';
+import { flatBallAndStickParams } from '../rendering/postprocessing-config';
 
 
 export type TubulinClassification = Record<string, TubulinFamily | MapFamily | string>;
@@ -113,7 +114,7 @@ export const EnhancedTubulinSplitPreset = StructureRepresentationPresetProvider(
                     type: 'ball-and-stick',
                     color: 'uniform',
                     colorParams: { value: getMolstarLigandColor(instance.compId) },
-                    typeParams: { sizeFactor: 0.3 },
+                    typeParams: flatBallAndStickParams(0.3),
                 });
                 objects_ligand[instance.uniqueKey] = { ref: component.ref };
             }

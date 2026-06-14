@@ -176,9 +176,10 @@ export function MSALabels({
       measureEl.textContent = text;
       maxWidth = Math.max(maxWidth, measureEl.offsetWidth);
     }
-    // +24 baseline buffer + 22 for the per-chain PTMs trigger that sits at the
-    // end of every PDB row (handled inline now, not absolutely positioned).
-    const finalWidth = Math.max(maxWidth + 46, 140);
+    // Buffer = baseline + the per-chain PTMs trigger + the eye/reference icons
+    // that sit at the end of every PDB row. Floor raised so titles + icons are
+    // fully visible on first render without the user having to drag the divider.
+    const finalWidth = Math.max(maxWidth + 56, 190);
     onWidthCalculated?.(finalWidth);
   }, [sequences, onWidthCalculated]);
 

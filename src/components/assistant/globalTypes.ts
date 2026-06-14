@@ -12,7 +12,9 @@ export type EntityKind =
   | 'family'
   | 'ligand'
   | 'variant'
-  | 'residue_range';
+  | 'residue_range'
+  | 'residue_set'
+  | 'region';
 
 export interface EntityRef {
   kind: EntityKind;
@@ -27,6 +29,11 @@ export interface EntityRef {
   observed?: string;
   start?: number;
   end?: number;
+  // residue_set (binding pocket) / region (named structural region): auth_seq_ids on auth_asym_id.
+  positions?: number[];
+  // Demo-interaction metadata (backend-computed in harvest, never model-set).
+  category?: string; // 'binding' | 'modification' | 'variant' — tints the residue
+  label?: string;    // human region name, e.g. 'C-terminal tail' (region kind)
 }
 
 export type ActionKind =

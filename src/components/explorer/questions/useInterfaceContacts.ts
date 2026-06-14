@@ -10,6 +10,7 @@ import {
   executeQuery,
 } from '@/components/molstar/core/queries';
 import { getMolstarGhostColor } from '@/components/molstar/colors/palette';
+import { flatBallAndStickParams } from '@/components/molstar/rendering/postprocessing-config';
 import { Color } from 'molstar/lib/mol-util/color';
 
 const CONTACT_RADIUS = 4.5;
@@ -109,7 +110,7 @@ export function useInterfaceContacts(ctx: ExplorerContext): ExplorerQuestion {
                 type: 'ball-and-stick',
                 color: 'uniform',
                 colorParams: { value: colorA },
-                typeParams: { sizeFactor: 0.2 },
+                typeParams: flatBallAndStickParams(0.2),
               });
             }
           }
@@ -127,7 +128,7 @@ export function useInterfaceContacts(ctx: ExplorerContext): ExplorerQuestion {
                 type: 'ball-and-stick',
                 color: 'uniform',
                 colorParams: { value: colorB },
-                typeParams: { sizeFactor: 0.2 },
+                typeParams: flatBallAndStickParams(0.2),
               });
             }
           }

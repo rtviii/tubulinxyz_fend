@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useMolstarInstance } from '@/components/molstar/services/MolstarInstanceManager';
 import { createClassificationFromProfile } from '@/services/profile_service';
 import type { StructureProfile } from '@/lib/profile_utils';
@@ -25,6 +24,10 @@ import {
 import { formatFamilyShort } from '@/lib/formatters';
 
 const EMPTY_CLASSIFICATION: Record<string, string> = {};
+
+// How tightly the structure is framed: smaller = more zoomed-in / bigger on
+// screen. Applied on load and re-applied whenever the viewer's pane resizes.
+const FIT_ZOOM = 0.62;
 
 /** Human-readable names for common nucleotides */
 const NUCLEOTIDE_NAMES: Record<string, string> = {
@@ -251,7 +254,7 @@ export default function LandingViewer({
               const snapshot = plugin.canvas3d.camera.getSnapshot();
               const radius = snapshot.radius;
               plugin.canvas3d.requestCameraReset({
-                snapshot: { ...snapshot, radius: radius * 0.75 },
+                snapshot: { ...snapshot, radius: radius * FIT_ZOOM },
                 durationMs: 0,
               });
             }
@@ -266,15 +269,38 @@ export default function LandingViewer({
     })();
   }, [isInitialized, instance, pdbId, instanceId]);
 
-  // Resize observer
+  // Resize observer. Skip when the container is collapsed to 0×0 (hidden tab,
+  // mid-slide) — calling handleResize at zero size makes Mol* allocate an empty
+  // texture and throw "empty textures are not allowed". Once the size settles
+  // (e.g. the reply slide finishing), reframe so the structure stays fitted to
+  // its pane instead of cropping.
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !instance) return;
+    let refit: ReturnType<typeof setTimeout> | null = null;
     const obs = new ResizeObserver(() => {
-      requestAnimationFrame(() => instance.viewer.handleResize());
+      requestAnimationFrame(() => {
+        const node = containerRef.current;
+        if (!node || node.clientWidth === 0 || node.clientHeight === 0) return;
+        instance.viewer.handleResize();
+        if (refit) clearTimeout(refit);
+        refit = setTimeout(() => {
+          const plugin = instance.viewer.ctx;
+          if (!plugin?.canvas3d || !node.clientWidth) return;
+          plugin.managers.camera.reset(undefined, 0);
+          requestAnimationFrame(() => {
+            if (!plugin.canvas3d) return;
+            const snap = plugin.canvas3d.camera.getSnapshot();
+            plugin.canvas3d.requestCameraReset({
+              snapshot: { ...snap, radius: snap.radius * FIT_ZOOM },
+              durationMs: 250,
+            });
+          });
+        }, 320);
+      });
     });
     obs.observe(el);
-    return () => obs.disconnect();
+    return () => { obs.disconnect(); if (refit) clearTimeout(refit); };
   }, [instance]);
 
   // Sync spin from props
@@ -313,31 +339,7 @@ export default function LandingViewer({
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
-      <div ref={containerRef} className="w-full h-full rounded-xl overflow-hidden" />
-
-      {/* Structure label -- bottom-left, transparent overlay */}
-      <Link
-        href={`/structures/${pdbId}`}
-        className="absolute bottom-3 left-3 z-10 max-w-[80%]
-                   px-2.5 py-1.5 rounded-lg bg-white/40 backdrop-blur-sm
-                   hover:bg-white/70 transition-all duration-150 group/label"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-1.5 text-[12px] font-medium text-slate-700/80
-                        group-hover/label:text-slate-900 transition-colors">
-          <span className="font-mono font-semibold">{pdbId}</span>
-          <span className="text-slate-400/60">&mdash;</span>
-          <span className="font-light">{type}</span>
-          <span aria-hidden className="text-slate-400/60 text-[10px] ml-0.5 opacity-0
-                group-hover/label:opacity-100 group-hover/label:translate-x-0.5 transition-all">
-            &rarr;
-          </span>
-        </div>
-        <p className="mt-0.5 text-[9px] text-slate-400/70 leading-relaxed line-clamp-1
-                      group-hover/label:text-slate-500">
-          {description}
-        </p>
-      </Link>
+      <div ref={containerRef} className="landing-viewer-fade w-full h-full overflow-hidden" />
 
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-xl">

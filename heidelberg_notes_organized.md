@@ -82,17 +82,31 @@
 
 
 Todos: 
-- to heidelberg from frankfurt + accommodations for 16th
+- [x] to  heidelberg from frankfurt + accommodations for 16th
 
 Remind Maxim to share pdfs for software paper.
 https://www.mpinat.mpg.de/grubmueller/kutzner/posters
 
+# UX
 
-----
+- [x] name on the front page
+- [x] tubexyz ->tubulinxyz
 
-# UI/UX
-
-- [ ] name on the front page
-- [ ] tubexyz ->tubulinxyz
 - [ ] switching structutures directly from the floating menu
-- [ ] articulate entity tooling boxes
+- [ ] ligand binding sites are not shadowless/illustrative; make inherit the style/aesthetics of the rest of the protein...
+- [ ] make all the annotations on aligned chains hidden by default...
+- [ ] naming of the chains in the top-left expert/easy mode strucuture modes: no fucking rcsb's auth_asym_id letters please. Prefer family( where classified) and then perhaps parenthesized chain name...
+- [ ] Is there anything preventing us from unifying representation and colors etc. state between the easy and expert modes (and also between the chains in expert mode)... in particular if i ask something to be painted in easy mode -- and the the llm does it -- i don't see why it shouldn't persist into the expert mode? or if i turn off or on the visibility of a ligand on one chain in the expert mode, it's super annoying that it doens't persist when i go to naother chain right now -- the ligand pops right back on....
+- [ ] MSA headers -- let's expand the default width slightly so the titles and icons are always visible at the outset and the user doens't need to resize...
+
+
+  ###  Articulate entity tooling boxes
+
+  Ok bro i want to articual
+
+
+
+# Devops --
+
+- [ ] host the darn thing
+

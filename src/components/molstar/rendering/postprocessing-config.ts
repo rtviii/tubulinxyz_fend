@@ -24,8 +24,21 @@ export const STYLIZED_POSTPROCESSING = {
             color: Color(0x000000)
         }
     },
-    shadow: { 
-        name: 'off' as const, 
-        params: {} 
+    shadow: {
+        name: 'off' as const,
+        params: {}
     }
 };
+
+/**
+ * typeParams for ball-and-stick representations of ligands / pocket / interface
+ * residues. Passing `ignoreLight: true` makes them render with the same flat,
+ * unlit material as the protein cartoon (which also sets ignoreLight). Without
+ * it, Molstar's default lit material gives ligands a shiny/metallic ("irony")
+ * look that clashes with the illustrative outline + AO style.
+ *
+ * Use this anywhere a ball-and-stick rep is added so the flat look can't regress.
+ */
+export function flatBallAndStickParams(sizeFactor: number) {
+    return { sizeFactor, ignoreLight: true };
+}

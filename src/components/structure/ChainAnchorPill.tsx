@@ -16,6 +16,7 @@ import type { PolymerComponent } from '@/components/molstar/core/types';
 import type { MSAHandle } from '@/components/msa/types';
 import { makeChainKey } from '@/lib/chain_key';
 import { StructureSlugBlock } from './StructureSlugBlock';
+import { PdbQuickPicker } from './PdbQuickPicker';
 import { PillChatInput } from '@/components/ui/AppPill';
 import { LigandPillToolbox } from './LigandPillToolbox';
 import { PolymerFamilyToolbox, groupChainsByEntity } from './PolymerFamilyToolbox';
@@ -66,11 +67,13 @@ export function ChainAnchorPill({
     return source.filter(l => !LIGAND_IGNORE_IDS.has(l.chemId));
   }, [isMonomerView, chainScopedLigands, allLigands]);
 
-  // Polymer entity groups — only surfaced in easy mode (in expert mode the
-  // header already carries a chain switcher for the active chain).
+  // Polymer entity groups, family-grouped. Surfaced in BOTH modes: in easy mode
+  // each chip opens a chain in expert view; in expert mode it switches the active
+  // chain. Grouping (vs a flat per-chain row) keeps the menu compact and labels
+  // meaningful for structures with many/un-annotated chains.
   const entityGroups = useMemo(
-    () => (isMonomerView ? [] : groupChainsByEntity(polymerComponents, profile)),
-    [isMonomerView, polymerComponents, profile]
+    () => groupChainsByEntity(polymerComponents, profile),
+    [polymerComponents, profile]
   );
 
   const chainBadgeLabel = useMemo(() => {
@@ -82,7 +85,6 @@ export function ChainAnchorPill({
   }, [profile, activeChainId, isMonomerView]);
 
   const exitToEasy = isMonomerView ? () => instance?.exitMonomerView() : undefined;
-  const showChainSwitcher = isMonomerView && polymerComponents.length > 1;
   const showChipTray = entityGroups.length > 0 || visibleLigands.length > 0;
   const chatPlaceholder = isMonomerView
     ? 'Ask about this chain...'
@@ -94,7 +96,7 @@ export function ChainAnchorPill({
                  rounded-2xl bg-white/80 backdrop-blur border border-slate-200/60
                  shadow-sm text-[11px] min-w-[14rem] max-w-[22rem]"
     >
-      {/* ── Header: slug + chain badge + chain switcher ── */}
+      {/* ── Header: slug + structure switcher + active-chain badge ── */}
       <div className="flex items-center gap-1 min-w-0">
         <StructureSlugBlock
           loadedStructure={loadedStructure}
@@ -104,8 +106,10 @@ export function ChainAnchorPill({
           highlighted={!isMonomerView}
         />
 
+        <PdbQuickPicker currentPdbId={loadedStructure} />
+
         {isMonomerView && activeChainId && (
-          <div className="flex items-baseline gap-1 px-1.5 py-1 rounded-full bg-slate-100/70 text-slate-700">
+          <div className="ml-auto flex items-baseline gap-1 px-1.5 py-1 rounded-full bg-slate-100/70 text-slate-700 flex-shrink-0">
             <span className="text-slate-400">/</span>
             <span className="font-mono font-semibold text-[11px]">{activeChainId}</span>
             {chainBadgeLabel && (
@@ -115,30 +119,10 @@ export function ChainAnchorPill({
             )}
           </div>
         )}
-
-        {showChainSwitcher && (
-          <div className="ml-auto flex items-center gap-0.5 flex-shrink-0">
-            {polymerComponents.map(chain => (
-              <button
-                key={chain.chainId}
-                onClick={() => {
-                  if (chain.chainId !== activeChainId) instance?.switchMonomerChain(chain.chainId);
-                }}
-                className={`w-5 h-5 text-[10px] font-mono rounded ${
-                  chain.chainId === activeChainId
-                    ? 'bg-slate-700 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-                title={`Switch to chain ${chain.chainId}`}
-              >
-                {chain.chainId}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
-      {/* ── Combined tray: polymer family chips (easy) + ligand chips ── */}
+      {/* ── Combined tray: family-grouped chain chips + ligand chips. In expert
+              mode the family chips act as the chain switcher. ── */}
       {showChipTray && (
         <div className="flex flex-wrap gap-1 items-center">
           {entityGroups.map(g => (
@@ -147,6 +131,9 @@ export function ChainAnchorPill({
               group={g}
               loadedStructure={loadedStructure}
               instance={instance}
+              isMonomerView={isMonomerView}
+              activeChainId={activeChainId}
+              onSwitchChain={chainId => instance?.switchMonomerChain(chainId)}
             />
           ))}
           {visibleLigands.map(lig => (

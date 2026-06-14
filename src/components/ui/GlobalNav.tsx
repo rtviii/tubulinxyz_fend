@@ -25,6 +25,9 @@ export interface GlobalNavMode {
   onExpert: () => void;
   // Expert view needs a target chain; disable when none is available.
   expertDisabled?: boolean;
+  // Tooltip for the Expert button — used to disclaim *why* it's disabled
+  // (e.g. no alpha/beta chain with an alignment in this structure).
+  expertTitle?: string;
   // Draw attention to Expert (e.g. while hovering chain-row entry points).
   expertHint?: boolean;
 }
@@ -106,7 +109,7 @@ export function GlobalNav({ mode }: GlobalNavProps) {
           <PillModeButton
             icon={Microscope}
             label="Expert mode"
-            title="Chain-level (expert) view"
+            title={mode.expertTitle ?? 'Chain-level (expert) view'}
             active={mode.active === 'expert'}
             hint={mode.expertHint}
             disabled={mode.expertDisabled}

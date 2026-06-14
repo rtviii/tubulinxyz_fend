@@ -14,7 +14,13 @@ import { Fragment, type ReactNode } from 'react';
 import { AssistantTable } from './AssistantTable';
 import type { AssistantTableData } from './types';
 
-function renderInline(text: string, keyPrefix: string): ReactNode[] {
+// Optional hook to transform plain-text runs (everything that isn't **bold** or
+// `code`). The landing page passes one that wraps entity tokens in
+// hover-to-highlight spans; structure-page callers omit it. Bold/code/tables are
+// never touched by it.
+export type RenderText = (text: string, key: string) => ReactNode;
+
+function renderInline(text: string, keyPrefix: string, renderText?: RenderText): ReactNode[] {
   // Split on **bold** and `code`, keeping the delimiters' content.
   const tokens = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
   return tokens.filter(Boolean).map((tok, i) => {
@@ -25,6 +31,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
     if (tok.startsWith('`') && tok.endsWith('`')) {
       return <code key={key} className="font-mono text-[11px] bg-slate-100 rounded px-1 py-px">{tok.slice(1, -1)}</code>;
     }
+    if (renderText) return <Fragment key={key}>{renderText(tok, key)}</Fragment>;
     return <Fragment key={key}>{tok}</Fragment>;
   });
 }
@@ -57,7 +64,15 @@ function parsePipeTable(lines: string[], i: number): { table: AssistantTableData
   return { table: { columns, rows }, next: j };
 }
 
-export function AssistantAnswer({ markdown, className = '' }: { markdown: string; className?: string }) {
+export function AssistantAnswer({
+  markdown,
+  className = '',
+  renderText,
+}: {
+  markdown: string;
+  className?: string;
+  renderText?: RenderText;
+}) {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n');
   const blocks: ReactNode[] = [];
   let bullets: string[] = [];
@@ -67,7 +82,7 @@ export function AssistantAnswer({ markdown, className = '' }: { markdown: string
     if (para.length) {
       blocks.push(
         <p key={`p-${blocks.length}`} className="leading-snug">
-          {renderInline(para.join(' '), `p${blocks.length}`)}
+          {renderInline(para.join(' '), `p${blocks.length}`, renderText)}
         </p>,
       );
       para = [];
@@ -78,7 +93,7 @@ export function AssistantAnswer({ markdown, className = '' }: { markdown: string
       blocks.push(
         <ul key={`u-${blocks.length}`} className="list-disc pl-4 space-y-0.5">
           {bullets.map((b, i) => (
-            <li key={i}>{renderInline(b, `u${blocks.length}-${i}`)}</li>
+            <li key={i}>{renderInline(b, `u${blocks.length}-${i}`, renderText)}</li>
           ))}
         </ul>,
       );

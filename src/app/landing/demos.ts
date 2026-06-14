@@ -20,7 +20,7 @@ import {
   extractLigandBonds,
   type LigandBondInfo,
 } from '@/components/molstar/core/bindingSite';
-import { STYLIZED_POSTPROCESSING } from '@/components/molstar/rendering/postprocessing-config';
+import { STYLIZED_POSTPROCESSING, flatBallAndStickParams } from '@/components/molstar/rendering/postprocessing-config';
 import { getMolstarGhostColor, getGhostHexForFamily } from '@/components/molstar/colors/palette';
 
 export type DemoCategory = 'ligands' | 'contacts' | 'modifications' | 'mutations';
@@ -318,7 +318,7 @@ async function showGdpGtp(ctx: LandingDemoContext): Promise<DemoResult> {
         type: 'ball-and-stick',
         color: 'uniform',
         colorParams: { value: nucColor },
-        typeParams: { sizeFactor: 0.4 },
+        typeParams: flatBallAndStickParams(0.4),
       });
     }
 
@@ -348,7 +348,7 @@ async function showGdpGtp(ctx: LandingDemoContext): Promise<DemoResult> {
             type: 'ball-and-stick',
             color: 'uniform',
             colorParams: { value: ghostColor },
-            typeParams: { sizeFactor: 0.15 },
+            typeParams: flatBallAndStickParams(0.15),
           });
         }
 
@@ -488,7 +488,7 @@ async function showTaxol(ctx: LandingDemoContext): Promise<DemoResult> {
             type: 'ball-and-stick',
             color: 'uniform',
             colorParams: { value: DEMO_COLOR_ACCENT },
-            typeParams: { sizeFactor: 0.4 },
+            typeParams: flatBallAndStickParams(0.4),
           });
         }
       }
@@ -562,7 +562,7 @@ async function showIntraDimerContacts(ctx: LandingDemoContext): Promise<DemoResu
         type: 'ball-and-stick',
         color: 'uniform',
         colorParams: { value: colorA },
-        typeParams: { sizeFactor: 0.15 },
+        typeParams: flatBallAndStickParams(0.15),
       });
     }
   }
@@ -580,7 +580,7 @@ async function showIntraDimerContacts(ctx: LandingDemoContext): Promise<DemoResu
         type: 'ball-and-stick',
         color: 'uniform',
         colorParams: { value: colorB },
-        typeParams: { sizeFactor: 0.15 },
+        typeParams: flatBallAndStickParams(0.15),
       });
     }
   }
@@ -702,7 +702,7 @@ async function showInterDimerContacts(ctx: LandingDemoContext): Promise<DemoResu
             type: 'ball-and-stick',
             color: 'uniform',
             colorParams: { value: colorA },
-            typeParams: { sizeFactor: 0.12 },
+            typeParams: flatBallAndStickParams(0.12),
           });
         }
       }
@@ -720,7 +720,7 @@ async function showInterDimerContacts(ctx: LandingDemoContext): Promise<DemoResu
             type: 'ball-and-stick',
             color: 'uniform',
             colorParams: { value: colorB },
-            typeParams: { sizeFactor: 0.12 },
+            typeParams: flatBallAndStickParams(0.12),
           });
         }
       }
@@ -945,9 +945,7 @@ export const LANDING_DEMOS: LandingDemo[] = [
   { id: 'taxol', label: 'Taxol binding', description: 'Drug binding pocket on beta-tubulin', category: 'ligands', target: '9MLF', run: showTaxol },
   { id: 'intra-dimer', label: 'Intra-dimer contacts', description: 'Alpha-beta interface bonds', category: 'contacts', target: '9MLF', run: showIntraDimerContacts },
   { id: 'inter-dimer', label: 'Inter-dimer contacts', description: 'Longitudinal bonds in the lattice', category: 'contacts', target: '6WVM', run: showInterDimerContacts },
-  { id: 'ptms', label: 'PTM sites', description: 'Post-translational modifications including K40', category: 'modifications', target: '9MLF', run: showPTMs },
   { id: 'tail', label: 'Flexible tails', description: 'Disordered C-terminal tails', category: 'modifications', target: '9MLF', run: showFlexibleTail },
-  { id: 'mutations', label: 'Key mutations', description: 'Clinically relevant tubulin mutations', category: 'mutations', target: null, run: showKeyMutations },
 ];
 
 export const DEMO_CATEGORY_LABELS: Record<DemoCategory, string> = {

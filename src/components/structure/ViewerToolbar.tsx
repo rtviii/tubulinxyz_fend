@@ -44,6 +44,9 @@ export function ViewerToolbar({
           onEasy: () => {},
           onExpert: enterExpertMode,
           expertDisabled: !defaultMonomerChainId,
+          expertTitle: defaultMonomerChainId
+            ? undefined
+            : 'No α/β tubulin chain with an alignment in this structure',
           expertHint: expertHintActive,
         }}
       />

@@ -253,9 +253,9 @@ export function DemoExplanationCard({ explanation, onDismiss, instance }: Props)
   }
 
   return (
-    <div className="absolute bottom-3 right-3 z-20 max-w-[300px]
-                    px-2.5 py-1.5 rounded-lg bg-white/40 backdrop-blur-sm
-                    border border-slate-200/40">
+    <div className="w-[300px] max-w-full
+                    px-2.5 py-1.5 rounded-lg bg-white/85 backdrop-blur-sm
+                    border border-slate-200/60 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-[11px] font-semibold text-slate-700/80 leading-tight">
           {explanation.title}

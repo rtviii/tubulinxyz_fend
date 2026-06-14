@@ -98,9 +98,9 @@ function buildChainFamilyMap(profile: LandingProfile | null): Record<string, Fam
 // ============================================================
 
 type Props = {
-    pdbId: string;                  // e.g. "1JFF"
-    instanceId: MolstarInstanceId;  // e.g. "landing_1jff"
-    profileUrl?: string;            // e.g. "/landing/1JFF.json"
+    pdbId: string;                  // e.g. "9MLF"
+    instanceId: MolstarInstanceId;  // e.g. "landing_9mlf"
+    profileUrl?: string;            // e.g. "/landing/9MLF.json"
     onViewer?: (viewer: any | null) => void;
 };
 

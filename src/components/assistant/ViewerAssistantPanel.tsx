@@ -14,33 +14,25 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { X, Eye, Layers, FlaskConical, MapPin, HelpCircle, Sparkles } from 'lucide-react';
+import { X, Sparkles } from 'lucide-react';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
-import type { ActionCard, EntityKind, EntityRef, QuerySpec } from './globalTypes';
+import type { ActionCard, EntityRef, QuerySpec } from './globalTypes';
 import type { AssistantSuggestedAction, AssistantViewerActionCall } from './types';
 import { asAssistantTable } from './types';
 import { CardChip } from './AssistantResultsPanel';
 import { AssistantAnswer } from './AssistantAnswer';
 import { AssistantTable } from './AssistantTable';
 import { cardToHref } from './globalCommandDispatcher';
+import {
+  KIND_META,
+  applyHighlight,
+  applyFocus,
+  isInteractive,
+  matchesHover,
+  labelFor,
+} from './entityHighlight';
 import { useAppDispatch } from '@/store/store';
 import { showAssistantToast } from '@/store/slices/assistantToastSlice';
-
-interface PillKindMeta {
-  Icon: typeof Eye;
-  tone: string;
-  label: string;
-}
-
-const KIND_META: Record<EntityKind, PillKindMeta> = {
-  chain: { Icon: Layers, tone: 'text-violet-600 bg-violet-50 border-violet-200', label: 'Chain' },
-  residue_range: { Icon: MapPin, tone: 'text-emerald-600 bg-emerald-50 border-emerald-200', label: 'Range' },
-  ligand: { Icon: FlaskConical, tone: 'text-amber-600 bg-amber-50 border-amber-200', label: 'Ligand' },
-  structure: { Icon: Eye, tone: 'text-slate-600 bg-slate-50 border-slate-200', label: 'Structure' },
-  polymer_entity: { Icon: Layers, tone: 'text-violet-600 bg-violet-50 border-violet-200', label: 'Entity' },
-  family: { Icon: Layers, tone: 'text-rose-600 bg-rose-50 border-rose-200', label: 'Family' },
-  variant: { Icon: HelpCircle, tone: 'text-rose-600 bg-rose-50 border-rose-200', label: 'Variant' },
-};
 
 export interface ViewerAssistantPanelProps {
   entities: EntityRef[];
@@ -254,97 +246,3 @@ function EntityPill({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Per-entity dispatch helpers
-// ---------------------------------------------------------------------------
-
-function isInteractive(e: EntityRef): boolean {
-  if (e.kind === 'chain') return !!e.auth_asym_id;
-  if (e.kind === 'residue_range') return !!e.auth_asym_id && e.start !== undefined && e.end !== undefined;
-  if (e.kind === 'ligand') return !!e.auth_asym_id && e.auth_seq_id !== undefined;
-  return false;
-}
-
-// Does a molstar hover (chainId + authSeqId) land inside this entity?
-function matchesHover(e: EntityRef, chainId: string, authSeqId: number): boolean {
-  if (e.kind === 'chain') {
-    return e.auth_asym_id === chainId;
-  }
-  if (e.kind === 'residue_range') {
-    return (
-      e.auth_asym_id === chainId &&
-      e.start !== undefined &&
-      e.end !== undefined &&
-      authSeqId >= e.start &&
-      authSeqId <= e.end
-    );
-  }
-  if (e.kind === 'ligand') {
-    return e.auth_asym_id === chainId && e.auth_seq_id === authSeqId;
-  }
-  return false;
-}
-
-function labelFor(e: EntityRef): string {
-  switch (e.kind) {
-    case 'chain':
-      return e.auth_asym_id ?? '?';
-    case 'residue_range':
-      return e.auth_asym_id && e.start !== undefined && e.end !== undefined
-        ? `${e.auth_asym_id}:${e.start}-${e.end}`
-        : 'range';
-    case 'ligand':
-      if (e.chemical_id && e.auth_asym_id && e.auth_seq_id !== undefined) {
-        return `${e.chemical_id} @ ${e.auth_asym_id}:${e.auth_seq_id}`;
-      }
-      return e.chemical_id ?? 'ligand';
-    case 'structure':
-      return e.rcsb_id ?? 'structure';
-    case 'polymer_entity':
-      return e.rcsb_id && e.entity_id ? `${e.rcsb_id}:${e.entity_id}` : 'entity';
-    case 'family':
-      return formatFamily(e.family ?? '');
-    case 'variant':
-      return e.wild_type && e.master_index !== undefined && e.observed
-        ? `${e.wild_type}${e.master_index}${e.observed}`
-        : 'variant';
-    default:
-      return '?';
-  }
-}
-
-function formatFamily(f: string): string {
-  if (f.startsWith('tubulin_')) {
-    const suffix = f.slice('tubulin_'.length);
-    const sym = ({ alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε' } as Record<string, string>)[suffix];
-    return sym ? `${sym}-tubulin` : f;
-  }
-  return f;
-}
-
-function applyHighlight(instance: MolstarInstance | null, e: EntityRef, on: boolean): void {
-  if (!instance) return;
-  try {
-    if (e.kind === 'chain' && e.auth_asym_id) {
-      instance.highlightChain(e.auth_asym_id, on);
-    } else if (e.kind === 'residue_range' && e.auth_asym_id && e.start !== undefined && e.end !== undefined) {
-      instance.highlightResidueRange(e.auth_asym_id, e.start, e.end, on);
-    } else if (e.kind === 'ligand' && e.auth_asym_id && e.auth_seq_id !== undefined) {
-      // Ligands are single residues in molstar terms.
-      instance.highlightResidueRange(e.auth_asym_id, e.auth_seq_id, e.auth_seq_id, on);
-    }
-  } catch { /* swallow — molstar can throw if state changed underneath */ }
-}
-
-function applyFocus(instance: MolstarInstance | null, e: EntityRef): void {
-  if (!instance) return;
-  try {
-    if (e.kind === 'chain' && e.auth_asym_id) {
-      instance.focusChain(e.auth_asym_id);
-    } else if (e.kind === 'residue_range' && e.auth_asym_id && e.start !== undefined && e.end !== undefined) {
-      instance.focusResidueRange(e.auth_asym_id, e.start, e.end);
-    } else if (e.kind === 'ligand' && e.auth_asym_id && e.auth_seq_id !== undefined) {
-      instance.focusResidue(e.auth_asym_id, e.auth_seq_id);
-    }
-  } catch { /* swallow */ }
-}
