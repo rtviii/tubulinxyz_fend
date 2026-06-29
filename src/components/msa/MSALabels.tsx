@@ -49,6 +49,7 @@ import {
   removeTrack,
   toggleTrackVisibility,
   selectAllTracks,
+  selectHoveredTrackId,
   type Family,
   type TrackEntry,
 } from '@/store/slices/annotationTracksSlice';
@@ -146,6 +147,7 @@ export function MSALabels({
   const selectedChainKey = useAppSelector(selectSelectedChainKey);
   const annotationChains = useAppSelector(state => state.annotations.chains);
   const allTracks = useAppSelector(selectAllTracks);
+  const hoveredTrackId = useAppSelector(selectHoveredTrackId);
   const ligandOverrides = useAppSelector(selectLigandOverrides);
   const variantOverrides = useAppSelector(selectVariantOverrides);
   const modificationOverrides = useAppSelector(selectModificationOverrides);
@@ -172,14 +174,18 @@ export function MSALabels({
     let maxWidth = 0;
     for (const seq of sequences) {
       const p = parseLabel(seq);
-      const text = [p.name, p.species, p.family, p.structure, p.isotype].filter(Boolean).join('  ');
+      // Single space matches the rendered ~4px inter-part gaps far better than
+      // a double space (which inflated the column by ~30px of phantom width).
+      const text = [p.name, p.species, p.family, p.structure, p.isotype].filter(Boolean).join(' ');
       measureEl.textContent = text;
       maxWidth = Math.max(maxWidth, measureEl.offsetWidth);
     }
-    // Buffer = baseline + the per-chain PTMs trigger + the eye/reference icons
-    // that sit at the end of every PDB row. Floor raised so titles + icons are
-    // fully visible on first render without the user having to drag the divider.
-    const finalWidth = Math.max(maxWidth + 56, 190);
+    // The icon cluster (expand chevron + 3D-visibility eye + per-chain "PTMs +"
+    // trigger, plus an X on aligned rows) is flex-shrink-0 on the LEFT of every
+    // PDB row, while the title is flex-1 and truncates. So the column must fit
+    // the measured title PLUS that fixed cluster, else the title clips at the
+    // default width. ~118px covers the worst case (an aligned row with the X).
+    const finalWidth = Math.max(maxWidth + 118, 190);
     onWidthCalculated?.(finalWidth);
   }, [sequences, onWidthCalculated]);
 
@@ -415,19 +421,22 @@ export function MSALabels({
             const isPtmRow = desc?.kind === 'ptm';
             const isTrackRow = desc?.kind === 'track';
             const isDeletable = isPtmRow || isTrackRow;
+            // Emphasized when the matching row in the residue popup's
+            // "Currently in tracks" list is hovered.
+            const isTrackHovered = isTrackRow && !!trackEntry && hoveredTrackId === trackEntry.spec.id;
             return (
               <div
                 key={seq.id}
                 className={`
                   flex items-center gap-1 pl-3 pr-1.5 select-none whitespace-nowrap
-                  text-[9px] font-mono
-                  bg-gray-50/80
+                  text-[9px] font-mono transition-colors
+                  ${isTrackHovered ? 'bg-amber-100/80' : 'bg-gray-50/80'}
                   ${isLastAux ? 'border-b border-gray-200' : ''}
                 `}
                 style={{
                   height: rowHeight,
                   lineHeight: `${rowHeight}px`,
-                  borderLeft: '2px solid #d1d5db',
+                  borderLeft: `2px solid ${isTrackHovered ? '#f59e0b' : '#d1d5db'}`,
                 }}
                 title={seq.layerLabel ?? seq.name}
               >

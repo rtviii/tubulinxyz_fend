@@ -21,6 +21,15 @@ html, body {
   -webkit-line-clamp: 2;
 }
 
+/* Keep an element scrollable while hiding its scrollbar (compact popovers). */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Molstar specific styles - only apply overflow hidden to molstar containers */
 .molstar-container {
   height: 100vh;

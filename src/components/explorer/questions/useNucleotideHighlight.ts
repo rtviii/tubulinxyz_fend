@@ -31,13 +31,6 @@ export function useNucleotideHighlight(ctx: ExplorerContext): ExplorerQuestion {
 
       const key = `${entity.chemical_id}_${np.auth_asym_id}_${np.auth_seq_id}`;
       ctx.instance.setLigandVisibility(key, true);
-
-      // Persistent 3D label on each nucleotide
-      await ctx.instance.addComponentExplorerLabel(
-        key,
-        `nuc-label-${key}`,
-        `${entity.chemical_id} (${np.auth_asym_id}:${np.auth_seq_id})`
-      );
     }
 
     // Focus the first nucleotide
@@ -55,7 +48,6 @@ export function useNucleotideHighlight(ctx: ExplorerContext): ExplorerQuestion {
 
   const clear = useCallback(async () => {
     if (!ctx.instance) return;
-    ctx.instance.removeAllExplorerLabels();
     ctx.instance.viewer.resetCamera();
     setIsActive(false);
   }, [ctx.instance]);

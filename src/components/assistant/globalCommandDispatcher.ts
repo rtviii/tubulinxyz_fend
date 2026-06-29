@@ -50,6 +50,7 @@ function backendStructureFiltersToUi(bf: Record<string, unknown>): Partial<UiFil
   if (n('year_min') !== undefined) out.yearMin = n('year_min');
   if (n('year_max') !== undefined) out.yearMax = n('year_max');
 
+  if (b('has_any_map') !== undefined) out.hasAnyMap = b('has_any_map');
   if (b('has_variants') !== undefined) out.hasVariants = b('has_variants');
   if (s('variant_family') !== undefined) out.variantFamily = s('variant_family');
   if (s('variant_type') !== undefined) out.variantType = s('variant_type');

@@ -33,8 +33,8 @@ const TUBULIN_GREEK: Record<string, string> = {
   eta: '\u03B7',
 };
 
-function familyDisplayName(family?: string | null): string {
-  if (!family) return 'Unclassified';
+function familyDisplayName(family?: string | null, fallback?: string | null): string {
+  if (!family) return fallback?.trim() || 'Unclassified';
   const tubulinMatch = family.match(/^tubulin_(\w+)$/);
   if (tubulinMatch) {
     const name = tubulinMatch[1];
@@ -404,14 +404,14 @@ const EntityGroupSection = memo(function EntityGroupSection({
     return cs ? chainIds.some(id => cs[id]?.visible ?? true) : true;
   });
 
-  const displayName = familyDisplayName(group.family);
-  const nameColor = familyBorderColor(group.family, false);
   const entity = group.entity;
+  const description = entity.pdbx_description;
+  const displayName = familyDisplayName(group.family, description);
+  const nameColor = familyBorderColor(group.family, false);
   const uniprotIds = entity.uniprot_accessions;
   const organism = entity.src_organism_names?.[0];
   const seqLen = entity.sequence_length;
   const isotype = entity.isotype;
-  const description = entity.pdbx_description;
 
   const headerHover = useHoverIntent(
     () => instance?.highlightChains(chainIds, true),
@@ -534,11 +534,9 @@ const ChainRow = memo(function ChainRow({
   const rowHover = useHoverIntent(
     () => {
       instance?.highlightChain(chain.chainId, true);
-      if (labelsEnabled) instance?.showComponentLabel(chain.chainId);
     },
     () => {
       instance?.highlightChain(chain.chainId, false);
-      instance?.hideComponentLabel();
     }
   );
 
@@ -625,8 +623,8 @@ function LigandRow({
   const smiles = entity?.SMILES_stereo ?? entity?.SMILES;
 
   const rowHover = useHoverIntent(
-    () => { if (labelsEnabled) instance?.showComponentLabel(ligand.uniqueKey); },
-    () => { instance?.hideComponentLabel(); }
+    () => {},
+    () => {}
   );
 
   return (

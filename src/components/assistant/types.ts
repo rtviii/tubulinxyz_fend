@@ -36,7 +36,13 @@ export type ViewerAction =
   // Focus 3D camera + draw binding-site representation for a named ligand on a
   // loaded chain. Reuses already-fetched per-chain contact data (no fetch).
   // auth_asym_id defaults to the active monomer chain when null/undefined.
-  | { type: 'FocusBindingSite'; args: { chemical_id: string; auth_asym_id?: string | null } };
+  | { type: 'FocusBindingSite'; args: { chemical_id: string; auth_asym_id?: string | null } }
+  // Draw the real non-covalent contacts between a chain and the chains around
+  // it, computed live from the loaded structure (no MSA / DB track). Works in
+  // BOTH easy and expert mode — the assistant's "where does <chain/partner>
+  // bind" path when the partner is physically present in the structure.
+  // partner_auth_asym_ids restricts the partners; omitted = every other chain.
+  | { type: 'ShowChainInterface'; args: { auth_asym_id: string; partner_auth_asym_ids?: string[] | null } };
 
 export type ViewerActionType = ViewerAction['type'];
 

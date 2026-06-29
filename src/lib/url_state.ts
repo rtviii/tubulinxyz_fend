@@ -34,7 +34,7 @@ const STRING_KEYS = [
   "variantObserved", "variantSource",
 ] as const;
 
-const BOOLEAN_KEYS = ["hasVariants"] as const;
+const BOOLEAN_KEYS = ["hasVariants", "hasAnyMap"] as const;
 
 export function uiFiltersToSearchParams(filters: Partial<UiFilters>): URLSearchParams {
   const sp = new URLSearchParams();

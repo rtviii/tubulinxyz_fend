@@ -36,6 +36,10 @@ export interface ViewerDispatchContext {
   // the binding-site representation in 3D, and jumps the MSA to the span.
   // authAsymId is optional; null/undefined falls back to the active monomer chain.
   focusBindingSite?: (chemicalId: string, authAsymId?: string | null) => Promise<void>;
+  // Draw a chain's inter-chain contacts AND surface them in the bond-pill card.
+  // When absent (e.g. landing, no card UI), the dispatcher calls the instance
+  // method directly so the 3D still draws.
+  showChainInterface?: (authAsymId: string, partnerAuthAsymIds?: string[]) => Promise<void>;
 }
 
 // Defense-in-depth guard. The backend validates action args against Pydantic
@@ -59,6 +63,7 @@ const REQUIRED_ARGS: Record<ViewerActionType, string[]> = {
   AddAnnotationTrack: ['label', 'spec', 'color'],
   RemoveAnnotationTrack: ['label_match'],
   FocusBindingSite: ['chemical_id'],
+  ShowChainInterface: ['auth_asym_id'],
 };
 
 function validateAction(action: ViewerAction): string | null {
@@ -181,6 +186,18 @@ async function dispatchOne(
       }
       await ctx.focusBindingSite(a.args.chemical_id, a.args.auth_asym_id);
       console.log('[viewerDispatcher] FocusBindingSite OK');
+      return;
+    }
+    case 'ShowChainInterface': {
+      // Computed live from the loaded structure — no monomer-mode gate, so it
+      // works in easy AND expert mode. Prefer the page callback (it also feeds
+      // the bond-pill card); fall back to the bare instance draw when absent.
+      const partners = a.args.partner_auth_asym_ids ?? undefined;
+      if (ctx.showChainInterface) {
+        await ctx.showChainInterface(a.args.auth_asym_id, partners);
+      } else {
+        await instance.focusChainInterface(a.args.auth_asym_id, partners);
+      }
       return;
     }
     default: {

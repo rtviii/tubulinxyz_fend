@@ -33,6 +33,8 @@ interface ChainAnchorPillProps {
   activeBindingSite: ActiveBindingSite | null;
   onActivateBindingSite: (target: Omit<ActiveBindingSite, 'contacts'>) => Promise<void> | void;
   onDeactivateBindingSite: () => Promise<void> | void;
+  /** Open the easy-mode sequence/MSA panel for a chain (α/β only). */
+  onOpenChainSequence?: (chainId: string) => void;
 }
 
 export function ChainAnchorPill({
@@ -46,6 +48,7 @@ export function ChainAnchorPill({
   activeBindingSite,
   onActivateBindingSite,
   onDeactivateBindingSite,
+  onOpenChainSequence,
 }: ChainAnchorPillProps) {
   // Ligand selection scope:
   // - expert mode (monomer): ligands associated with the active chain
@@ -134,6 +137,7 @@ export function ChainAnchorPill({
               isMonomerView={isMonomerView}
               activeChainId={activeChainId}
               onSwitchChain={chainId => instance?.switchMonomerChain(chainId)}
+              onOpenChainSequence={onOpenChainSequence}
             />
           ))}
           {visibleLigands.map(lig => (

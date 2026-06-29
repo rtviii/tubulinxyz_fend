@@ -5,12 +5,12 @@ import { createPortal } from 'react-dom';
 import { X, ExternalLink, Crosshair, Plus } from 'lucide-react';
 import { useGetVariantsAtPositionQuery, useGetModificationsAtPositionQuery } from '@/store/tubxz_api';
 import type { VariantAnnotation, ModificationAnnotation } from '@/store/tubxz_api';
-import { MODIFICATION_COLORS, VARIANT_COLORS } from '@/lib/colors/annotationPalette';
+import { MODIFICATION_COLORS } from '@/lib/colors/annotationPalette';
 import { useOrganismMap } from '@/services/organism_map';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { ResiduePopupTarget } from './types';
-import { useAppSelector } from '@/store/store';
-import { selectAllTracks, type TrackEntry } from '@/store/slices/annotationTracksSlice';
+import { useAppSelector, useAppDispatch } from '@/store/store';
+import { selectAllTracks, setHoveredTrack, type TrackEntry } from '@/store/slices/annotationTracksSlice';
 
 // ── Drag hook ────────────────────────────────────────────────
 
@@ -50,7 +50,7 @@ function useDrag(initialPos: { x: number; y: number }) {
 
 // ── Shared content (the inner card) ──────────────────────────
 
-function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ballStickActive, onAlignChain, onMouseDownHeader }: {
+export function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ballStickActive, onAlignChain, onMouseDownHeader }: {
   target: ResiduePopupTarget;
   onClose: () => void;
   onFocus?: () => void;
@@ -78,7 +78,6 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
   // Unified substitution groups (literature + structural merged by path)
   const allSubs = allVariants.filter(v => v.type === 'substitution');
   const subPathGroups = groupSubstitutionsByPath(allSubs);
-  const nonSubs = allVariants.filter(v => v.type !== 'substitution');
 
   // Group modifications by type
   const modsByType: Record<string, ModificationAnnotation[]> = {};
@@ -116,11 +115,10 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
     return hits;
   }, [allTracks, target.family, target.masterIndex]);
 
-  // Section-level collapsible state — default: all expanded
+  // Section-level collapsible state. Tracks start collapsed.
   const [subsOpen, setSubsOpen] = useState(true);
-  const [delInsOpen, setDelInsOpen] = useState(true);
   const [modsOpen, setModsOpen] = useState(true);
-  const [tracksOpen, setTracksOpen] = useState(true);
+  const [tracksOpen, setTracksOpen] = useState(false);
 
   // Stop drag from being initiated when interacting with header buttons
   const stopDrag = (e: React.MouseEvent) => e.stopPropagation();
@@ -129,15 +127,14 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
     <>
       {/* Title bar: the whole header is the drag handle (OS-window style) */}
       <div
-        className="flex items-center gap-1 px-1.5 py-1 border-b border-gray-200 bg-gray-50/80 rounded-t-lg cursor-grab active:cursor-grabbing select-none"
+        className="flex items-center gap-1 px-1.5 py-1 border-b border-gray-200/70 bg-gray-50/60 rounded-t-lg cursor-grab active:cursor-grabbing select-none"
         onMouseDown={onMouseDownHeader}
+        title={`${target.label} · col ${target.masterIndex}`}
       >
         <span className="font-mono font-bold text-gray-900 text-xs">
           {target.residueLetter}
-          {target.authSeqId !== undefined ? target.authSeqId : ''}
+          {target.authSeqId !== undefined ? target.authSeqId : target.masterIndex}
         </span>
-        <span className="text-[9px] text-gray-500">{target.label}</span>
-        <span className="text-[8px] text-gray-400">col {target.masterIndex}</span>
         <div className="flex-1" />
         <div className="flex items-center gap-0.5" onMouseDown={stopDrag}>
           {onFocus && (
@@ -170,7 +167,7 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
         </div>
       </div>
 
-      <div className="px-1.5 py-0.5 max-h-[340px] overflow-y-auto" style={{ minWidth: 240 }}>
+      <div className="px-1.5 py-0.5 max-h-[340px] overflow-y-auto no-scrollbar" style={{ minWidth: 240 }}>
         {!hasFamily && (
           <div className="text-[9px] text-gray-400 italic">No family data available</div>
         )}
@@ -203,36 +200,6 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
               </div>
             )}
 
-            {/* Non-substitution variants (del/ins) */}
-            {nonSubs.length > 0 && (
-              <div className="mb-0.5">
-                <SectionHeader
-                  label="Del/Ins"
-                  count={nonSubs.length}
-                  open={delInsOpen}
-                  onToggle={() => setDelInsOpen(o => !o)}
-                />
-                {delInsOpen && (
-                  <div className="border border-gray-100 rounded bg-gray-50/50">
-                    {nonSubs.map((v, i) => {
-                      const color = VARIANT_COLORS[v.type as keyof typeof VARIANT_COLORS] ?? '#9ca3af';
-                      const org = v.source === 'structural' && v.rcsb_id && organismMap
-                        ? organismMap[v.rcsb_id]?.[0] : v.species;
-                      return (
-                        <div key={i} className="flex items-center gap-1 px-1 py-0.5 text-[9px] border-b border-gray-50 last:border-b-0">
-                          <span className="text-[7px] px-1 py-px rounded font-semibold text-white" style={{ backgroundColor: color }}>
-                            {v.type.slice(0, 3).toUpperCase()}
-                          </span>
-                          {v.rcsb_id && <span className="font-mono text-gray-600">{v.rcsb_id}:{v.entity_id ?? '?'}</span>}
-                          {org && <span className="text-gray-400">{org}</span>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Modifications grouped by type */}
             {Object.keys(modsByType).length > 0 && (
               <div className="mb-0.5">
@@ -258,7 +225,7 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
             {trackHits.length > 0 && (
               <div className="mb-0.5">
                 <SectionHeader
-                  label="Tracks"
+                  label="Currently in tracks"
                   count={trackHits.length}
                   open={tracksOpen}
                   onToggle={() => setTracksOpen(o => !o)}
@@ -274,7 +241,7 @@ function ResiduePopupContent({ target, onClose, onFocus, onToggleBallStick, ball
             )}
 
             {/* Empty state */}
-            {allVariants.length === 0 && modifications.length === 0 && trackHits.length === 0 && (
+            {subPathGroups.length === 0 && modifications.length === 0 && trackHits.length === 0 && (
               <div className="text-[9px] text-gray-400 py-1">No annotations at this position</div>
             )}
           </>
@@ -360,7 +327,7 @@ function SubstitutionPathRow({
         <span className="text-[8px] text-gray-500 tabular-nums w-4 text-right">{variants.length}</span>
       </div>
       {expanded && (
-        <div className="ml-3 pl-1.5 border-l border-gray-200 mt-0.5 mb-0.5 max-h-44 overflow-y-auto">
+        <div className="ml-3 pl-1.5 border-l border-gray-200 mt-0.5 mb-0.5 max-h-44 overflow-y-auto no-scrollbar">
           {/* Literature entries -- amber left border */}
           {litEntries.map((v, i) => {
             const detail = [v.species, v.tubulin_type].filter(Boolean).join(' / ');
@@ -467,7 +434,7 @@ function ModificationTypeRow({
                 </div>
 
                 {isOpen && (
-                  <div className="mt-0.5 mb-0.5 overflow-x-auto">
+                  <div className="mt-0.5 mb-0.5 overflow-x-auto no-scrollbar">
                     <table className="text-[8px] border-collapse">
                       <thead>
                         <tr className="text-gray-400">
@@ -529,8 +496,12 @@ function TrackHitRow({
   hit: { entry: TrackEntry; position: NonNullable<TrackEntry['resolved']>[number]; color: string };
 }) {
   const [expanded, setExpanded] = useState(false);
+  const dispatch = useAppDispatch();
   const { entry, position, color } = hit;
   const recordCount = position.matched_records.length;
+
+  // Clear the MSA header emphasis if the popup closes while hovered.
+  useEffect(() => () => { dispatch(setHoveredTrack(null)); }, [dispatch]);
 
   // Pull a few common keys for terse one-line display. matched_records may be
   // variants, modifications, or binding contacts depending on track kind, so
@@ -549,6 +520,8 @@ function TrackHitRow({
       <div
         className="flex items-center gap-1 text-[9px] cursor-pointer hover:bg-gray-50 rounded px-0.5 py-px"
         onClick={() => setExpanded(e => !e)}
+        onMouseEnter={() => dispatch(setHoveredTrack(entry.spec.id))}
+        onMouseLeave={() => dispatch(setHoveredTrack(null))}
       >
         <span className="text-gray-400 w-2 text-center flex-shrink-0">{expanded ? '▾' : '▸'}</span>
         <span className="w-1.5 h-1.5 rounded-sm flex-shrink-0" style={{ backgroundColor: color }} />
@@ -558,7 +531,7 @@ function TrackHitRow({
         <span className="text-[8px] text-gray-400 tabular-nums ml-auto">×{recordCount}</span>
       </div>
       {expanded && (
-        <div className="ml-3 pl-1.5 border-l border-gray-200 mt-0.5 mb-0.5 max-h-32 overflow-y-auto">
+        <div className="ml-3 pl-1.5 border-l border-gray-200 mt-0.5 mb-0.5 max-h-32 overflow-y-auto no-scrollbar">
           {position.matched_records.map((rec, i) => (
             <div key={i} className="text-[8px] text-gray-500 py-px leading-snug break-all">
               {summarize(rec)}
@@ -583,6 +556,7 @@ function AnchoredPopup({
   onToggleBallStick,
   ballStickActive,
   onAlignChain,
+  onHoverResidue,
   stackIndex = 0,
 }: {
   target: ResiduePopupTarget & { anchor: { mode: 'anchored'; position3d: [number, number, number] } };
@@ -592,6 +566,7 @@ function AnchoredPopup({
   onToggleBallStick?: () => void;
   ballStickActive?: boolean;
   onAlignChain?: (pdbId: string, chainId: string) => void;
+  onHoverResidue?: (target: ResiduePopupTarget, enter: boolean) => void;
   stackIndex?: number;
 }) {
   const [screenPos, setScreenPos] = useState<{ x: number; y: number } | null>(null);
@@ -642,8 +617,10 @@ function AnchoredPopup({
         <circle cx={anchorX} cy={anchorY} r={4} fill="#3b82f6" opacity={0.8} />
       </svg>
       <div
-        className="fixed z-[9999] bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg shadow-lg min-w-[220px] text-sm"
+        className="fixed z-[9999] bg-white/80 backdrop-blur border border-slate-200/60 rounded-lg shadow-lg min-w-[220px] text-sm"
         style={{ top: popupPos.y, left: popupPos.x }}
+        onMouseEnter={() => onHoverResidue?.(target, true)}
+        onMouseLeave={() => onHoverResidue?.(target, false)}
       >
         <ResiduePopupContent
           target={target}
@@ -661,13 +638,14 @@ function AnchoredPopup({
 
 // ── Static popup (screen-positioned, no 3D tracking) ─────────
 
-function StaticPopup({
+export function StaticPopup({
   target,
   onClose,
   onFocusResidue,
   onToggleBallStick,
   ballStickActive,
   onAlignChain,
+  onHoverResidue,
   stackIndex = 0,
 }: {
   target: ResiduePopupTarget & { anchor: { mode: 'static'; screenX: number; screenY: number } };
@@ -676,6 +654,7 @@ function StaticPopup({
   onToggleBallStick?: () => void;
   ballStickActive?: boolean;
   onAlignChain?: (pdbId: string, chainId: string) => void;
+  onHoverResidue?: (target: ResiduePopupTarget, enter: boolean) => void;
   stackIndex?: number;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -687,8 +666,10 @@ function StaticPopup({
   return (
     <div
       ref={menuRef}
-      className="fixed z-[9999] bg-white/95 backdrop-blur-sm border border-gray-200 rounded-lg shadow-lg min-w-[220px] text-sm"
+      className="fixed z-[9999] bg-white/80 backdrop-blur border border-slate-200/60 rounded-lg shadow-lg min-w-[220px] text-sm"
       style={{ top: pos.y, left: pos.x }}
+      onMouseEnter={() => onHoverResidue?.(target, true)}
+      onMouseLeave={() => onHoverResidue?.(target, false)}
     >
       <ResiduePopupContent
         target={target}
@@ -711,10 +692,11 @@ interface ResiduePopupProps {
   onClose: () => void;
   onFocusResidue?: (target: ResiduePopupTarget) => void;
   onAlignChain?: (pdbId: string, chainId: string) => void;
+  onHoverResidue?: (target: ResiduePopupTarget, enter: boolean) => void;
   stackIndex?: number;
 }
 
-function ResiduePopupSingle({ target, instance, onClose, onFocusResidue, onAlignChain, stackIndex = 0 }: ResiduePopupProps) {
+function ResiduePopupSingle({ target, instance, onClose, onFocusResidue, onAlignChain, onHoverResidue, stackIndex = 0 }: ResiduePopupProps) {
   const [ballStickActive, setBallStickActive] = useState(false);
   const cleanupRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -743,6 +725,7 @@ function ResiduePopupSingle({ target, instance, onClose, onFocusResidue, onAlign
     onToggleBallStick: (instance && target.chainId && target.authSeqId !== undefined) ? handleToggleBallStick : undefined,
     ballStickActive,
     onAlignChain,
+    onHoverResidue,
     stackIndex,
   };
 
@@ -761,9 +744,10 @@ interface ResiduePopupLayerProps {
   onCloseAll: () => void;
   onFocusResidue?: (target: ResiduePopupTarget) => void;
   onAlignChain?: (pdbId: string, chainId: string) => void;
+  onHoverResidue?: (target: ResiduePopupTarget, enter: boolean) => void;
 }
 
-export function ResiduePopupLayer({ popups, instance, onClose, onCloseAll, onFocusResidue, onAlignChain }: ResiduePopupLayerProps) {
+export function ResiduePopupLayer({ popups, instance, onClose, onCloseAll, onFocusResidue, onAlignChain, onHoverResidue }: ResiduePopupLayerProps) {
   useEffect(() => {
     if (popups.length === 0) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -785,6 +769,7 @@ export function ResiduePopupLayer({ popups, instance, onClose, onCloseAll, onFoc
           onClose={() => onClose(target.id)}
           onFocusResidue={onFocusResidue}
           onAlignChain={onAlignChain}
+          onHoverResidue={onHoverResidue}
           stackIndex={i}
         />
       ))}

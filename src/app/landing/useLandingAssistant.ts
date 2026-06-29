@@ -8,6 +8,7 @@
 import { useCallback, useRef, useState } from 'react';
 import type { AssistantResult } from '@/components/assistant/types';
 import { API_BASE_URL } from '@/config';
+import { logQuery } from '@/lib/queryLog';
 
 export type AssistantNote = { kind: 'error' | 'clarify'; message: string } | null;
 
@@ -15,6 +16,9 @@ export function useLandingAssistant() {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<AssistantResult | null>(null);
+  // The submitted question, retained after `text` is cleared so the handoff
+  // panel on the destination page can preface it.
+  const [lastQuestion, setLastQuestion] = useState<string | null>(null);
   const [note, setNote] = useState<AssistantNote>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -25,6 +29,9 @@ export function useLandingAssistant() {
   const submit = useCallback(async (raw: string, pageContextExtra?: Record<string, unknown>) => {
     const trimmed = raw.trim();
     if (!trimmed || loading) return;
+
+    setLastQuestion(trimmed);
+    logQuery('landing', trimmed, { page: 'landing', ...pageContextExtra });
 
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -76,5 +83,5 @@ export function useLandingAssistant() {
 
   const canSend = text.trim().length > 0 && !loading;
 
-  return { text, setText, loading, response, note, active, canSend, submit, dismiss };
+  return { text, setText, loading, response, lastQuestion, note, active, canSend, submit, dismiss };
 }

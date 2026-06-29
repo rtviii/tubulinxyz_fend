@@ -107,11 +107,15 @@ export interface TrackEntry {
 interface AnnotationTracksState {
   tracks: Record<string, TrackEntry>;
   order: string[];  // display order in the aux panel
+  // Track whose row should be emphasized in the MSA labels (set on hover from
+  // the residue popup's "Currently in tracks" rows). Transient UI state.
+  hoveredTrackId: string | null;
 }
 
 const initialState: AnnotationTracksState = {
   tracks: {},
   order: [],
+  hoveredTrackId: null,
 };
 
 // ============================================================
@@ -222,6 +226,10 @@ export const annotationTracksSlice = createSlice({
       state.order = state.order.filter(id => id !== action.payload);
     },
 
+    setHoveredTrack: (state, action: PayloadAction<string | null>) => {
+      state.hoveredTrackId = action.payload;
+    },
+
     clearAllTracks: () => initialState,
   },
 });
@@ -233,6 +241,7 @@ export const {
   setTrackError,
   toggleTrackVisibility,
   removeTrack,
+  setHoveredTrack,
   clearAllTracks,
 } = annotationTracksSlice.actions;
 
@@ -253,6 +262,9 @@ export const selectAllTracks = createSelector(
 
 export const selectTrack = (state: RootState, id: string): TrackEntry | null =>
   state.annotationTracks.tracks[id] ?? null;
+
+export const selectHoveredTrackId = (state: RootState): string | null =>
+  state.annotationTracks.hoveredTrackId;
 
 export const selectTracksByFamily = createSelector(
   [selectAllTracks, (_state: RootState, family: Family) => family],

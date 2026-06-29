@@ -4,7 +4,6 @@ import type { ExplorerContext, ExplorerQuestion } from '../types';
 import type { StructureProfile } from '@/lib/profile_utils';
 import { masterFrequenciesToColorings } from '../heatmapColors';
 import { getMolstarLigandColor } from '@/components/molstar/colors/palette';
-import { buildMultiResidueQuery, executeQuery } from '@/components/molstar/core/queries';
 
 interface CanonicalBindingSiteResponse {
   chemical_id: string;
@@ -79,46 +78,6 @@ export function useCanonicalBindingSite(
 
       if (allColorings.length > 0) {
         await ctx.instance.applyColorscheme(`canonical-site-${chemicalId}`, allColorings);
-
-        const structure = ctx.instance.viewer.getCurrentStructure();
-        if (structure) {
-          const sorted = [...allColorings].sort((a, b) => {
-            const freqA = freqMap.get(
-              Number(Object.entries(chains[0].masterToAuth)
-                .find(([, v]) => v === a.authSeqId)?.[0] ?? 0)
-            ) ?? 0;
-            const freqB = freqMap.get(
-              Number(Object.entries(chains[0].masterToAuth)
-                .find(([, v]) => v === b.authSeqId)?.[0] ?? 0)
-            ) ?? 0;
-            return freqB - freqA;
-          });
-
-          const topResidues = sorted.slice(0, Math.min(5, sorted.length));
-          if (topResidues.length > 0) {
-            const loci = executeQuery(
-              buildMultiResidueQuery(
-                topResidues[0].chainId,
-                topResidues.map(r => r.authSeqId)
-              ),
-              structure
-            );
-
-            if (loci) {
-              const familyShort = family.replace('tubulin_', '');
-              const labelText = data.chemical_name
-                ? `${data.chemical_name} site \u00B7 ${data.structure_count} structures`
-                : `${chemicalId} site (${familyShort}) \u00B7 ${data.structure_count} structures`;
-
-              await ctx.instance.addExplorerLabel(
-                `canonical-label-${chemicalId}`,
-                loci,
-                labelText,
-                ligandColor,
-              );
-            }
-          }
-        }
       }
 
       setIsActive(true);
@@ -129,7 +88,6 @@ export function useCanonicalBindingSite(
 
   const clear = useCallback(async () => {
     if (ctx.instance) {
-      ctx.instance.removeExplorerLabel(`canonical-label-${chemicalId}`);
       await ctx.instance.restoreDefaultColors();
     }
     setIsActive(false);

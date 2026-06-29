@@ -5,7 +5,9 @@ import {  getMolstarLigandColor } from '../colors/palette';
 import {
   computeStructureInteractions,
   extractLigandBonds,
+  extractInterChainBonds,
   type LigandBondInfo,
+  type BondPairInfo,
 } from '../core/bindingSite';
 import {
   MolstarInstanceId,
@@ -118,6 +120,9 @@ export class MolstarInstance {
   private bindingSiteLabelKey: string | null = null;
   private activeBindingSiteKey: string | null = null;
 
+  // Active chain-interface representation refs (focusChainInterface()).
+  private chainInterfaceRefs: string[] = [];
+
   constructor(
     public readonly id: MolstarInstanceId,
     public readonly viewer: MolstarViewer,
@@ -182,8 +187,7 @@ export class MolstarInstance {
     return this.labelManager;
   }
 
-
-removeExplorerLabel(key: string): void {
+  removeExplorerLabel(key: string): void {
   this.labelManager?.removePersistent(key);
 }
 
@@ -257,6 +261,23 @@ private componentColor(component: Component): Color {
 }
 
 hideComponentLabel(): void {
+  this.labelManager?.hideHover();
+}
+
+/**
+ * Transient 3D label for an arbitrary residue selection — styled like the
+ * component hover labels. Used by the assistant's ephemeral entity highlights
+ * (hover a residue/range/pocket/region → label shows; mouse-out → hideHoverLabel).
+ */
+async showResiduesLabel(chainId: string, authSeqIds: number[], text: string, color?: Color): Promise<void> {
+  const mgr = this.ensureLabelManager();
+  const structure = this.viewer.getCurrentStructure();
+  if (!mgr || !structure || !authSeqIds.length) return;
+  const loci = executeQuery(buildMultiResidueQuery(chainId, authSeqIds), structure);
+  if (loci) await mgr.showHover(loci, text, color);
+}
+
+hideHoverLabel(): void {
   this.labelManager?.hideHover();
 }
 
@@ -1354,6 +1375,154 @@ const color = getMolstarGhostColor(family);
 
   getActiveBindingSiteKey(): string | null {
     return this.activeBindingSiteKey;
+  }
+
+  /** Distinct auth_asym_ids of the polymer chains in the loaded structure. */
+  private getPolymerChainIds(): string[] {
+    const structure = this.viewer.getCurrentStructure();
+    if (!structure) return [];
+    const ids = new Set<string>();
+    for (const unit of structure.units) {
+      const loc = StructureElement.Location.create(structure, unit, unit.elements[0]);
+      if (StructureProperties.entity.type(loc) === 'polymer') {
+        ids.add(StructureProperties.chain.auth_asym_id(loc));
+      }
+    }
+    return Array.from(ids);
+  }
+
+  /** Clear any chain-interface representation built by focusChainInterface(). */
+  async clearChainInterface(): Promise<void> {
+    const plugin = this.viewer?.ctx;
+    if (plugin) {
+      for (const ref of this.chainInterfaceRefs) {
+        try { await plugin.build().delete(ref).commit(); } catch { /* gone */ }
+      }
+    }
+    this.chainInterfaceRefs = [];
+  }
+
+  /**
+   * Draw the real non-covalent contacts between `chainId` and the polymer
+   * chains around it, as an ephemeral representation: ball-and-stick on the
+   * contacting residues of each chain (ghost-coloured by family) plus a Molstar
+   * 'interactions' layer for the bonds. Camera focuses on `chainId`.
+   *
+   * Works in BOTH easy and expert mode — it reads the loaded assembly directly
+   * and needs no MSA / master-index track (unlike AddAnnotationTrack). This is
+   * the assistant's "where does <chain> bind" path for a partner that is
+   * actually present in the structure (e.g. a MAP like EB on a microtubule).
+   *
+   * `partnerChainIds` restricts the contacts to those chains; if omitted, every
+   * other polymer chain is treated as a potential partner. Returns the bond
+   * pairs (for an optional pill UI), or null if nothing was drawn.
+   */
+  async focusChainInterface(chainId: string, partnerChainIds?: string[]): Promise<BondPairInfo[] | null> {
+    const plugin = this.viewer?.ctx;
+    const structure = this.viewer.getCurrentStructure();
+    if (!plugin || !structure) return null;
+
+    const hierarchy = plugin.managers.structure.hierarchy.current;
+    if (hierarchy.structures.length === 0) return null;
+    const structureCell = hierarchy.structures[0].cell;
+
+    await this.clearChainInterface();
+
+    let partners = (partnerChainIds ?? []).filter(c => c && c !== chainId);
+    if (partners.length === 0) {
+      partners = this.getPolymerChainIds().filter(c => c !== chainId);
+    }
+    if (partners.length === 0) return null;
+
+    let interactions: any = null;
+    try {
+      interactions = await computeStructureInteractions(plugin, structure);
+    } catch (err) {
+      console.warn('[chain-interface] interaction computation failed:', err);
+    }
+    if (!interactions) return null;
+
+    // Aggregate the focused chain's contacts across every partner.
+    const selfResidues = new Set<number>();
+    const partnerResidues = new Map<string, Set<number>>();
+    const pairs: BondPairInfo[] = [];
+    for (const partner of partners) {
+      const bonds = extractInterChainBonds(structure, interactions, chainId, partner);
+      if (bonds.bondCount === 0) continue;
+      bonds.residuesA.forEach(r => selfResidues.add(r));
+      let pset = partnerResidues.get(partner);
+      if (!pset) { pset = new Set(); partnerResidues.set(partner, pset); }
+      bonds.residuesB.forEach(r => pset!.add(r));
+      pairs.push(...bonds.pairs);
+    }
+    if (selfResidues.size === 0) return null;
+
+    const classification = this.instanceState?.tubulinClassification ?? {};
+    const exprs: any[] = [];
+
+    // Ball-and-stick for the focused chain's contacting residues.
+    const selfQuery = buildMultiResidueQuery(chainId, Array.from(selfResidues));
+    exprs.push(selfQuery);
+    const selfComp = await plugin.builders.structure.tryCreateComponentFromExpression(
+      structureCell, selfQuery, `chain-iface-self-${chainId}`, { label: `Interface (${chainId})` },
+    );
+    if (selfComp) {
+      this.chainInterfaceRefs.push(selfComp.ref);
+      await plugin.builders.structure.representation.addRepresentation(selfComp, {
+        type: 'ball-and-stick', color: 'uniform',
+        colorParams: { value: getMolstarGhostColor(classification[chainId]) },
+        typeParams: flatBallAndStickParams(0.15),
+      });
+    }
+
+    // Ball-and-stick for each partner chain's contacting residues.
+    for (const [partner, pset] of partnerResidues) {
+      const pQuery = buildMultiResidueQuery(partner, Array.from(pset));
+      exprs.push(pQuery);
+      const pComp = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structureCell, pQuery, `chain-iface-partner-${chainId}-${partner}`, { label: `Interface (${partner})` },
+      );
+      if (pComp) {
+        this.chainInterfaceRefs.push(pComp.ref);
+        await plugin.builders.structure.representation.addRepresentation(pComp, {
+          type: 'ball-and-stick', color: 'uniform',
+          colorParams: { value: getMolstarGhostColor(classification[partner]) },
+          typeParams: flatBallAndStickParams(0.15),
+        });
+      }
+    }
+
+    // Dashed interaction lines across all involved residues.
+    if (exprs.length > 1) {
+      const ifaceExpr = MS.struct.combinator.merge(exprs);
+      const ifaceComp = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structureCell, ifaceExpr, `chain-iface-interactions-${chainId}`, { label: `${chainId} interactions` },
+      );
+      if (ifaceComp) {
+        this.chainInterfaceRefs.push(ifaceComp.ref);
+        try {
+          await plugin.builders.structure.representation.addRepresentation(ifaceComp, {
+            type: 'interactions', color: 'interaction-type',
+          });
+        } catch { /* interactions repr unavailable; skip */ }
+      }
+    }
+
+    if (plugin.canvas3d) {
+      plugin.canvas3d.setProps({
+        postprocessing: STYLIZED_POSTPROCESSING,
+        renderer: { pickingAlphaThreshold: 0.1 },
+      });
+    }
+
+    // Camera on the focused chain.
+    const chainLoci = executeQuery(buildChainQuery(chainId), structure);
+    if (chainLoci) {
+      this.viewer.clearFocus();
+      this.viewer.focusLoci(chainLoci);
+    }
+
+    return pairs;
   }
 
   /**

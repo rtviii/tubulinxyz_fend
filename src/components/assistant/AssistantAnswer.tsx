@@ -113,6 +113,29 @@ export function AssistantAnswer({
       continue;
     }
 
+    // Markdown ATX headings (#, ##, ###…). The card UI is small, so render them
+    // as a compact bold lead-in (slightly larger for top levels) rather than huge
+    // browser-default headings — and never leak literal `##` into the prose.
+    const heading = line.match(/^\s*(#{1,6})\s+(.*)$/);
+    if (heading) {
+      flushPara();
+      flushBullets();
+      const level = heading[1].length;
+      blocks.push(
+        <p
+          key={`h-${blocks.length}`}
+          className={
+            level <= 2
+              ? 'font-semibold text-slate-800 text-[12.5px] mt-1 first:mt-0'
+              : 'font-semibold text-slate-700 mt-0.5'
+          }
+        >
+          {renderInline(heading[2], `h${blocks.length}`, renderText)}
+        </p>,
+      );
+      continue;
+    }
+
     const bullet = line.match(/^\s*[-*]\s+(.*)$/);
     if (bullet) {
       flushPara();

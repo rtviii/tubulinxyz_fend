@@ -12,6 +12,7 @@ const EXAMPLES = [
   'Where does taxol bind?',
   'Compare GTP site in human vs Toxoplasma α-tubulin',
   'Find cryo-EM structures under 3 Å',
+  'Show me lissencephaly-associated variants in β-tubulin',
 ];
 
 const PLACEHOLDER = 'Ask about structures, binding sites, ligands, mutations…';

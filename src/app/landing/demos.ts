@@ -18,8 +18,15 @@ import {
 import {
   computeStructureInteractions,
   extractLigandBonds,
+  extractInterChainBonds,
   type LigandBondInfo,
+  type BondPairInfo,
+  type ChainBondResidues,
 } from '@/components/molstar/core/bindingSite';
+
+// Re-exported so existing consumers (DemoExplanationCard) keep importing it from
+// './demos'; the definition now lives in core/bindingSite.
+export type { BondPairInfo };
 import { STYLIZED_POSTPROCESSING, flatBallAndStickParams } from '@/components/molstar/rendering/postprocessing-config';
 import { getMolstarGhostColor, getGhostHexForFamily } from '@/components/molstar/colors/palette';
 
@@ -47,7 +54,6 @@ export interface LandingDemo {
 
 // ── Constants ──
 
-const DEMO_COLOR_ACCENT = Color(0xD94A8C);
 const DEMO_COLOR_PTM = Color(0x22C55E);
 const DEMO_COLOR_MUT = Color(0xEF4444);
 const DEMO_COLOR_TAIL_A = Color(0x5B8DEF);
@@ -124,119 +130,10 @@ function buildChainColors(classification: Record<string, string>, chainIds: stri
   return result;
 }
 
-export interface BondPairInfo {
-  residueA: { chainId: string; authSeqId: number; compId: string };
-  residueB: { chainId: string; authSeqId: number; compId: string };
-  type: string;
-}
-
-interface ChainBondResidues {
-  residuesA: Set<number>;
-  residuesB: Set<number>;
-  bondCount: number;
-  pairs: BondPairInfo[];
-}
-
-// computeStructureInteractions + extractLigandBonds moved to
-// '@/components/molstar/core/bindingSite' so the in-app ligand toolbox can
-// share the same implementation.
-
-/**
- * Given pre-computed interactions, extract the residues that participate in
- * non-covalent bonds between two specific chains.
- */
-function extractInterChainBonds(
-  structure: Structure,
-  interactions: any,
-  chainA: string,
-  chainB: string,
-): ChainBondResidues {
-  const residuesA = new Set<number>();
-  const residuesB = new Set<number>();
-  const pairs: BondPairInfo[] = [];
-  let bondCount = 0;
-
-  if (!interactions) return { residuesA, residuesB, bondCount, pairs };
-
-  const { contacts, unitsFeatures } = interactions;
-
-  // Cache unit-id -> { chainId, isPolymer }
-  const unitInfoCache = new Map<number, { chainId: string; isPolymer: boolean }>();
-  function getUnitInfo(unitId: number): { chainId: string; isPolymer: boolean } {
-    if (unitInfoCache.has(unitId)) return unitInfoCache.get(unitId)!;
-    const unit = structure.unitMap.get(unitId);
-    const loc = StructureElement.Location.create(structure, unit, unit.elements[0]);
-    const info = {
-      chainId: StructureProperties.chain.auth_asym_id(loc),
-      isPolymer: StructureProperties.entity.type(loc) === 'polymer',
-    };
-    unitInfoCache.set(unitId, info);
-    return info;
-  }
-
-  for (let i = 0; i < contacts.edgeCount; i++) {
-    const edge = contacts.edges[i];
-    const { unitA: uIdA, indexA, unitB: uIdB, indexB } = edge;
-
-    const infoA = getUnitInfo(uIdA);
-    const infoB = getUnitInfo(uIdB);
-
-    // Skip non-polymer units (waters, ions, ligands)
-    if (!infoA.isPolymer || !infoB.isPolymer) continue;
-
-    let swapped = false;
-    if (infoA.chainId === chainA && infoB.chainId === chainB) { /* ok */ }
-    else if (infoA.chainId === chainB && infoB.chainId === chainA) { swapped = true; }
-    else continue;
-
-    const uA = structure.unitMap.get(uIdA);
-    const uB = structure.unitMap.get(uIdB);
-    const fA = unitsFeatures.get(uIdA);
-    const fB = unitsFeatures.get(uIdB);
-    if (!fA || !fB) continue;
-
-    const memberA = fA.members[fA.offsets[indexA]];
-    const memberB = fB.members[fB.offsets[indexB]];
-
-    const locA = StructureElement.Location.create(structure, uA, uA.elements[memberA]);
-    const locB = StructureElement.Location.create(structure, uB, uB.elements[memberB]);
-
-    // Double-check both sides are polymer residues at the element level too
-    if (StructureProperties.entity.type(locA) !== 'polymer') continue;
-    if (StructureProperties.entity.type(locB) !== 'polymer') continue;
-
-    const seqA = StructureProperties.residue.auth_seq_id(locA);
-    const seqB = StructureProperties.residue.auth_seq_id(locB);
-    const compIdA = StructureProperties.atom.label_comp_id(locA);
-    const compIdB = StructureProperties.atom.label_comp_id(locB);
-    const typeLabel = interactionTypeLabel(edge.props.type);
-
-    bondCount++;
-
-    if (!swapped) {
-      residuesA.add(seqA);
-      residuesB.add(seqB);
-      pairs.push({
-        residueA: { chainId: chainA, authSeqId: seqA, compId: compIdA },
-        residueB: { chainId: chainB, authSeqId: seqB, compId: compIdB },
-        type: typeLabel,
-      });
-    } else {
-      residuesA.add(seqB);
-      residuesB.add(seqA);
-      pairs.push({
-        residueA: { chainId: chainA, authSeqId: seqB, compId: compIdB },
-        residueB: { chainId: chainB, authSeqId: seqA, compId: compIdA },
-        type: typeLabel,
-      });
-    }
-  }
-
-  return { residuesA, residuesB, bondCount, pairs };
-}
-
-// extractLigandBonds (and the LigandBondInfo type) live in
-// '@/components/molstar/core/bindingSite' now.
+// BondPairInfo / ChainBondResidues / extractInterChainBonds (and
+// computeStructureInteractions / extractLigandBonds) now live in
+// '@/components/molstar/core/bindingSite' and are imported above, so the
+// assistant's chain-interface path and the in-app ligand toolbox share them.
 
 // Keep the old proximity-based helper as fallback
 function getInterfaceResidues(structure: any, chainA: string, chainB: string): number[] {
@@ -428,18 +325,35 @@ async function showGdpGtp(ctx: LandingDemoContext): Promise<DemoResult> {
 
 // ── Demo: Taxol binding ──
 
+// The landing dimer (9MLF) has NO taxol bound, so the taxane pocket is pulled
+// from a real taxol-bound β-tubulin structure and mapped onto chain B. β-tubulin
+// residue numbering is conserved across these structures, so the source
+// auth_seq_id values land on the matching residues of the demo dimer. The card
+// states which structure the site comes from (honesty over an unsourced
+// overpaint). 9WDA uses lowercase auth chains — its β chain is 'b'.
+const TAXOL_REF = { rcsbId: '9WDA', chainId: 'b', ligandIds: ['TA1', 'TXL', 'TAX'] };
+const TAXOL_COLOR = Color(0x00C853); // vivid green (paclitaxel / taxol)
+const TAXOL_HEX = '#00C853';
+const TAXOL_POCKET_CHAIN = 'B'; // β-tubulin on the demo dimer
+
 async function showTaxol(ctx: LandingDemoContext): Promise<DemoResult> {
   const inst = ctx.heterodimer;
   if (!inst) return { cleanup: noop, explanation: null };
 
+  const plugin = inst.viewer.ctx;
+  const structure = inst.viewer.getCurrentStructure();
+  if (!plugin || !structure) return { cleanup: noop, explanation: null };
+
   try {
-    const res = await fetch(`${API_BASE_URL}/ligands/neighborhoods/9MLF/B`);
+    const res = await fetch(
+      `${API_BASE_URL}/ligands/neighborhoods/${TAXOL_REF.rcsbId}/${TAXOL_REF.chainId}`,
+    );
     if (!res.ok) throw new Error(`Neighborhoods ${res.status}`);
     const data = await res.json();
     const neighborhoods = data.neighborhoods ?? [];
 
     let target = neighborhoods.find((n: any) =>
-      ['TXL', 'TA1', 'TAX'].includes((n.ligand_id ?? '').toUpperCase())
+      TAXOL_REF.ligandIds.includes((n.ligand_id ?? '').toUpperCase()),
     );
     if (!target) {
       target = neighborhoods
@@ -450,59 +364,61 @@ async function showTaxol(ctx: LandingDemoContext): Promise<DemoResult> {
       return { cleanup: noop, explanation: null };
     }
 
-    const residues = target.residues as { auth_asym_id: string; auth_seq_id: number }[];
-    const ligandName = target.ligand_name ?? target.ligand_id ?? 'Drug';
+    const ligandName = target.ligand_name ?? target.ligand_id ?? 'Taxol';
 
-    const colorings = residues.map(r => ({
-      chainId: r.auth_asym_id,
-      authSeqId: r.auth_seq_id,
-      color: DEMO_COLOR_ACCENT,
-    }));
-    await inst.applyColorscheme('demo-taxol', colorings);
+    // Map the source binding-site residues onto the demo's β chain (by number),
+    // dedupe by position, and sort for a tidy pill row.
+    const pocketResidues = (target.residues as { auth_seq_id: number; comp_id?: string }[])
+      .map(r => ({ chainId: TAXOL_POCKET_CHAIN, authSeqId: r.auth_seq_id, compId: r.comp_id ?? '' }))
+      .filter((r, i, arr) => arr.findIndex(x => x.authSeqId === r.authSeqId) === i)
+      .sort((a, b) => a.authSeqId - b.authSeqId);
 
-    // Also create a representation for the drug ligand itself
-    const plugin = inst.viewer.ctx;
-    const structure = inst.viewer.getCurrentStructure();
+    const authSeqIds = pocketResidues.map(r => r.authSeqId);
     const createdRefs: string[] = [];
 
-    if (plugin && structure) {
-      const hierarchy = plugin.managers.structure.hierarchy.current;
-      if (hierarchy.structures.length > 0) {
-        const structureCell = hierarchy.structures[0].cell;
-        const ligandExpr = MS.struct.generator.atomGroups({
-          'residue-test': MS.core.logic.and([
-            MS.core.rel.eq([MS.ammp('auth_comp_id'), target.ligand_id]),
-            MS.core.rel.eq([MS.ammp('auth_asym_id'), target.ligand_auth_asym_id]),
-            MS.core.rel.eq([MS.ammp('auth_seq_id'), target.ligand_auth_seq_id]),
-          ]),
+    // Ball-and-stick the pocket residues on chain B (green) — no overpaint.
+    const hierarchy = plugin.managers.structure.hierarchy.current;
+    if (hierarchy.structures.length > 0 && authSeqIds.length > 0) {
+      const structureCell = hierarchy.structures[0].cell;
+      const pocketComp = await plugin.builders.structure.tryCreateComponentFromExpression(
+        structureCell,
+        buildMultiResidueQuery(TAXOL_POCKET_CHAIN, authSeqIds),
+        'demo-taxol-pocket',
+        { label: `${ligandName} pocket` },
+      );
+      if (pocketComp) {
+        createdRefs.push(pocketComp.ref);
+        await plugin.builders.structure.representation.addRepresentation(pocketComp, {
+          type: 'ball-and-stick',
+          color: 'uniform',
+          colorParams: { value: TAXOL_COLOR },
+          typeParams: flatBallAndStickParams(0.15),
         });
-        const comp = await plugin.builders.structure.tryCreateComponentFromExpression(
-          structureCell,
-          ligandExpr,
-          `demo-drug-${target.ligand_id}`,
-          { label: ligandName },
-        );
-        if (comp) {
-          createdRefs.push(comp.ref);
-          await plugin.builders.structure.representation.addRepresentation(comp, {
-            type: 'ball-and-stick',
-            color: 'uniform',
-            colorParams: { value: DEMO_COLOR_ACCENT },
-            typeParams: flatBallAndStickParams(0.4),
-          });
-        }
       }
     }
 
+    applyPostprocessing(inst);
+
+    const tab: DemoTab = {
+      label: target.ligand_id ?? 'TA1',
+      description: `Taxane site as observed in ${TAXOL_REF.rcsbId} (${ligandName}-bound β-tubulin), mapped onto this dimer's β-tubulin. ${pocketResidues.length} pocket residues — 9MLF itself has no taxol bound.`,
+      color: TAXOL_HEX,
+      pocketResidues,
+    };
+
     return {
       cleanup: () => {
-        restoreInstance(inst);
         deleteRefs(inst, createdRefs);
+        inst.removeAllExplorerLabels();
+        inst.viewer.highlightLoci(null);
+        applyPostprocessing(inst);
       },
       explanation: {
         title: `${ligandName} binding pocket`,
-        body: `${residues.length} residues in the binding pocket on beta-tubulin. The taxane site stabilizes lateral contacts in the microtubule lattice.`,
+        body: `The taxane site stabilizes lateral contacts in the microtubule lattice. Residues mapped from ${TAXOL_REF.rcsbId}; hover to highlight, click to focus.`,
         target: 'heterodimer',
+        tabs: [tab],
+        chainColors: buildChainColors(getClassification(inst, 'landing_9mlf'), ['A', 'B']),
       },
     };
   } catch (e) {
@@ -942,7 +858,7 @@ async function showFlexibleTail(ctx: LandingDemoContext): Promise<DemoResult> {
 
 export const LANDING_DEMOS: LandingDemo[] = [
   { id: 'gdp-gtp', label: 'GDP / GTP', description: 'Show nucleotide binding sites', category: 'ligands', target: '9MLF', run: showGdpGtp },
-  { id: 'taxol', label: 'Taxol binding', description: 'Drug binding pocket on beta-tubulin', category: 'ligands', target: '9MLF', run: showTaxol },
+  { id: 'taxol', label: 'Taxol binding', description: 'Taxane pocket mapped from 9WDA', category: 'ligands', target: '9WDA', run: showTaxol },
   { id: 'intra-dimer', label: 'Intra-dimer contacts', description: 'Alpha-beta interface bonds', category: 'contacts', target: '9MLF', run: showIntraDimerContacts },
   { id: 'inter-dimer', label: 'Inter-dimer contacts', description: 'Longitudinal bonds in the lattice', category: 'contacts', target: '6WVM', run: showInterDimerContacts },
   { id: 'tail', label: 'Flexible tails', description: 'Disordered C-terminal tails', category: 'modifications', target: '9MLF', run: showFlexibleTail },

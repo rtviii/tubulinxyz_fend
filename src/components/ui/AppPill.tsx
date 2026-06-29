@@ -8,6 +8,7 @@ import {
   useAssistantTarget,
   type AssistantConfirmPayload,
 } from '@/components/assistant/AssistantTargetContext';
+import { logQuery } from '@/lib/queryLog';
 
 /**
  * Shared floating-pill shell used across landing, catalogue, and structure pages.
@@ -243,6 +244,8 @@ export function PillChatInput({
   const submit = async () => {
     const trimmed = text.trim();
     if (!trimmed || status.kind === 'loading') return;
+
+    logQuery(target.target, trimmed);
 
     abortRef.current?.abort();
     const controller = new AbortController();

@@ -103,6 +103,9 @@ interface SequenceAlignmentPanelProps {
   /** Emits the set of chain keys whose parent PDB row is currently expanded (aux rows showing). */
   onExpandedChainKeysChange?: (keys: Set<string>) => void;
   onAddAlignment?: () => void;
+  /** Export/preview: force every PDB row expanded so its aux rows (variants,
+   *  ligand sites, PTMs) materialize without manual chevron clicks. */
+  forceExpandAll?: boolean;
 }
 
 // ────────────────────────────────────────────
@@ -371,6 +374,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       onDisplaySequencesChange,
       onExpandedChainKeysChange,
       onAddAlignment,
+      forceExpandAll = false,
     } = props;
 
     const msaRef = useRef<ResizableMSAContainerHandle>(null);
@@ -479,6 +483,12 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       });
     }, []);
 
+    // export/preview: force every PDB row expanded so aux rows materialize.
+    const effectiveExpanded = useMemo(
+      () => (forceExpandAll ? new Set(pdbSequences.map(s => s.id)) : expandedSequences),
+      [forceExpandAll, pdbSequences, expandedSequences],
+    );
+
     // Annotation data (drives auxiliary track generation)
     const annotationChains = useAppSelector(
       state => state.annotations.chains
@@ -490,8 +500,8 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       const primaries = showMasters
         ? [...masterSequences, ...pdbSequences]
         : [...pdbSequences];
-      return interleaveAuxiliaries(primaries, expandedSequences, annotationChains, tracks, maxLength);
-    }, [masterSequences, pdbSequences, showMasters, expandedSequences, annotationChains, tracks, maxLength]);
+      return interleaveAuxiliaries(primaries, effectiveExpanded, annotationChains, tracks, maxLength);
+    }, [masterSequences, pdbSequences, showMasters, effectiveExpanded, annotationChains, tracks, maxLength]);
 
     // Emit chain-to-row mapping for Molstar hover crosshair
     useEffect(() => {
@@ -518,11 +528,11 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
       if (!onExpandedChainKeysChange) return;
       const pdbIds = new Set(pdbSequences.map(s => s.id));
       const expandedChainKeys = new Set<string>();
-      for (const id of expandedSequences) {
+      for (const id of effectiveExpanded) {
         if (pdbIds.has(id)) expandedChainKeys.add(id);
       }
       onExpandedChainKeysChange(expandedChainKeys);
-    }, [expandedSequences, pdbSequences]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [effectiveExpanded, pdbSequences]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Primary chain visibility (driven by Molstar component state in Redux) ──
     const primaryVisible = useAppSelector(state => {
@@ -927,7 +937,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
     // ── Loading state ──
     if (!nglLoaded || !family || maxLength === 0 || !isAligned) {
       return (
-        <div className="h-full flex flex-col bg-white overflow-hidden">
+        <div className="h-full flex flex-col bg-white/70 backdrop-blur overflow-hidden">
           <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 border-b border-gray-100 bg-gray-50/40">
             <ResidueDisplayChip
               hovered={null}
@@ -956,7 +966,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
     }
 
     return (
-      <div className="h-full flex flex-col bg-white overflow-hidden">
+      <div className="h-full flex flex-col bg-white/70 backdrop-blur overflow-hidden">
         {/* Header: residue display (left) + tools (right) + close ── */}
         <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 border-b border-gray-100 bg-gray-50/40">
           <ResidueDisplayChip
@@ -1006,7 +1016,7 @@ export const SequenceAlignmentPanel = forwardRef<MSAHandle, SequenceAlignmentPan
             visibleChainKeys={visibleChainKeys}
             onToggleChainVisibility={handleToggleChainVisibility}
             onSoloChain={handleSoloChain}
-            expandedSequences={expandedSequences}
+            expandedSequences={effectiveExpanded}
             onToggleExpand={handleToggleExpand}
             onAddAlignment={onAddAlignment}
             primaryPdbId={pdbId}
