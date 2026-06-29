@@ -1,7 +1,7 @@
 // src/hooks/useStructureHoverSync.ts
 
 import { useEffect, useRef } from 'react';
-import { useAppDispatch, useAppSelector } from '@/store/store';
+import { useAppDispatch } from '@/store/store';
 import { setComponentHovered } from '@/components/molstar/state/molstarInstancesSlice';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
 import type { MolstarInstanceId, ViewMode } from '@/components/molstar/core/types';
@@ -26,12 +26,6 @@ export function useStructureHoverSync({
   const prevKeyRef = useRef<string | null>(null);
   const viewModeRef = useRef(viewMode);
 
-  const labelsEnabled = useAppSelector(
-    state => state.molstarInstances.instances[instanceId]?.labelsEnabled ?? true
-  );
-  const labelsEnabledRef = useRef(labelsEnabled);
-  useEffect(() => { labelsEnabledRef.current = labelsEnabled; }, [labelsEnabled]);
-
   const ligandLookupRef = useRef(new Map<string, string>());
   const chainIdsRef = useRef(new Set<string>());
 
@@ -43,7 +37,6 @@ export function useStructureHoverSync({
       dispatchRef.current(setComponentHovered({
         instanceId, componentKey: prevKeyRef.current, hovered: false
       }));
-      instance.hideComponentLabel();
       prevKeyRef.current = null;
     }
   }, [viewMode, instance, instanceId]);
@@ -73,18 +66,15 @@ export function useStructureHoverSync({
       if (!info) {
         if (prev) {
           dispatch(setComponentHovered({ instanceId, componentKey: prev, hovered: false }));
-          instance.hideComponentLabel();
           prevKeyRef.current = null;
         }
         return;
       }
 
       let key: string | null = null;
-      let isLigand = false;
       const ligKey = ligandLookupRef.current.get(`${info.chainId}_${info.authSeqId}`);
       if (ligKey) {
         key = ligKey;
-        isLigand = true;
       } else if (chainIdsRef.current.has(info.chainId)) {
         key = info.chainId;
       }
@@ -97,11 +87,6 @@ export function useStructureHoverSync({
 
       if (key) {
         dispatch(setComponentHovered({ instanceId, componentKey: key, hovered: true }));
-        // Skip label creation for ligands in 3D hover to avoid unwanted camera side-effects.
-        // Ligand labels are shown from sidebar hover instead.
-        if (labelsEnabledRef.current && !isLigand) instance.showComponentLabel(key);
-      } else {
-        instance.hideComponentLabel();
       }
 
       prevKeyRef.current = key;
@@ -109,7 +94,6 @@ export function useStructureHoverSync({
 
     return () => {
       unsubscribe();
-      instance.hideComponentLabel();
       prevKeyRef.current = null;
     };
   }, [instance, instanceId]);

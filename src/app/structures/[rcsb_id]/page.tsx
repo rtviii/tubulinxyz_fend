@@ -32,6 +32,7 @@ import { ChainAnchorPill } from '@/components/structure/ChainAnchorPill';
 import { ViewerLayoutBar, type LayoutState } from '@/components/structure/ViewerLayoutBar';
 import { AlignmentDialog } from '@/components/monomer/AlignmentDialog';
 import { BindingSiteCard, type ActiveBindingSite } from '@/components/structure/BindingSiteCard';
+import { ChainInterfaceCard, type ActiveChainInterface } from '@/components/structure/ChainInterfaceCard';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import type { ImperativePanelHandle } from 'react-resizable-panels';
 import { SequenceAlignmentPanel, type MSAContextMenuEvent } from '@/components/msa/SequenceAlignmentPanel';
@@ -51,6 +52,7 @@ import { dispatchViewerActions } from '@/components/assistant/viewerCommandDispa
 import type { AssistantResult, AssistantSuggestedAction, AssistantViewerActionCall, ViewerAction } from '@/components/assistant/types';
 import type { ActionCard, EntityRef, QuerySpec } from '@/components/assistant/globalTypes';
 import { ViewerAssistantPanel } from '@/components/assistant/ViewerAssistantPanel';
+import { AssistantHandoffPanel } from '@/components/assistant/AssistantHandoffPanel';
 import {
   searchParamsToStructureView,
   type AlignedChainRef,
@@ -106,6 +108,11 @@ function StructureProfilePageInner() {
   // Arrival actions (precomputed on landing, replayed here): last-applied nonce
   // so we one-shot per arrival even across StrictMode double-invokes / remounts.
   const arrivalAppliedNonceRef = useRef<number>(0);
+  // Whether a binding-site focus has already been applied for the current load,
+  // set by EITHER the arrival-action replay or the URL focusLigand fallback, so
+  // the two channels never double-toggle the same pocket. Reset on structure change.
+  const bindingFocusDoneRef = useRef(false);
+  const urlFocusLigandAppliedRef = useRef(false);
 
   // In-page assistant: surfaced entities + last summary from /nl_query/viewer.
   const [viewerEntities, setViewerEntities] = useState<EntityRef[]>([]);
@@ -294,12 +301,44 @@ function StructureProfilePageInner() {
     if (!instance) return;
     const contacts = await instance.focusLigandBindingSite(target.uniqueKey);
     if (contacts === null) return;
+    // Mutually exclusive with the chain-interface card.
+    await instance.clearChainInterface();
+    setActiveChainInterface(null);
     setActiveBindingSite({ ...target, contacts });
   }, [instance]);
 
   const handleDeactivateBindingSite = useCallback(async () => {
     await instance?.clearBindingSite();
     setActiveBindingSite(null);
+  }, [instance]);
+
+  // ── Active chain-interface state (the chain-chain analogue of the binding
+  // site; fed by the assistant's ShowChainInterface action). ──
+  const [activeChainInterface, setActiveChainInterface] = useState<ActiveChainInterface | null>(null);
+
+  const handleShowChainInterface = useCallback(async (
+    authAsymId: string,
+    partnerAuthAsymIds?: string[],
+  ) => {
+    if (!instance) return;
+    const pairs = await instance.focusChainInterface(authAsymId, partnerAuthAsymIds);
+    if (!pairs) return;
+    // Surface the PARTNER-side residue of each bond (what the focused chain touches).
+    const contacts = pairs.map((p) => ({
+      chainId: p.residueB.chainId,
+      authSeqId: p.residueB.authSeqId,
+      compId: p.residueB.compId,
+      type: p.type,
+    }));
+    // Mutually exclusive with the ligand binding-site card.
+    await instance.clearBindingSite();
+    setActiveBindingSite(null);
+    setActiveChainInterface({ chainId: authAsymId, label: null, color: '#0d9488', contacts });
+  }, [instance]);
+
+  const handleCloseChainInterface = useCallback(async () => {
+    await instance?.clearChainInterface();
+    setActiveChainInterface(null);
   }, [instance]);
 
   // Store handle (lifted above the LLM callback so it can read fresh state
@@ -366,6 +405,8 @@ function StructureProfilePageInner() {
   // Molstar component refs we hold would be stale after reload.
   useEffect(() => {
     setActiveBindingSite(null);
+    bindingFocusDoneRef.current = false;
+    urlFocusLigandAppliedRef.current = false;
   }, [loadedStructure]);
 
   // ── Direct alignment from popup "+" buttons ──
@@ -462,7 +503,18 @@ function StructureProfilePageInner() {
     const WINDOW = 15;
     const col = target.masterIndex;
     msaRef.current?.jumpToRange(Math.max(1, col - WINDOW), col + WINDOW);
-  }, [instance]);
+    // Select the residue in the MSA (sticky) for structural residues.
+    const pdb = target.pdbId ?? loadedStructure;
+    if (pdb && target.chainId && target.authSeqId !== undefined) {
+      msaRef.current?.selectResidueByChainKey(makeChainKey(pdb, target.chainId), target.masterIndex, target.authSeqId);
+    }
+  }, [instance, loadedStructure]);
+
+  // Hovering a residue popup highlights its column in the MSA (transient).
+  const handleHoverResidueMsa = useCallback((target: ResiduePopupTarget, enter: boolean) => {
+    if (enter) msaRef.current?.setHighlight(target.masterIndex, target.masterIndex);
+    else msaRef.current?.clearHighlight();
+  }, []);
 
   // Right-click popup: track mousedown position, only open popup on mouseup if no drag occurred.
   // We can't use onContextMenu because on macOS it fires on mousedown (before any drag).
@@ -744,14 +796,34 @@ function StructureProfilePageInner() {
   );
   const polymerChainIdsRef = useRef(polymerChainIds);
   polymerChainIdsRef.current = polymerChainIds;
+  // α/β chains only — the easy-mode sequence/MSA panel needs an alignment.
+  const alignableChainIds = useMemo(
+    () => new Set(polymerComponents.filter(p => chainIsAlignable(profile, p.chainId)).map(p => p.chainId)),
+    [polymerComponents, profile]
+  );
+  const alignableChainIdsRef = useRef(alignableChainIds);
+  alignableChainIdsRef.current = alignableChainIds;
+
+  // Open the easy-mode sequence/MSA panel for a specific chain (used by the
+  // chain dropdown). Gated to alignable families so it never opens empty.
+  const handleOpenChainSequence = useCallback((chainId: string) => {
+    if (!alignableChainIdsRef.current.has(chainId)) return;
+    setStructureSequenceChainId(chainId);
+  }, []);
 
   useEffect(() => {
     if (!instance?.viewer || isMonomerView) return;
     const unsub = instance.viewer.subscribeToClick(info => {
       if (!info) return;
       const currentChain = structureSeqChainRef.current;
-      // Only auto-switch if the panel is open and the click is on a different polymer chain
-      if (currentChain && info.chainId !== currentChain && polymerChainIdsRef.current.has(info.chainId)) {
+      // Only auto-switch if the panel is already open and the click lands on a
+      // different polymer chain that actually has an alignment (α/β).
+      if (
+        currentChain &&
+        info.chainId !== currentChain &&
+        polymerChainIdsRef.current.has(info.chainId) &&
+        alignableChainIdsRef.current.has(info.chainId)
+      ) {
         setStructureSequenceChainId(info.chainId);
       }
     });
@@ -768,13 +840,22 @@ function StructureProfilePageInner() {
   const DEFAULT_MOLSTAR_SIZE = 66;
   const DEFAULT_MSA_SIZE = 34;
   const [layoutState, setLayoutState] = useState<LayoutState>('split');
+  // Set when the user explicitly closes the easy-mode MSA, so the auto-default
+  // effect below doesn't immediately re-open it with the default chain. Cleared
+  // once the panel is reopened (any visible MSA size).
+  const msaUserClosedRef = useRef(false);
 
   const handlePanelLayout = useCallback((sizes: number[]) => {
     const [molstarSize, msaSize] = sizes;
     if (molstarSize === 0 || (msaSize ?? 0) > 99.9) setLayoutState('msa-only');
     else if ((msaSize ?? 0) === 0) setLayoutState('molstar-only');
     else setLayoutState('split');
+    if ((msaSize ?? 0) > 0) msaUserClosedRef.current = false;
   }, []);
+
+  // Each structure starts fresh: a close on one structure shouldn't keep the
+  // MSA suppressed after navigating to another.
+  useEffect(() => { msaUserClosedRef.current = false; }, [loadedStructure]);
 
   // Auto expand/collapse MSA panel based on whether the bottom panel should be visible.
   // In structure (easy) mode, it starts collapsed until a chain is clicked; in monomer
@@ -794,14 +875,16 @@ function StructureProfilePageInner() {
   }, [showBottomPanel]);
 
   // Easy mode: when the user opens MSA via the layout bar (no chain selected yet),
-  // default to the first polymer chain so the panel has content to render.
+  // default to the first α/β chain so the panel renders a populated alignment.
+  // If the structure has no alignable chain, leave it unset (nothing to show).
   useEffect(() => {
     if (isMonomerView) return;
+    if (msaUserClosedRef.current) return; // user closed it; don't auto-reopen
     if (layoutState === 'molstar-only') return;
     if (structureSequenceChainId) return;
-    if (polymerComponents.length === 0) return;
-    setStructureSequenceChainId(polymerComponents[0].chainId);
-  }, [layoutState, isMonomerView, structureSequenceChainId, polymerComponents]);
+    if (!expertDefaultChainId) return;
+    setStructureSequenceChainId(expertDefaultChainId);
+  }, [layoutState, isMonomerView, structureSequenceChainId, expertDefaultChainId]);
 
   // Single place that dispatches a batch of viewer actions with the page's
   // full dispatch context. Reused by the assistant handler (auto-apply) and by
@@ -820,9 +903,10 @@ function StructureProfilePageInner() {
         },
         viewMode,
         focusBindingSite: handleFocusBindingSiteForLLM,
+        showChainInterface: handleShowChainInterface,
       });
     },
-    [instance, alignChainById, dispatch, store, viewMode, handleFocusBindingSiteForLLM],
+    [instance, alignChainById, dispatch, store, viewMode, handleFocusBindingSiteForLLM, handleShowChainInterface],
   );
 
   // Run a single suggested action (clicked chip). Failures are swallowed to a
@@ -856,6 +940,9 @@ function StructureProfilePageInner() {
 
     arrivalAppliedNonceRef.current = arrival.nonce;
     const actions = arrival.actions as unknown as ViewerAction[];
+    // Claim the binding-site focus so the URL focusLigand fallback won't re-run it
+    // after this replay clears the arrival slice.
+    if (actions.some((a) => a.type === 'FocusBindingSite')) bindingFocusDoneRef.current = true;
     (async () => {
       try {
         const reports = await runViewerActions(actions);
@@ -881,6 +968,41 @@ function StructureProfilePageInner() {
     activeChainData,
     runViewerActions,
     dispatch,
+  ]);
+
+  // Fallback for the focusLigand URL param (e.g. a refreshed or shared
+  // /structures/X?mode=monomer&chain=A&focus_ligand=LOC link, where the Redux
+  // arrival-action handoff was lost on reload). Mirrors the arrival effect's
+  // gating so the pocket is shown once the chain's ligand data is ready. The
+  // arrival channel owns the focus when present; this is purely the no-handoff
+  // path, guarded by bindingFocusDoneRef so the two never double-toggle.
+  useEffect(() => {
+    if (urlFocusLigandAppliedRef.current || bindingFocusDoneRef.current) return;
+    const chem = urlInitialState.focusLigand;
+    if (!chem) return;
+    if (arrival.actions.length > 0) return; // the arrival replay will handle it
+    if (!instance || !activeChainId || !activeFamily) return;
+    if (viewMode !== 'monomer') return;
+    if ((masterData?.alignment_length ?? 0) === 0) return;
+    if (pendingAligns.length > 0) return;
+    if (!activeChainData) return;
+
+    urlFocusLigandAppliedRef.current = true;
+    bindingFocusDoneRef.current = true;
+    handleFocusBindingSiteForLLM(chem, urlInitialState.chain ?? undefined).catch((e) =>
+      console.warn('[url-focus-ligand] focus failed', e),
+    );
+  }, [
+    urlInitialState,
+    arrival.actions.length,
+    instance,
+    activeChainId,
+    activeFamily,
+    viewMode,
+    masterData,
+    pendingAligns,
+    activeChainData,
+    handleFocusBindingSiteForLLM,
   ]);
 
   // ── Assistant target: enables the cross-page PillChatInput to drive this viewer ──
@@ -1025,7 +1147,7 @@ function StructureProfilePageInner() {
           collapsible
           collapsedSize={0}
         >
-          <div className="h-full w-full bg-white border-t border-slate-200/60 overflow-hidden">
+          <div className="h-full w-full border-t border-slate-200/60 overflow-hidden">
             {showBottomPanel && sequencePanelChainId && (
               <SequenceAlignmentPanel
                 ref={msaRef}
@@ -1045,7 +1167,11 @@ function StructureProfilePageInner() {
                   if (isMonomerView) {
                     instance?.exitMonomerView();
                   } else {
+                    // Easy mode: actually collapse the panel and don't let the
+                    // auto-default effect re-open it with the default chain.
+                    msaUserClosedRef.current = true;
                     setStructureSequenceChainId(null);
+                    msaPanelRef.current?.collapse();
                   }
                 }}
                 alignedStructures={isMonomerView ? alignedStructures : undefined}
@@ -1089,6 +1215,7 @@ function StructureProfilePageInner() {
               activeBindingSite={activeBindingSite}
               onActivateBindingSite={handleActivateBindingSite}
               onDeactivateBindingSite={handleDeactivateBindingSite}
+              onOpenChainSequence={handleOpenChainSequence}
             />
           </div>
           {activeBindingSite && (
@@ -1097,6 +1224,15 @@ function StructureProfilePageInner() {
                 site={activeBindingSite}
                 instance={instance}
                 onClose={handleDeactivateBindingSite}
+              />
+            </div>
+          )}
+          {activeChainInterface && (
+            <div className="relative z-10">
+              <ChainInterfaceCard
+                site={activeChainInterface}
+                instance={instance}
+                onClose={handleCloseChainInterface}
               />
             </div>
           )}
@@ -1143,29 +1279,43 @@ function StructureProfilePageInner() {
         </div>
       )}
 
-      {/* ── In-page assistant panel (AssistantResult from /assistant/query) ── */}
-      {(viewerEntities.length > 0 || viewerSummary || viewerNavCard || viewerAnswer || viewerCards.length > 0 || viewerSuggestedActions.length > 0) && (
-        <ViewerAssistantPanel
-          entities={viewerEntities}
-          summary={viewerSummary}
-          navCard={viewerNavCard}
-          answer={viewerAnswer}
-          cards={viewerCards}
-          queries={viewerQueries}
-          suggestedActions={viewerSuggestedActions}
-          onRunAction={onRunSuggestedAction}
-          instance={instance}
-          onDismiss={() => {
-            setViewerEntities([]);
-            setViewerSummary('');
-            setViewerNavCard(null);
-            setViewerAnswer(null);
-            setViewerCards([]);
-            setViewerSuggestedActions([]);
-            setViewerQueries([]);
-          }}
-        />
-      )}
+      {/* ── Assistant output (bottom-right): the live in-page response stacked
+              ABOVE the navigation-handoff summary. The handoff yields to its dot
+              while a live response is showing so they don't fight for the corner. ── */}
+      {(() => {
+        const hasLiveResponse =
+          viewerEntities.length > 0 || !!viewerSummary || !!viewerNavCard ||
+          !!viewerAnswer || viewerCards.length > 0 || viewerSuggestedActions.length > 0;
+        return (
+          <div className="absolute bottom-3 right-3 z-40 flex flex-col items-end gap-2 pointer-events-none max-w-[calc(100vw-1.5rem)]">
+            {hasLiveResponse && (
+              <ViewerAssistantPanel
+                entities={viewerEntities}
+                summary={viewerSummary}
+                navCard={viewerNavCard}
+                answer={viewerAnswer}
+                cards={viewerCards}
+                queries={viewerQueries}
+                suggestedActions={viewerSuggestedActions}
+                onRunAction={onRunSuggestedAction}
+                instance={instance}
+                onDismiss={() => {
+                  setViewerEntities([]);
+                  setViewerSummary('');
+                  setViewerNavCard(null);
+                  setViewerAnswer(null);
+                  setViewerCards([]);
+                  setViewerSuggestedActions([]);
+                  setViewerQueries([]);
+                }}
+              />
+            )}
+            {/* Persistent summary of the assistant handoff that brought the user
+                here: the question asked, the actions taken, the raw exchange. */}
+            <AssistantHandoffPanel loadedStructure={loadedStructure} yieldToLiveResponse={hasLiveResponse} />
+          </div>
+        );
+      })()}
 
       {/* ── AlignmentDialog (lifted from MonomerSidebar) ── */}
       {alignDialogOpen && activeChainId && isMonomerView && (
@@ -1180,7 +1330,7 @@ function StructureProfilePageInner() {
         />
       )}
 
-      <ResiduePopupLayer popups={popups} instance={instance} onClose={removePopup} onCloseAll={clearPopups} onFocusResidue={handleFocusResidue} onAlignChain={isMonomerView ? handleDirectAlign : undefined} />
+      <ResiduePopupLayer popups={popups} instance={instance} onClose={removePopup} onCloseAll={clearPopups} onFocusResidue={handleFocusResidue} onAlignChain={isMonomerView ? handleDirectAlign : undefined} onHoverResidue={handleHoverResidueMsa} />
     </div>
     </AssistantTargetProvider>
   );

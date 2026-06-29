@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff, Focus, ArrowUpRight } from 'lucide-react';
+import { Eye, EyeOff, Focus, ArrowUpRight, AlignJustify } from 'lucide-react';
 import { useAppSelector } from '@/store/store';
 import { getHexForFamily, TUBULIN_GHOST_COLORS } from '@/components/molstar/colors/palette';
 import { isAlignableFamily } from '@/lib/profile_utils';
@@ -23,8 +23,11 @@ const TUBULIN_GREEK: Record<string, string> = {
   eta: 'η',
 };
 
-export function familyDisplayName(family?: string | null): string {
-  if (!family) return 'Unclassified';
+// `fallback` is the entity's RCSB description (pdbx_description), used when a
+// chain has no resolved tubulin/MAP family so the pill still shows the real
+// molecule name instead of a bare "Unclassified"/"?".
+export function familyDisplayName(family?: string | null, fallback?: string | null): string {
+  if (!family) return fallback?.trim() || 'Unclassified';
   const tubulinMatch = family.match(/^tubulin_(\w+)$/);
   if (tubulinMatch) {
     const name = tubulinMatch[1];
@@ -32,11 +35,20 @@ export function familyDisplayName(family?: string | null): string {
     if (greek) return `${greek}-tubulin`;
     return name.charAt(0).toUpperCase() + name.slice(1) + '-tubulin';
   }
+  const mapMatch = family.match(/^map_(\w+)/);
+  if (mapMatch) {
+    return mapMatch[1].split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  }
   return family;
 }
 
-export function familyGlyph(family?: string | null): string {
-  if (!family) return '?';
+export function familyGlyph(family?: string | null, fallback?: string | null): string {
+  if (!family) {
+    // Never "?": every RCSB entity has a description — show its initial so the
+    // unclassified pill at least carries a real, distinguishing letter.
+    const m = (fallback ?? '').match(/[A-Za-z0-9]/);
+    return m ? m[0].toUpperCase() : '•';
+  }
   const tubulinMatch = family.match(/^tubulin_(\w+)$/);
   if (tubulinMatch) {
     const greek = TUBULIN_GREEK[tubulinMatch[1]];
@@ -120,6 +132,8 @@ interface PolymerFamilyToolboxProps {
   activeChainId?: string | null;
   /** Switch the active monomer chain (expert mode). */
   onSwitchChain?: (chainId: string) => void;
+  /** Open the easy-mode sequence/MSA panel for a chain (α/β only). */
+  onOpenChainSequence?: (chainId: string) => void;
 }
 
 export function PolymerFamilyToolbox({
@@ -129,6 +143,7 @@ export function PolymerFamilyToolbox({
   isMonomerView = false,
   activeChainId = null,
   onSwitchChain,
+  onOpenChainSequence,
 }: PolymerFamilyToolboxProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -147,9 +162,13 @@ export function PolymerFamilyToolbox({
   // In expert mode, light up the chip whose family owns the active chain.
   const ownsActiveChain = isMonomerView && activeChainId != null && chainIds.includes(activeChainId);
 
-  const familyName = familyDisplayName(group.family);
-  const familyColor = getHexForFamily(group.family);
   const entity = group.entity;
+  const description = entity?.pdbx_description ?? null;
+  const familyName = familyDisplayName(group.family, description);
+  const familyColor = getHexForFamily(group.family);
+  // No resolved family → mark the pill with a gray dashed outline, but still
+  // label it from the RCSB description (handled by familyName/familyGlyph).
+  const unclassified = !group.family;
   const isotype = entity && 'isotype' in entity ? entity.isotype : null;
   const uniprot = entity?.uniprot_accessions?.[0];
   const organism = entity?.src_organism_names?.[0];
@@ -195,7 +214,11 @@ export function PolymerFamilyToolbox({
         type="button"
         className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full
                    border bg-white hover:bg-slate-50 text-[10px] transition-colors
-                   ${ownsActiveChain ? 'border-slate-400 ring-1 ring-slate-300' : 'border-slate-200/80'}`}
+                   ${ownsActiveChain
+                      ? 'border-slate-400 ring-1 ring-slate-300'
+                      : unclassified
+                        ? 'border-dashed border-slate-300'
+                        : 'border-slate-200/80'}`}
         style={{ backgroundColor: ghostHex(group.family) + '18' }}
         title={isMonomerView ? `${familyName} — switch chain` : familyName}
       >
@@ -203,7 +226,7 @@ export function PolymerFamilyToolbox({
           className="font-semibold text-[11px] leading-none"
           style={{ color: familyColor }}
         >
-          {familyGlyph(group.family)}
+          {familyGlyph(group.family, description)}
         </span>
         <span className="text-slate-500 text-[9px]">{group.chains.length}</span>
       </button>
@@ -276,6 +299,7 @@ export function PolymerFamilyToolbox({
                 alignable={alignable}
                 onEnterExpert={() => enterExpertOnChain(chain.chainId)}
                 onSwitch={() => onSwitchChain?.(chain.chainId)}
+                onOpenSequence={onOpenChainSequence ? () => onOpenChainSequence(chain.chainId) : undefined}
               />
             ))}
           </div>
@@ -295,6 +319,7 @@ function ChainChip({
   alignable,
   onEnterExpert,
   onSwitch,
+  onOpenSequence,
 }: {
   chainId: string;
   instance: MolstarInstance | null;
@@ -303,6 +328,7 @@ function ChainChip({
   alignable: boolean;
   onEnterExpert: () => void;
   onSwitch: () => void;
+  onOpenSequence?: () => void;
 }) {
   const visible = useAppSelector(
     state => state.molstarInstances.instances.structure?.componentStates?.[chainId]?.visible ?? true
@@ -376,6 +402,15 @@ function ChainChip({
       >
         <Focus size={9} />
       </button>
+      {onOpenSequence && alignable && (
+        <button
+          onClick={onOpenSequence}
+          className="p-0.5 text-slate-300 hover:text-slate-700"
+          title="Open sequence / MSA here (easy mode)"
+        >
+          <AlignJustify size={9} />
+        </button>
+      )}
       <button
         onClick={() => { if (alignable) onEnterExpert(); }}
         disabled={!alignable}

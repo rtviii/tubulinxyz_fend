@@ -46,6 +46,7 @@ const injectedRtkApi = api
             family: queryArg.family,
             uniprot: queryArg.uniprot,
             isotype: queryArg.isotype,
+            hasAnyMap: queryArg.hasAnyMap,
             hasVariants: queryArg.hasVariants,
             variantFamily: queryArg.variantFamily,
             variantType: queryArg.variantType,
@@ -349,6 +350,7 @@ export type ListStructuresApiArg = {
   family?: string[] | null;
   uniprot?: string[] | null;
   isotype?: string[] | null;
+  hasAnyMap?: boolean | null;
   hasVariants?: boolean | null;
   variantFamily?: string | null;
   variantType?: string | null;
@@ -1177,6 +1179,8 @@ export type StructureFilters = {
   has_polymer_family?: string[] | null;
   has_uniprot?: string[] | null;
   has_isotype?: string[] | null;
+  /** True -> only structures that contain at least one MAP (non-tubulin, family STARTS WITH 'map_') polymer entity. */
+  has_any_map?: boolean | null;
   /** Has any variants */
   has_variants?: boolean | null;
   /** Family to scope variant filters */

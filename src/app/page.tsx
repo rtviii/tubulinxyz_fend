@@ -8,10 +8,9 @@ import LandingViewer from '@/app/landing/LandingViewer';
 import { useExistingInstance } from '@/components/molstar/services/MolstarInstanceManager';
 import { LANDING_DEMOS, DEMO_CATEGORY_LABELS, type DemoCategory, type DemoResult } from '@/app/landing/demos';
 import { DemoExplanationCard, type DemoExplanation } from '@/app/landing/DemoExplanationCard';
-import { AppPill } from '@/components/ui/AppPill';
+import { AppPill, PillDivider } from '@/components/ui/AppPill';
 import { GlobalNav } from '@/components/ui/GlobalNav';
 import { useLandingAssistant } from '@/app/landing/useLandingAssistant';
-import { useAssistantPrepaint } from '@/app/landing/useAssistantPrepaint';
 import { LandingChatInput, ThinkingShimmer } from '@/app/landing/LandingChatInput';
 import { AssistantResultsPanel } from '@/components/assistant/AssistantResultsPanel';
 
@@ -98,14 +97,6 @@ export default function Page() {
   // Both Molstar demo instances stay mounted; tabs only toggle visibility.
   const heterodimer = useExistingInstance('landing_9mlf');
   const lattice = useExistingInstance('landing_6wvm');
-
-  // When an assistant answer arrives, pre-paint the demo dimer's residues by
-  // category (binding/PTM/variant). Gated to the clean dimer tab and off while a
-  // manual demo owns the overpaint layer, so the two never fight.
-  useAssistantPrepaint(heterodimer, assistant.response, {
-    chainIds: DEMO_CHAIN_IDS,
-    enabled: activeTab === 0 && activeDemo === null,
-  });
 
   // Close the Explore dropdown on outside click.
   useEffect(() => {
@@ -216,6 +207,7 @@ export default function Page() {
                   embedded
                   hideDismiss
                   response={assistant.response}
+                  question={assistant.lastQuestion}
                   onDismiss={assistant.dismiss}
                   instance={heterodimer}
                   demo={{ rcsbId: DEMO_RCSB_ID, chainIds: DEMO_CHAIN_IDS }}
@@ -255,39 +247,39 @@ export default function Page() {
                 />
               )}
 
-              <div className="flex items-center gap-1.5">
-                {/* Unified Dimer/Lattice switch + follow-to-structure */}
-                <div className="inline-flex items-center rounded-md border border-slate-200 bg-white/90 backdrop-blur-sm overflow-hidden">
-                  {STRUCTURES.map((s, idx) => {
-                    const isActive = activeTab === idx;
-                    return (
-                      <button
-                        key={s.pdbId}
-                        type="button"
-                        onClick={() => setActiveTab(idx)}
-                        title={s.type}
-                        className={`px-2 py-1 text-[11px] leading-none transition-colors
-                          ${isActive ? 'bg-slate-100 text-slate-800 font-semibold' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-                      >
-                        {s.tab}
-                      </button>
-                    );
-                  })}
-                  <Link
-                    href={`/structures/${STRUCTURES[activeTab].pdbId}`}
-                    title={`Open ${STRUCTURES[activeTab].pdbId}`}
-                    className="px-1.5 py-1 border-l border-slate-200 text-slate-300 hover:text-slate-700 transition-colors"
-                  >
-                    <ArrowUpRight size={11} />
-                  </Link>
-                </div>
+              <AppPill>
+                {/* Dimer / Lattice switch */}
+                {STRUCTURES.map((s, idx) => {
+                  const isActive = activeTab === idx;
+                  return (
+                    <button
+                      key={s.pdbId}
+                      type="button"
+                      onClick={() => setActiveTab(idx)}
+                      title={s.type}
+                      className={`px-2.5 py-1 rounded-full leading-none transition-colors
+                        ${isActive ? 'bg-slate-100 text-slate-800 font-semibold' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      {s.tab}
+                    </button>
+                  );
+                })}
+                <Link
+                  href={`/structures/${STRUCTURES[activeTab].pdbId}`}
+                  title={`Open ${STRUCTURES[activeTab].pdbId}`}
+                  className="grid place-items-center w-6 h-6 rounded-full text-slate-300 hover:text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <ArrowUpRight size={12} />
+                </Link>
 
-                {/* Spin / Pause — icon only */}
+                <PillDivider />
+
+                {/* Spin / Pause */}
                 <button
                   onClick={() => setSpinning(v => !v)}
                   type="button"
                   title={spinning ? 'Pause rotation' : 'Resume rotation'}
-                  className="grid place-items-center w-[26px] h-[26px] rounded-md border border-slate-200 bg-white/90 backdrop-blur-sm text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
+                  className="grid place-items-center w-6 h-6 rounded-full text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   {spinning ? (
                     <svg width="10" height="10" viewBox="0 0 14 14" fill="currentColor">
@@ -301,15 +293,17 @@ export default function Page() {
                   )}
                 </button>
 
+                <PillDivider />
+
                 {/* Explore demos — collapses upward */}
                 <div className="relative" ref={demoRef}>
                   <button
                     onClick={() => setDemoOpen(v => !v)}
                     type="button"
-                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] leading-none bg-white/90 backdrop-blur-sm transition-colors
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full leading-none transition-colors
                       ${activeDemo
-                        ? 'border-slate-300 text-slate-700'
-                        : 'border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                        ? 'bg-slate-100 text-slate-700 font-medium'
+                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                       }`}
                   >
                     Demos
@@ -317,8 +311,8 @@ export default function Page() {
                   </button>
 
                   {demoOpen && (
-                    <div className="absolute bottom-full right-0 mb-1.5 w-56 rounded-md border border-slate-200
-                                    bg-white shadow-lg z-50 py-1 text-[11px] max-h-[50vh] overflow-y-auto">
+                    <div className="absolute bottom-full right-0 mb-2 w-56 rounded-xl border border-slate-200/60
+                                    bg-white/95 backdrop-blur shadow-lg z-50 py-1 text-[11px] max-h-[50vh] overflow-y-auto">
                       {(Object.entries(DEMOS_BY_CATEGORY) as [DemoCategory, typeof LANDING_DEMOS][]).map(
                         ([category, demos]) => (
                           <div key={category}>
@@ -345,7 +339,7 @@ export default function Page() {
                     </div>
                   )}
                 </div>
-              </div>
+              </AppPill>
             </div>
           </div>
         </div>

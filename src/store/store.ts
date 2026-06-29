@@ -10,7 +10,7 @@ import annotationsReducer from './slices/annotationsSlice';
 import annotationTracksReducer from './slices/annotationTracksSlice';
 import chainFocusReducer from './slices/chainFocusSlice';
 import colorOverridesReducer from './slices/colorOverridesSlice';
-import assistantToastReducer from './slices/assistantToastSlice';
+import assistantHandoffReducer from './slices/assistantHandoffSlice';
 import arrivalActionsReducer from './slices/arrivalActionsSlice';
 
 export const makeStore = () => {
@@ -23,7 +23,7 @@ export const makeStore = () => {
       chainFocus: chainFocusReducer,
       colorOverrides: colorOverridesReducer,
       structures_page: structuresReducer,
-      assistantToast: assistantToastReducer,
+      assistantHandoff: assistantHandoffReducer,
       arrivalActions: arrivalActionsReducer,
       [tubxz_api.reducerPath]: tubxz_api.reducer,
     },

@@ -27,7 +27,9 @@ interface Props {
   onClose: () => void;
 }
 
-const SHORT_TYPE: Record<string, string> = {
+// Shared by BindingSiteCard (ligand contacts) and ChainInterfaceCard
+// (chain-chain contacts) so both bond-pill cards read identically.
+export const SHORT_TYPE: Record<string, string> = {
   'Hydrogen Bond': 'H-bond',
   'Weak Hydrogen Bond': 'Wk H-bond',
   'Ionic Interaction': 'Ionic',
@@ -39,7 +41,7 @@ const SHORT_TYPE: Record<string, string> = {
   'Unknown Interaction': 'Contact',
 };
 
-function residueLabel(r: { compId: string; authSeqId: number }): string {
+export function residueLabel(r: { compId: string; authSeqId: number }): string {
   return `${r.compId}${r.authSeqId}`;
 }
 
@@ -55,7 +57,7 @@ function deduplicateContacts(contacts: LigandBondInfo[]): LigandBondInfo[] {
   return result;
 }
 
-function buildResidueExpr(chainId: string, authSeqId: number) {
+export function buildResidueExpr(chainId: string, authSeqId: number) {
   return MS.struct.generator.atomGroups({
     'chain-test': MS.core.rel.eq([MS.ammp('auth_asym_id'), chainId]),
     'residue-test': MS.core.rel.eq([MS.ammp('auth_seq_id'), authSeqId]),

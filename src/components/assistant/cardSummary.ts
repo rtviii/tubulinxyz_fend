@@ -55,7 +55,9 @@ export function summarizeCardLines(card: ActionCard, taxNameOf: TaxNameOf = () =
 
     case 'inspect_ligand': {
       if (card.rcsb_id) lines.push(`Opened ${card.rcsb_id}${card.suggested_chain ? `:${card.suggested_chain}` : ''}`);
-      if (card.chemical_id) lines.push(`Showing the ${card.chemical_id} binding site`);
+      // The "show the binding site" step is NOT synthesized here — it must come
+      // from a real FocusBindingSite arrival_action so the card can never promise
+      // a focus it won't execute. Callers append arrival_actions separately.
       break;
     }
 

@@ -6,7 +6,9 @@
 // so they're safe to fire on a spinning demo or over expert-mode state.
 
 import { Eye, Layers, FlaskConical, MapPin, HelpCircle, Target, type LucideIcon } from 'lucide-react';
+import { Color } from 'molstar/lib/mol-util/color';
 import type { MolstarInstance } from '@/components/molstar/services/MolstarInstance';
+import { CATEGORY_PAINT } from '@/lib/colors/annotationPalette';
 import type { EntityKind, EntityRef } from './globalTypes';
 
 export interface EntityKindMeta {
@@ -27,12 +29,14 @@ export const KIND_META: Record<EntityKind, EntityKindMeta> = {
   variant: { Icon: HelpCircle, tone: 'text-rose-600 bg-rose-50 border-rose-200', label: 'Variant' },
 };
 
-// Per-category tint, so binding / PTM / variant residues read differently at a
-// glance. Falls back to the kind's tone when an entity carries no category.
+// Per-category tint, so binding / PTM / variant / interface residues read
+// differently at a glance. Falls back to the kind's tone when an entity carries
+// no category.
 const CATEGORY_TONE: Record<string, string> = {
   binding: 'text-amber-700 bg-amber-50 border-amber-200',
   modification: 'text-indigo-700 bg-indigo-50 border-indigo-200',
   variant: 'text-orange-700 bg-orange-50 border-orange-200',
+  interface: 'text-emerald-700 bg-emerald-50 border-emerald-200',
 };
 
 export function toneFor(e: EntityRef): string {
@@ -160,6 +164,31 @@ export function labelFor(e: EntityRef): string {
   }
 }
 
+// Accent color for the hover label — the residue's category (binding/PTM/variant)
+// so a glance at the label tells you what it is; falls back to molstar's default.
+function labelAccent(e: EntityRef): Color | undefined {
+  const hex = e.category ? CATEGORY_PAINT[e.category] : undefined;
+  return hex ? Color(parseInt(hex.slice(1), 16)) : undefined;
+}
+
+// Show a transient 3D label for the entity being hovered (region name, pocket,
+// "B:272", chain family) — the same label style the manual demos use.
+function showEntityLabel(instance: MolstarInstance, e: EntityRef): void {
+  const text = labelFor(e);
+  const color = labelAccent(e);
+  if (e.kind === 'chain' && e.auth_asym_id) {
+    void instance.showComponentLabel(e.auth_asym_id);
+  } else if (e.kind === 'residue_range' && e.auth_asym_id && e.start !== undefined && e.end !== undefined) {
+    const ids: number[] = [];
+    for (let a = e.start; a <= e.end; a++) ids.push(a);
+    void instance.showResiduesLabel(e.auth_asym_id, ids, text, color);
+  } else if ((e.kind === 'residue_set' || e.kind === 'region') && e.auth_asym_id && e.positions?.length) {
+    void instance.showResiduesLabel(e.auth_asym_id, e.positions, text, color);
+  } else if (e.kind === 'ligand' && e.auth_asym_id && e.auth_seq_id !== undefined) {
+    void instance.showResiduesLabel(e.auth_asym_id, [e.auth_seq_id], text, color);
+  }
+}
+
 export function applyHighlight(instance: MolstarInstance | null, e: EntityRef, on: boolean): void {
   if (!instance) return;
   try {
@@ -173,6 +202,9 @@ export function applyHighlight(instance: MolstarInstance | null, e: EntityRef, o
       // Ligands are single residues in molstar terms.
       instance.highlightResidueRange(e.auth_asym_id, e.auth_seq_id, e.auth_seq_id, on);
     }
+    // Transient label travels with the highlight: show on hover-in, clear on out.
+    if (on) showEntityLabel(instance, e);
+    else instance.hideHoverLabel();
   } catch { /* swallow — molstar can throw if state changed underneath */ }
 }
 

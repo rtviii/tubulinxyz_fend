@@ -13,6 +13,11 @@ export interface DemoTab {
   description: string;
   color: string;
   ligandContacts?: LigandBondInfo[];
+  // Binding-pocket residues mapped from another structure (the demo viewer has
+  // no live ligand to compute interactions against). Rendered as plain residue
+  // chips that highlight/focus on the demo. Mutually exclusive with
+  // ligandContacts in practice.
+  pocketResidues?: { chainId: string; authSeqId: number; compId: string }[];
   ligandChainId?: string;
   ligandSeqId?: number;
   ligandCompId?: string;
@@ -330,6 +335,27 @@ export function DemoExplanationCard({ explanation, onDismiss, instance }: Props)
                       </button>
                     );
                   })}
+                </div>
+              )}
+              {/* Mapped pocket residues (no interaction type — no live ligand). */}
+              {currentTab.pocketResidues && currentTab.pocketResidues.length > 0 && (
+                <div className="flex flex-wrap gap-[3px] max-h-[100px] overflow-y-auto">
+                  {currentTab.pocketResidues.map((r, i) => (
+                    <button
+                      key={i}
+                      className="inline-flex items-center gap-[2px] px-1 py-[1px] rounded
+                                 text-[8px] font-mono leading-tight
+                                 bg-slate-100/50 text-slate-500/80 border border-slate-200/30
+                                 hover:bg-violet-50/70 hover:text-violet-700 hover:border-violet-200/60
+                                 transition-colors cursor-default"
+                      onPointerEnter={() => highlightSingleResidue(r.chainId, r.authSeqId, r.compId)}
+                      onPointerLeave={() => clearHighlight()}
+                      onClick={() => focusSingleResidue(r.chainId, r.authSeqId)}
+                    >
+                      <ChainDot chainId={r.chainId} color={cc[r.chainId]} />
+                      <span className="font-semibold text-slate-600/80">{residueLabel(r)}</span>
+                    </button>
+                  ))}
                 </div>
               )}
             </>

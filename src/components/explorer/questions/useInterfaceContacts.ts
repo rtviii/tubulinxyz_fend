@@ -11,7 +11,6 @@ import {
 } from '@/components/molstar/core/queries';
 import { getMolstarGhostColor } from '@/components/molstar/colors/palette';
 import { flatBallAndStickParams } from '@/components/molstar/rendering/postprocessing-config';
-import { Color } from 'molstar/lib/mol-util/color';
 
 const CONTACT_RADIUS = 4.5;
 
@@ -48,16 +47,6 @@ function getInterfaceResidues(
     }
   });
   return Array.from(ids);
-}
-
-function blendColors(a: Color, b: Color): Color {
-  const rA = (a >> 16) & 0xFF, gA = (a >> 8) & 0xFF, bA = a & 0xFF;
-  const rB = (b >> 16) & 0xFF, gB = (b >> 8) & 0xFF, bB = b & 0xFF;
-  return Color.fromRgb(
-    Math.round((rA + rB) / 2),
-    Math.round((gA + gB) / 2),
-    Math.round((bA + bB) / 2),
-  );
 }
 
 export function useInterfaceContacts(ctx: ExplorerContext): ExplorerQuestion {
@@ -160,27 +149,6 @@ export function useInterfaceContacts(ctx: ExplorerContext): ExplorerQuestion {
               }
             }
           }
-
-          // --- Label ---
-
-          if ((aNearB.length > 0 || bNearA.length > 0) && ctx.instance) {
-            const labelLoci = aNearB.length > 0
-              ? executeQuery(buildMultiResidueQuery(a.chainId, aNearB), structure)
-              : executeQuery(buildMultiResidueQuery(b.chainId, bNearA), structure);
-
-            if (labelLoci) {
-              const totalResidues = aNearB.length + bNearA.length;
-              const labelKey = `iface-label-${a.chainId}-${b.chainId}`;
-              const labelColor = blendColors(colorA, colorB);
-              await ctx.instance.addExplorerLabel(
-                labelKey,
-                labelLoci,
-                `${a.chainId}/${b.chainId} interface \u00B7 ${totalResidues} residues`,
-                labelColor,
-              );
-              refs.push(labelKey);
-            }
-          }
         }
       }
 
@@ -196,13 +164,9 @@ export function useInterfaceContacts(ctx: ExplorerContext): ExplorerQuestion {
     if (!plugin) return;
 
     for (const ref of createdRefs) {
-      if (ref.startsWith('iface-label-')) {
-        ctx.instance?.removeExplorerLabel(ref);
-      } else {
-        try {
-          await plugin.build().delete(ref).commit();
-        } catch { /* already gone */ }
-      }
+      try {
+        await plugin.build().delete(ref).commit();
+      } catch { /* already gone */ }
     }
 
     setCreatedRefs([]);

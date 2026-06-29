@@ -185,3 +185,118 @@ export function extractLigandBonds(
 
   return { residues, bondCount, contacts };
 }
+
+// --- Protein-protein (chain-chain) interface contacts -----------------------
+// Same interaction graph, but extracting the non-covalent bonds BETWEEN two
+// polymer chains instead of ligand<->polymer. Used by both the landing demos
+// and MolstarInstance.focusChainInterface (the assistant's "where does <chain>
+// bind" path, which works in easy mode — no MSA / master-index needed).
+
+export interface BondPairInfo {
+  residueA: { chainId: string; authSeqId: number; compId: string };
+  residueB: { chainId: string; authSeqId: number; compId: string };
+  type: string;
+}
+
+export interface ChainBondResidues {
+  /** auth_seq_ids on chainA that bond chainB. */
+  residuesA: Set<number>;
+  /** auth_seq_ids on chainB that bond chainA. */
+  residuesB: Set<number>;
+  bondCount: number;
+  pairs: BondPairInfo[];
+}
+
+/**
+ * Given pre-computed interactions, extract the residues that participate in
+ * non-covalent bonds between two specific polymer chains.
+ */
+export function extractInterChainBonds(
+  structure: Structure,
+  interactions: any,
+  chainA: string,
+  chainB: string,
+): ChainBondResidues {
+  const residuesA = new Set<number>();
+  const residuesB = new Set<number>();
+  const pairs: BondPairInfo[] = [];
+  let bondCount = 0;
+
+  if (!interactions) return { residuesA, residuesB, bondCount, pairs };
+
+  const { contacts, unitsFeatures } = interactions;
+
+  // Cache unit-id -> { chainId, isPolymer }
+  const unitInfoCache = new Map<number, { chainId: string; isPolymer: boolean }>();
+  function getUnitInfo(unitId: number): { chainId: string; isPolymer: boolean } {
+    if (unitInfoCache.has(unitId)) return unitInfoCache.get(unitId)!;
+    const unit = structure.unitMap.get(unitId);
+    const loc = StructureElement.Location.create(structure, unit, unit.elements[0]);
+    const info = {
+      chainId: StructureProperties.chain.auth_asym_id(loc),
+      isPolymer: StructureProperties.entity.type(loc) === 'polymer',
+    };
+    unitInfoCache.set(unitId, info);
+    return info;
+  }
+
+  for (let i = 0; i < contacts.edgeCount; i++) {
+    const edge = contacts.edges[i];
+    const { unitA: uIdA, indexA, unitB: uIdB, indexB } = edge;
+
+    const infoA = getUnitInfo(uIdA);
+    const infoB = getUnitInfo(uIdB);
+
+    // Skip non-polymer units (waters, ions, ligands)
+    if (!infoA.isPolymer || !infoB.isPolymer) continue;
+
+    let swapped = false;
+    if (infoA.chainId === chainA && infoB.chainId === chainB) { /* ok */ }
+    else if (infoA.chainId === chainB && infoB.chainId === chainA) { swapped = true; }
+    else continue;
+
+    const uA = structure.unitMap.get(uIdA);
+    const uB = structure.unitMap.get(uIdB);
+    const fA = unitsFeatures.get(uIdA);
+    const fB = unitsFeatures.get(uIdB);
+    if (!fA || !fB) continue;
+
+    const memberA = fA.members[fA.offsets[indexA]];
+    const memberB = fB.members[fB.offsets[indexB]];
+
+    const locA = StructureElement.Location.create(structure, uA, uA.elements[memberA]);
+    const locB = StructureElement.Location.create(structure, uB, uB.elements[memberB]);
+
+    // Double-check both sides are polymer residues at the element level too
+    if (StructureProperties.entity.type(locA) !== 'polymer') continue;
+    if (StructureProperties.entity.type(locB) !== 'polymer') continue;
+
+    const seqA = StructureProperties.residue.auth_seq_id(locA);
+    const seqB = StructureProperties.residue.auth_seq_id(locB);
+    const compIdA = StructureProperties.atom.label_comp_id(locA);
+    const compIdB = StructureProperties.atom.label_comp_id(locB);
+    const typeLabel = interactionTypeLabel(edge.props.type);
+
+    bondCount++;
+
+    if (!swapped) {
+      residuesA.add(seqA);
+      residuesB.add(seqB);
+      pairs.push({
+        residueA: { chainId: chainA, authSeqId: seqA, compId: compIdA },
+        residueB: { chainId: chainB, authSeqId: seqB, compId: compIdB },
+        type: typeLabel,
+      });
+    } else {
+      residuesA.add(seqB);
+      residuesB.add(seqA);
+      pairs.push({
+        residueA: { chainId: chainA, authSeqId: seqB, compId: compIdB },
+        residueB: { chainId: chainB, authSeqId: seqA, compId: compIdA },
+        type: typeLabel,
+      });
+    }
+  }
+
+  return { residuesA, residuesB, bondCount, pairs };
+}

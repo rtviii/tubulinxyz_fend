@@ -28,6 +28,7 @@ export const CATEGORY_PAINT: Record<string, string> = {
   binding:      '#f59e0b', // amber
   modification: '#6366f1', // indigo
   variant:      '#f97316', // orange
+  interface:    '#10b981', // emerald
 };
 
 export const getVariantColor = (t: VariantType): string => VARIANT_COLORS[t];

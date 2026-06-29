@@ -1,14 +1,10 @@
-import gl from 'gl';
-import pngjs from 'pngjs';
-import jpegjs from 'jpeg-js';
 import { HeadlessPluginContext } from 'molstar/lib/mol-plugin/headless-plugin-context';
-import { DefaultPluginSpec } from 'molstar/lib/mol-plugin/spec';
-import { EnhancedTubulinSplitPreset } from '../src/components/molstar/colors/preset_structure';
 import * as fs from 'fs';
 import * as path from 'path';
 import { STYLIZED_POSTPROCESSING } from '@/components/molstar/rendering/postprocessing-config';
 import { PluginStateObject } from 'molstar/lib/mol-plugin-state/objects';
 import { structureLayingTransform, changeCameraRotation } from 'molstar/lib/mol-plugin-state/manager/focus-camera/orient-axes';
+import { createHeadlessPlugin } from './_plugin';
 
 // ============================================================
 // CONFIGURATION - Adjust these as needed
@@ -39,38 +35,6 @@ interface RenderResult {
     success: boolean;
     error?: string;
     duration: number;
-}
-
-async function createPlugin(): Promise<HeadlessPluginContext> {
-    const externalModules = { gl, pngjs, 'jpeg-js': jpegjs };
-    const spec = DefaultPluginSpec();
-
-    const plugin = new HeadlessPluginContext(
-        externalModules,
-        spec,
-        {
-            width: CONFIG.IMAGE_WIDTH,
-            height: CONFIG.IMAGE_HEIGHT
-        },
-        {
-            // Configure transparent background and quality settings
-            imagePass: {
-                transparentBackground: CONFIG.TRANSPARENT_BACKGROUND,
-                cameraHelper: {
-                    axes: { name: 'off', params: {} },
-                },
-                multiSample: {
-                    mode: 'on',
-                    sampleLevel: CONFIG.MULTISAMPLE_LEVEL,
-                }
-            }
-        }
-    );
-
-    await plugin.init();
-    plugin.builders.structure.representation.registerPreset(EnhancedTubulinSplitPreset);
-
-    return plugin;
 }
 
 async function renderStructure(
@@ -203,7 +167,10 @@ async function processQueue(
     // Worker function
     const worker = async (workerId: number): Promise<void> => {
         // Each worker gets its own plugin instance
-        const plugin = await createPlugin();
+        const plugin = await createHeadlessPlugin(CONFIG.IMAGE_WIDTH, CONFIG.IMAGE_HEIGHT, {
+            transparent: CONFIG.TRANSPARENT_BACKGROUND,
+            multiSample: CONFIG.MULTISAMPLE_LEVEL,
+        });
 
         try {
             while (queue.length > 0) {

@@ -39,7 +39,7 @@ import {
   type DemoGrounding,
 } from './entityHighlight';
 import { useAppDispatch } from '@/store/store';
-import { showAssistantToast } from '@/store/slices/assistantToastSlice';
+import { setAssistantHandoff } from '@/store/slices/assistantHandoffSlice';
 import { setArrivalActions } from '@/store/slices/arrivalActionsSlice';
 
 // Per-action CTA verb + thumbnail eligibility for the landing plan cards.
@@ -94,9 +94,12 @@ export interface AssistantResultsPanelProps {
   // The demo structure's identity + chains, so the honesty gate knows what can
   // actually be shown on the demo viewer. Omit to disable demo highlighting.
   demo?: { rcsbId: string; chainIds: string[] } | null;
+  // The question the user typed — carried into the destination page's handoff
+  // panel so it can preface what was asked.
+  question?: string | null;
 }
 
-export function AssistantResultsPanel({ response, onDismiss, embedded = false, hideDismiss = false, instance = null, demo = null }: AssistantResultsPanelProps) {
+export function AssistantResultsPanel({ response, onDismiss, embedded = false, hideDismiss = false, instance = null, demo = null, question = null }: AssistantResultsPanelProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
 
@@ -121,7 +124,8 @@ export function AssistantResultsPanel({ response, onDismiss, embedded = false, h
       if (card.arrival_actions?.length) {
         dispatch(setArrivalActions({ rcsbId: card.rcsb_id ?? null, actions: card.arrival_actions }));
       }
-      dispatch(showAssistantToast(card));
+      // Hand the question + full exchange to the destination page's panel.
+      dispatch(setAssistantHandoff({ question, card, result: response }));
       router.push(href);
     }
   };
@@ -510,6 +514,7 @@ function backendStructureFiltersToApiArg(bf: Record<string, unknown>): ListStruc
     yearMax: n('year_max'),
     sourceTaxa: arrNAsS('source_organism_ids') ?? arrNAsS('sourceTaxa'),
     hostTaxa: arrNAsS('host_organism_ids'),
+    hasAnyMap: b('has_any_map'),
     hasVariants: b('has_variants'),
     variantFamily: s('variant_family'),
     variantType: s('variant_type'),

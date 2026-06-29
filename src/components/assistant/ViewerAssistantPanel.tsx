@@ -32,7 +32,7 @@ import {
   labelFor,
 } from './entityHighlight';
 import { useAppDispatch } from '@/store/store';
-import { showAssistantToast } from '@/store/slices/assistantToastSlice';
+import { setAssistantHandoff } from '@/store/slices/assistantHandoffSlice';
 
 export interface ViewerAssistantPanelProps {
   entities: EntityRef[];
@@ -87,7 +87,13 @@ export function ViewerAssistantPanel({ entities, summary, navCard, answer, cards
   const handleNavClick = (card: ActionCard) => {
     const { href } = cardToHref(card, queries ?? []);
     if (href && href !== '#') {
-      dispatch(showAssistantToast(card));
+      // No captured prompt here (the in-page input lives upstream), but carry
+      // whatever exchange the answer produced so the destination panel can show
+      // the actions taken + data used.
+      const result = answer
+        ? { kind: 'respond' as const, answer_markdown: answer.markdown, data: answer.data, cards, queries }
+        : null;
+      dispatch(setAssistantHandoff({ question: null, card, result }));
       router.push(href);
     }
   };
@@ -97,19 +103,13 @@ export function ViewerAssistantPanel({ entities, summary, navCard, answer, cards
   if (pills.length === 0 && !summary && !navCard && !answer && cardList.length === 0 && chips.length === 0) return null;
 
   return (
-    <div className="absolute top-3 right-3 z-30 w-[320px] pointer-events-auto">
+    <div className="w-[320px] max-w-[calc(100vw-1.5rem)] pointer-events-auto">
       <div className="rounded-xl border border-slate-200/80 bg-white/95 backdrop-blur-sm shadow-lg overflow-hidden">
-        {/* Header: summary + dismiss */}
-        <div className="px-3 py-2 flex items-start gap-2 border-b border-slate-100">
-          <div className="flex-1 min-w-0">
-            {summary ? (
-              <p className="text-[11px] text-slate-600 leading-snug">{summary}</p>
-            ) : (
-              <p className="text-[10px] text-slate-400 uppercase tracking-wider">
-                {pills.length} {pills.length === 1 ? 'item' : 'items'}
-              </p>
-            )}
-          </div>
+        {/* Header: unified with the handoff panel (Sparkles + label + dismiss).
+            No "N items" count — it was meaningless when the answer has no pills. */}
+        <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-slate-100">
+          <Sparkles size={11} className="text-violet-500" />
+          <span className="flex-1 text-[9px] font-semibold uppercase tracking-wider text-slate-400">Assistant</span>
           <button
             onClick={handleDismiss}
             className="flex-shrink-0 p-0.5 rounded text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-colors"
@@ -118,6 +118,9 @@ export function ViewerAssistantPanel({ entities, summary, navCard, answer, cards
             <X size={12} />
           </button>
         </div>
+        {summary && (
+          <p className="px-3 pt-2 text-[11px] text-slate-600 leading-snug">{summary}</p>
+        )}
 
         {/* Grounded textual answer (+ optional structured table from data.table) */}
         {answer && (() => {

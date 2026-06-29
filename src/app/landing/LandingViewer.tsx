@@ -18,12 +18,9 @@ import {
 } from '@/components/molstar/state/selectors';
 import {
   getHexForLigand,
-  getMolstarGhostColor,
   TUBULIN_GHOST_COLORS,
 } from '@/components/molstar/colors/palette';
 import { formatFamilyShort } from '@/lib/formatters';
-
-const EMPTY_CLASSIFICATION: Record<string, string> = {};
 
 // How tightly the structure is framed: smaller = more zoomed-in / bigger on
 // screen. Applied on load and re-applied whenever the viewer's pane resizes.
@@ -60,15 +57,6 @@ const NUCLEOTIDE_IDS = new Set([
   'GTP', 'GDP', 'GNP', 'GSP', 'GMPPCP', 'GMPPNP', 'GPPNHP', 'GTPS',
   'ATP', 'ADP', 'ANP', 'ACP',
 ]);
-
-/** Friendly names for tubulin families */
-const FAMILY_FRIENDLY: Record<string, string> = {
-  tubulin_alpha: 'Alpha tubulin',
-  tubulin_beta: 'Beta tubulin',
-  tubulin_gamma: 'Gamma tubulin',
-  tubulin_delta: 'Delta tubulin',
-  tubulin_epsilon: 'Epsilon tubulin',
-};
 
 const LANDING_SPEC = {
   ...DefaultPluginUISpec(),
@@ -138,67 +126,6 @@ export default function LandingViewer({
   // Classify ligands
   const nucleotideLigands = ligandComponents.filter(l => NUCLEOTIDE_IDS.has(l.compId));
   const drugLigands = ligandComponents.filter(l => !NUCLEOTIDE_IDS.has(l.compId));
-
-  // Get classification for hover labels (stable reference via shallowEqual)
-  const classification = useAppSelector(
-    s => s.molstarInstances.instances[instanceId]?.tubulinClassification ?? EMPTY_CLASSIFICATION,
-  );
-
-
-  // Hover: show friendly 3D labels only (no separate info bar)
-  useEffect(() => {
-    if (!instance) return;
-
-    const ligLookup = new Map<string, typeof ligandComponents[0]>();
-    for (const lig of ligandComponents) {
-      ligLookup.set(`${lig.authAsymId}_${lig.authSeqId}`, lig);
-    }
-    const chainIds = new Set(polymerComponents.map(p => p.chainId));
-
-    let prevKey: string | null = null;
-
-    const unsub = instance.viewer.subscribeToHover((info) => {
-      if (!info) {
-        if (prevKey) {
-          instance.hideComponentLabel();
-          prevKey = null;
-        }
-        return;
-      }
-
-      const ligMatch = ligLookup.get(`${info.chainId}_${info.authSeqId}`);
-      let key: string | null = null;
-
-      if (ligMatch) {
-        key = ligMatch.uniqueKey;
-        instance.showComponentLabel(key);
-      } else if (chainIds.has(info.chainId)) {
-        key = info.chainId;
-        const family = classification[info.chainId];
-        const friendly = FAMILY_FRIENDLY[family] ?? 'Protein';
-
-        const mgr = (instance as any).ensureLabelManager?.();
-        if (mgr) {
-          const comp = (instance as any).getComponent?.(key);
-          if (comp) {
-            const structure = instance.viewer.getStructureFromRef(comp.ref);
-            if (structure) {
-              const { structureToLoci } = require('@/components/molstar/core/queries');
-              const loci = structureToLoci(structure);
-              const ghostColor = getMolstarGhostColor(family);
-              mgr.showHover(loci, friendly, ghostColor);
-            }
-          }
-        }
-      } else {
-        if (prevKey) instance.hideComponentLabel();
-        key = null;
-      }
-
-      prevKey = key;
-    });
-    return unsub;
-  }, [instance, ligandComponents, polymerComponents, classification]);
 
   // Load structure
   useEffect(() => {

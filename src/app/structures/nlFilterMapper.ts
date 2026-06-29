@@ -23,6 +23,7 @@ type BackendStructureFilters = {
   has_polymer_family?: string[];
   has_uniprot?: string[];
   has_isotype?: string[];
+  has_any_map?: boolean;
   has_variants?: boolean;
   variant_family?: string;
   variant_type?: string;
@@ -54,6 +55,7 @@ export function backendFiltersToUi(
   if (bf.year_min !== undefined) out.yearMin = bf.year_min;
   if (bf.year_max !== undefined) out.yearMax = bf.year_max;
 
+  if (bf.has_any_map !== undefined) out.hasAnyMap = bf.has_any_map;
   if (bf.has_variants !== undefined) out.hasVariants = bf.has_variants;
   if (bf.variant_family !== undefined) out.variantFamily = bf.variant_family;
   if (bf.variant_type !== undefined) out.variantType = bf.variant_type;
@@ -117,6 +119,7 @@ export function humanizeUiFilters(parsed: Partial<UiFilters>): AssistantConfirmI
   if (parsed.sourceTaxa?.length) out.push({ label: "Source organism IDs", value: joinList(parsed.sourceTaxa) });
   if (parsed.hostTaxa?.length) out.push({ label: "Host organism IDs", value: joinList(parsed.hostTaxa) });
 
+  if (parsed.hasAnyMap) out.push({ label: "Contains MAP", value: "yes" });
   if (parsed.hasVariants !== undefined) {
     out.push({ label: "Has variants", value: parsed.hasVariants ? "yes" : "no" });
   }

@@ -22,6 +22,9 @@ export type UiFilters = {
     ligands: string[];
     uniprot: string[];
 
+    // True -> only structures containing at least one MAP (any map_* family).
+    hasAnyMap?: boolean;
+
     resMin?: number;
     resMax?: number;
     yearMin?: number;
@@ -467,6 +470,15 @@ export function StructureFiltersPanel({
                                     </button>
                                 );
                             })}
+                            {/* "Any MAP" — structures containing at least one microtubule-associated
+                                protein (any map_* family). Distinct from picking a specific MAP in
+                                the Ligands / MAPs selector below. */}
+                            <ColorPill
+                                active={!!filters.hasAnyMap}
+                                color="#7c3aed"
+                                label="any MAP"
+                                onClick={() => updateFilter("hasAnyMap", filters.hasAnyMap ? undefined : true)}
+                            />
                         </div>
                     </FilterRow>
 

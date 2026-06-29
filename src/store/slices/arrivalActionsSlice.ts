@@ -1,6 +1,6 @@
 // Carries a card's precomputed `arrival_actions` across the landing -> structure
 // navigation so the structure page can REPLAY them (paint annotation tracks,
-// focus the binding site) once the view has settled. Mirrors assistantToastSlice:
+// focus the binding site) once the view has settled. Mirrors assistantHandoffSlice:
 // the source panel unmounts on router.push, so the payload lives here instead.
 //
 // Refresh-safe by construction: the store resets on a hard reload, so a refreshed
